@@ -1,6 +1,6 @@
 {
   "ticker": "EXE.TO",
-  "generated_at": "2026-01-29T14:12:16.411777",
+  "generated_at": "2026-01-29T14:35:50.037129",
   "period": "1y",
   "info": {
     "symbol": "EXE.TO",
@@ -934,6 +934,64 @@
     "date_range": {
       "start": "2025-01-28",
       "end": "2026-01-28"
+    }
+  },
+  "fundamental_analysis": {
+    "ticker": "EXE.TO",
+    "company_name": "Extendicare Inc.",
+    "sector": "Healthcare",
+    "industry": "Medical Care Facilities",
+    "analysis": {
+      "growth_rates": {
+        "revenue": {
+          "1y": 12.356345841280595,
+          "3y_cagr": 7.9052552709016455,
+          "5y_cagr": null
+        },
+        "earnings": {
+          "1y": 121.32011064681303,
+          "3y_cagr": 86.98509115088733,
+          "5y_cagr": null
+        },
+        "fcf": {
+          "1y": 195.8164121022529,
+          "3y_cagr": "(27.734570506076462+221.24276599951335j)",
+          "current": 101689000.0
+        }
+      },
+      "fcf_metrics": {
+        "fcf": 101689000.0,
+        "fcf_yield": 4.600656450865487,
+        "fcf_margin": 6.935538213697703
+      },
+      "margins": {
+        "current": {
+          "operating_margin": 7.585107645467677,
+          "ebitda_margin": 10.534155593840412,
+          "net_margin": 5.129511486139018
+        },
+        "trend": {
+          "current": 5.129511486139018,
+          "1y_ago": 2.6040704789506477,
+          "2y_ago": 5.693787620428347
+        }
+      },
+      "efficiency": {
+        "asset_turnover": 2.0369914474817583,
+        "receivables_turnover": 16.88414191780191,
+        "days_sales_outstanding": 21.6179182677421
+      },
+      "dupont": {
+        "net_margin": 5.129511486139018,
+        "asset_turnover": 2.0369914474817583,
+        "equity_multiplier": 5.788310602161606,
+        "roe_calculated": 60.48073211528564,
+        "roe_reported": 65.569997
+      },
+      "quality_scores": {
+        "altman_z": 3.6670361339727804,
+        "piotroski_f": 7
+      }
     }
   }
 }

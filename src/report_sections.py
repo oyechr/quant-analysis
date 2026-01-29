@@ -8,6 +8,8 @@ from typing import Dict, Any, List
 import pandas as pd
 import logging
 
+from .fundamental_analysis import FundamentalAnalyzer
+
 logger = logging.getLogger(__name__)
 
 
@@ -515,3 +517,36 @@ class TechnicalAnalysisSection(ReportSection):
         md.append("")
         
         return md
+
+
+class FundamentalAnalysisSection(ReportSection):
+    """Handle fundamental analysis data"""
+    
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Any:
+        """
+        Fetch financial data and create analyzer
+        
+        Returns:
+            FundamentalAnalyzer instance (not dict - for dual formatting)
+        """
+        # Fetch required data
+        ticker_info = fetcher.get_ticker_info(ticker, use_cache=use_cache)
+        fundamentals = fetcher.fetch_fundamentals(ticker, use_cache=use_cache)
+        price_data = kwargs.get('price_data')  # Optional, passed from generator
+        
+        # Create analyzer
+        analyzer = FundamentalAnalyzer(ticker_info, fundamentals, price_data)
+        return analyzer
+    
+    def format_for_json(self, raw_data: Any) -> Any:
+        """Format for JSON - use analyzer's get_summary()"""
+        if hasattr(raw_data, 'get_summary'):
+            return raw_data.get_summary()
+        return None
+    
+    def format_for_markdown(self, raw_data: Any) -> List[str]:
+        """Format for Markdown - use analyzer's format_markdown()"""
+        if hasattr(raw_data, 'format_markdown'):
+            return raw_data.format_markdown()
+        return []
+

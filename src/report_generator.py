@@ -21,7 +21,8 @@ from .report_sections import (
     DividendsSection,
     AnalystRatingsSection,
     NewsSection,
-    TechnicalAnalysisSection
+    TechnicalAnalysisSection,
+    FundamentalAnalysisSection
 )
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,8 @@ class ReportGenerator:
         period: str = "1y",
         output_format: str = "both",
         use_cache: bool = True,
-        include_technical: bool = False
+        include_technical: bool = False,
+        include_fundamental: bool = False
     ) -> Dict[str, Any]:
         """
         Generate comprehensive report with all available data
@@ -71,6 +73,7 @@ class ReportGenerator:
             output_format: "json", "markdown", or "both"
             use_cache: Whether to use cached data
             include_technical: Whether to include technical analysis (requires 1y period)
+            include_fundamental: Whether to include fundamental analysis
             
         Returns:
             Dictionary with all fetched data and metadata
@@ -115,12 +118,30 @@ class ReportGenerator:
                 logger.error(f"Error processing technical analysis: {e}")
                 report_data['technical_analysis'] = None
         
+        # Add fundamental analysis if requested
+        fundamental_analyzer = None
+        if include_fundamental:
+            try:
+                fund_section = FundamentalAnalysisSection()
+                # Pass price data if available for market-based calculations
+                price_data = self.fetcher.fetch_ticker(ticker, period='1y', use_cache=use_cache)
+                fundamental_analyzer = fund_section.fetch_data(
+                    self.fetcher,
+                    ticker,
+                    use_cache=use_cache,
+                    price_data=price_data
+                )
+                report_data['fundamental_analysis'] = fund_section.format_for_json(fundamental_analyzer)
+            except Exception as e:
+                logger.error(f"Error processing fundamental analysis: {e}")
+                report_data['fundamental_analysis'] = None
+        
         # Save outputs
         if output_format in ["json", "both"]:
             self._save_json_report(ticker, report_data)
         
         if output_format in ["markdown", "both"]:
-            self._save_markdown_report(ticker, report_data, technical_analyzer)
+            self._save_markdown_report(ticker, report_data, technical_analyzer, fundamental_analyzer)
         
         logger.info(f"Report generation complete for {ticker}")
         return report_data
@@ -134,7 +155,7 @@ class ReportGenerator:
             json.dump(data, f, indent=2, default=str)
         logger.info(f"JSON report saved: {output_file}")
     
-    def _save_markdown_report(self, ticker: str, data: Dict[str, Any], technical_analyzer=None):
+    def _save_markdown_report(self, ticker: str, data: Dict[str, Any], technical_analyzer=None, fundamental_analyzer=None):
         """Save report as Markdown using section handlers"""
         reports_dir = self.output_dir / ticker / 'reports'
         reports_dir.mkdir(parents=True, exist_ok=True)
@@ -155,6 +176,14 @@ class ReportGenerator:
                 except Exception as e:
                     logger.warning(f"Error formatting markdown for {section_name}: {e}")
         
+        # Add fundamental analysis summary if available
+        if fundamental_analyzer and data.get('fundamental_analysis'):
+            try:
+                fund_section = FundamentalAnalysisSection()
+                md.extend(fund_section.format_for_markdown(fundamental_analyzer))
+            except Exception as e:
+                logger.warning(f"Error formatting fundamental analysis markdown: {e}")
+        
         # Add technical analysis summary if available
         if technical_analyzer and data.get('technical_analysis'):
             try:
@@ -173,6 +202,11 @@ class ReportGenerator:
         if technical_analyzer:
             self._save_technical_markdown(ticker, technical_analyzer)
             self._save_technical_json(ticker, technical_analyzer)
+        
+        # Save detailed fundamental analysis markdown if available
+        if fundamental_analyzer:
+            self._save_fundamental_markdown(ticker, fundamental_analyzer)
+            self._save_fundamental_json(ticker, fundamental_analyzer)
     
     def _save_technical_json(self, ticker: str, technical_analyzer):
         """Save detailed technical analysis as separate JSON file"""
@@ -208,6 +242,41 @@ class ReportGenerator:
             f.write('\n'.join(md))
         
         logger.info(f"Technical analysis markdown saved: {output_file}")
+    
+    def _save_fundamental_json(self, ticker: str, fundamental_analyzer):
+        """Save detailed fundamental analysis as separate JSON file"""
+        reports_dir = self.output_dir / ticker / 'reports'
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "fundamental_analysis.json"
+        
+        # Get summary with all metrics
+        fundamental_data = fundamental_analyzer.get_summary()
+        
+        # Write file
+        with open(output_file, 'w') as f:
+            json.dump(fundamental_data, f, indent=2, default=str)
+        
+        logger.info(f"Fundamental analysis JSON saved: {output_file}")
+    
+    def _save_fundamental_markdown(self, ticker: str, fundamental_analyzer):
+        """Save detailed fundamental analysis as separate markdown file"""
+        reports_dir = self.output_dir / ticker / 'reports'
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "fundamental_analysis.md"
+        
+        md = []
+        md.append(f"# {ticker} - Fundamental Analysis Report")
+        md.append("")
+        md.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # Get detailed markdown from analyzer
+        md.extend(fundamental_analyzer.format_markdown())
+        
+        # Write file
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(md))
+        
+        logger.info(f"Fundamental analysis markdown saved: {output_file}")
 
 
 # Convenience function

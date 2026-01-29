@@ -46,13 +46,15 @@ def main():
         period="1y",  # Same period - reuses cache from Example 1
         output_format="both",
         use_cache=True,
-        include_technical=True  # Enable technical analysis
+        include_technical=True,  # Enable technical analysis
+        include_fundamental=True  # Enable fundamental analysis
     )
     
     print(f"\n✓ Enhanced report generated for {ticker}")
     print(f"  - JSON: data/{ticker}/reports/full_report.json")
     print(f"  - Markdown: data/{ticker}/reports/report.md")
-    print(f"  - Technical Analysis: data/{ticker}/reports/technical_analysis.md")
+    print(f"  - Technical Analysis: data/{ticker}/reports/technical_analysis.md + .json")
+    print(f"  - Fundamental Analysis: data/{ticker}/reports/fundamental_analysis.md + .json")
     
     # # Example 3: Generate multiple reports
     # print("\n" + "=" * 70)
