@@ -1,0 +1,39 @@
+{
+  "latest_values": {
+    "date": "2026-01-28 00:00:00-05:00",
+    "close_price": 23.399999618530277,
+    "indicators": {
+      "Dividends": 0.0,
+      "Stock Splits": 0.0,
+      "SMA_20": 22.20349998474121,
+      "SMA_50": 21.70862018585205,
+      "SMA_200": 15.85723870754242,
+      "EMA_12": 22.611157850449928,
+      "EMA_26": 22.156746488340083,
+      "MACD": 0.4544113621098447,
+      "MACD_signal": 0.4080185205368455,
+      "MACD_diff": 0.046392841572999166,
+      "RSI_14": 69.02338053880655,
+      "Stoch_K": 81.69008913492397,
+      "Stoch_D": 87.0687522137502,
+      "BB_upper": 23.373838114494106,
+      "BB_middle": 22.20349998474121,
+      "BB_lower": 21.033161854988315,
+      "ATR_14": 0.5651895398646773,
+      "OBV": 12027000.0,
+      "VWAP": 22.63919247940178
+    }
+  },
+  "signals": {
+    "RSI": "Neutral (69.0)",
+    "MACD": "Bullish",
+    "MA_Trend": "Bullish (Golden Cross)",
+    "Price_Position": "Strong uptrend (above both MAs)",
+    "Bollinger_Bands": "Price above upper band - overbought"
+  },
+  "data_points": 252,
+  "date_range": {
+    "start": "2025-01-28 00:00:00-05:00",
+    "end": "2026-01-28 00:00:00-05:00"
+  }
+}

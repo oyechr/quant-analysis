@@ -358,6 +358,139 @@ class TechnicalAnalyzer:
                 'end': str(self.df.index[-1]) if not self.df.empty else None
             }
         }
+    
+    def format_markdown(self) -> List[str]:
+        """
+        Format technical analysis as detailed markdown report
+        
+        Returns:
+            List of markdown lines for detailed technical analysis
+        """
+        md = []
+        md.append("\n## Technical Analysis")
+        md.append("")
+        
+        if self.df.empty:
+            md.append("*No data available for technical analysis*")
+            return md
+        
+        # Data range - format dates from index
+        start_date = str(self.df.index[0])[:10]  # Get YYYY-MM-DD portion
+        end_date = str(self.df.index[-1])[:10]
+        md.append(f"**Analysis Period:** {start_date} to {end_date}")
+        md.append(f"**Data Points:** {len(self.df)} trading days")
+        md.append("")
+        
+        # Latest values
+        latest_data = self.get_latest_values()
+        md.append(f"### Current Price: ${latest_data['close_price']:.2f}")
+        md.append(f"*As of {latest_data['date']}*")
+        md.append("")
+        
+        # Trading Signals
+        signals = self.generate_signals()
+        if signals:
+            md.append("### Trading Signals")
+            md.append("")
+            for indicator, signal in signals.items():
+                md.append(f"**{indicator}:** {signal}")
+            md.append("")
+        
+        # Indicator Categories
+        indicators = latest_data['indicators']
+        
+        # Trend Indicators
+        md.append("### Trend Indicators")
+        md.append("")
+        md.append("| Indicator | Value |")
+        md.append("|-----------|-------|")
+        for key in ['SMA_20', 'SMA_50', 'SMA_200', 'EMA_12', 'EMA_26']:
+            if key in indicators and indicators[key] is not None:
+                md.append(f"| {key} | ${indicators[key]:.2f} |")
+        
+        if 'MACD' in indicators and indicators['MACD'] is not None:
+            md.append(f"| MACD | {indicators['MACD']:.4f} |")
+        if 'MACD_signal' in indicators and indicators['MACD_signal'] is not None:
+            md.append(f"| MACD Signal | {indicators['MACD_signal']:.4f} |")
+        if 'MACD_diff' in indicators and indicators['MACD_diff'] is not None:
+            md.append(f"| MACD Histogram | {indicators['MACD_diff']:.4f} |")
+        md.append("")
+        
+        # Momentum Indicators
+        md.append("### Momentum Indicators")
+        md.append("")
+        md.append("| Indicator | Value | Interpretation |")
+        md.append("|-----------|-------|----------------|")
+        
+        if 'RSI_14' in indicators and indicators['RSI_14'] is not None:
+            rsi = indicators['RSI_14']
+            interp = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
+            md.append(f"| RSI (14) | {rsi:.2f} | {interp} |")
+        
+        if 'Stoch_K' in indicators and indicators['Stoch_K'] is not None:
+            md.append(f"| Stochastic %K | {indicators['Stoch_K']:.2f} | |")
+        if 'Stoch_D' in indicators and indicators['Stoch_D'] is not None:
+            md.append(f"| Stochastic %D | {indicators['Stoch_D']:.2f} | |")
+        md.append("")
+        
+        # Volatility Indicators
+        md.append("### Volatility Indicators")
+        md.append("")
+        md.append("| Indicator | Value |")
+        md.append("|-----------|-------|")
+        
+        for key in ['BB_upper', 'BB_middle', 'BB_lower']:
+            if key in indicators and indicators[key] is not None:
+                label = key.replace('BB_', 'Bollinger ').replace('_', ' ').title()
+                md.append(f"| {label} | ${indicators[key]:.2f} |")
+        
+        if 'ATR_14' in indicators and indicators['ATR_14'] is not None:
+            md.append(f"| ATR (14) | ${indicators['ATR_14']:.2f} |")
+        md.append("")
+        
+        # Volume Indicators
+        md.append("### Volume Indicators")
+        md.append("")
+        md.append("| Indicator | Value |")
+        md.append("|-----------|-------|")
+        
+        if 'OBV' in indicators and indicators['OBV'] is not None:
+            md.append(f"| OBV | {indicators['OBV']:,.0f} |")
+        if 'VWAP' in indicators and indicators['VWAP'] is not None:
+            md.append(f"| VWAP | ${indicators['VWAP']:.2f} |")
+        md.append("")
+        
+        # Recent Price Action (last 5 days)
+        md.append("### Recent Price Action (Last 5 Days)")
+        md.append("")
+        recent = self.df[['Close', 'Volume']].tail(5)
+        
+        # Add key indicators if available
+        display_cols = ['Close', 'Volume']
+        optional_cols = ['SMA_20', 'RSI_14', 'MACD']
+        for col in optional_cols:
+            if col in self.df.columns:
+                display_cols.append(col)
+        
+        # Format as markdown table
+        md.append("| Date | " + " | ".join([col.replace('_', ' ') for col in display_cols]) + " |")
+        md.append("|" + "------|" * (len(display_cols) + 1))
+        
+        for idx, row in self.df[display_cols].tail(5).iterrows():
+            date_str = str(idx)[:10]  # Get YYYY-MM-DD portion
+            values = [date_str]
+            for col in display_cols:
+                val = row[col]
+                if pd.isna(val):
+                    values.append('N/A')
+                elif col == 'Volume':
+                    values.append(f"{val:,.0f}")
+                else:
+                    values.append(f"{val:.2f}")
+            md.append("| " + " | ".join(values) + " |")
+        md.append("")
+        
+        return md
 
 
 def analyze_ticker(price_data: pd.DataFrame) -> Dict[str, Any]:

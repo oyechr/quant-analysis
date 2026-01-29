@@ -26,16 +26,35 @@ def main():
     
     report_data = generator.generate_full_report(
         ticker=ticker,
-        period="1mo",
+        period="1y",  # Use 1y to share cache with technical analysis
         output_format="both",  # Creates both JSON and Markdown
         use_cache=True
     )
     
     print(f"\n✓ Report generated for {ticker}")
-    print(f"  - JSON: data/{ticker}/full_report.json")
-    print(f"  - Markdown: data/{ticker}/report.md")
+    print(f"  - JSON: data/{ticker}/reports/full_report.json")
+    print(f"  - Markdown: data/{ticker}/reports/report.md")
     
-    # # Example 2: Generate multiple reports
+    # Example 2: Generate report with technical analysis
+    print("\n" + "=" * 70)
+    print("Generating Report with Technical Analysis")
+    print("=" * 70)
+    
+    print(f"\nGenerating enhanced report for {ticker}...")
+    report_data = generator.generate_full_report(
+        ticker=ticker,
+        period="1y",  # Same period - reuses cache from Example 1
+        output_format="both",
+        use_cache=True,
+        include_technical=True  # Enable technical analysis
+    )
+    
+    print(f"\n✓ Enhanced report generated for {ticker}")
+    print(f"  - JSON: data/{ticker}/reports/full_report.json")
+    print(f"  - Markdown: data/{ticker}/reports/report.md")
+    print(f"  - Technical Analysis: data/{ticker}/reports/technical_analysis.md")
+    
+    # # Example 3: Generate multiple reports
     # print("\n" + "=" * 70)
     # print("Generating Reports for Multiple Tickers")
     # print("=" * 70)

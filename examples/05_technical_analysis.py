@@ -86,7 +86,7 @@ def main():
     print(f"Signals Generated: {len(summary['signals'])}")
     
     # Save summary to JSON for inspection
-    output_file = Path("data") / ticker / "technical_analysis.json"
+    output_file = Path("data") / ticker / "reports" / "technical_analysis.json"
     output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, 'w') as f:
         json.dump(summary, f, indent=2)

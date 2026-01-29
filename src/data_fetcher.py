@@ -39,7 +39,7 @@ class DataFetcher:
         ticker: str,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        period: str = "1mo",
+        period: str = "1y",
         interval: str = "1d",
         use_cache: bool = True
     ) -> pd.DataFrame:
@@ -93,7 +93,7 @@ class DataFetcher:
         tickers: List[str],
         start: Optional[str] = None,
         end: Optional[str] = None,
-        period: str = "1mo",
+        period: str = "1y",
         interval: str = "1d",
         use_cache: bool = True
     ) -> dict[str, pd.DataFrame]:
@@ -551,9 +551,9 @@ class DataFetcher:
         Returns:
             Path object for the cache file
         """
-        ticker_dir = self.cache_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
-        return ticker_dir / filename
+        cache_dir = self.cache_dir / ticker / 'cache'
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir / filename
     
     def _load_json_cache(self, cache_path: Path) -> Optional[Any]:
         """
@@ -594,15 +594,15 @@ class DataFetcher:
         interval: str
     ) -> Path:
         """Generate cache filename based on parameters (for CSV price data)"""
-        # Create ticker-specific subdirectory
-        ticker_dir = self.cache_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
+        # Create cache subdirectory
+        cache_dir = self.cache_dir / ticker / 'cache'
+        cache_dir.mkdir(parents=True, exist_ok=True)
         
         if start and end:
-            filename = f"{start}_{end}_{interval}.csv"
+            filename = f"prices_{start}_{end}_{interval}.csv"
         else:
-            filename = f"{period}_{interval}.csv"
-        return ticker_dir / filename
+            filename = f"prices_{period}_{interval}.csv"
+        return cache_dir / filename
     
     def clear_cache(self, ticker: Optional[str] = None):
         """
@@ -627,13 +627,13 @@ class DataFetcher:
 
 
 # Convenience functions
-def fetch_ticker(ticker: str, period: str = "1mo", **kwargs) -> pd.DataFrame:
+def fetch_ticker(ticker: str, period: str = "1y", **kwargs) -> pd.DataFrame:
     """Quick fetch for a single ticker"""
     fetcher = DataFetcher()
     return fetcher.fetch_ticker(ticker, period=period, **kwargs)
 
 
-def fetch_multiple(tickers: List[str], period: str = "1mo", **kwargs) -> dict[str, pd.DataFrame]:
+def fetch_multiple(tickers: List[str], period: str = "1y", **kwargs) -> dict[str, pd.DataFrame]:
     """Quick fetch for multiple tickers"""
     fetcher = DataFetcher()
     return fetcher.fetch_multiple_tickers(tickers, period=period, **kwargs)

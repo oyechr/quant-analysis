@@ -433,3 +433,85 @@ class NewsSection(ReportSection):
                 md.append(f"   - [Read more]({link})")
         
         return md
+
+
+class TechnicalAnalysisSection(ReportSection):
+    """Technical analysis section"""
+    
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Any:
+        """Fetch price data and calculate technical indicators"""
+        from .technical_analysis import TechnicalAnalyzer
+        
+        # Fetch 1 year of data for 200-day SMA calculation
+        period = kwargs.get('period', '1y')
+        price_data = fetcher.fetch_ticker(ticker, period=period, use_cache=use_cache)
+        
+        # Calculate all indicators
+        analyzer = TechnicalAnalyzer(price_data)
+        analyzer.calculate_all_indicators()
+        
+        # Return analyzer instance for formatting
+        return analyzer
+    
+    def format_for_json(self, raw_data: Any) -> Any:
+        """Format technical analysis for JSON (return summary)"""
+        if hasattr(raw_data, 'get_summary'):
+            return raw_data.get_summary()
+        return None
+    
+    def format_for_markdown(self, raw_data: Any) -> List[str]:
+        """Format technical analysis summary for main report"""
+        md = []
+        md.append("\n## Technical Analysis Summary")
+        md.append("")
+        
+        if not hasattr(raw_data, 'get_latest_values'):
+            md.append("*Technical analysis not available*")
+            return md
+        
+        # Get summary data
+        latest = raw_data.get_latest_values()
+        signals = raw_data.generate_signals()
+        
+        # Current price
+        md.append(f"**Current Price:** ${latest['close_price']:.2f}")
+        md.append(f"**As of:** {latest['date']}")
+        md.append("")
+        
+        # Key signals
+        if signals:
+            md.append("### Key Signals")
+            md.append("")
+            for indicator, signal in signals.items():
+                md.append(f"- **{indicator}:** {signal}")
+            md.append("")
+        
+        # Key indicators table
+        md.append("### Key Indicators")
+        md.append("")
+        md.append("| Indicator | Value |")
+        md.append("|-----------|-------|")
+        
+        indicators = latest['indicators']
+        key_indicators = [
+            ('SMA_20', 'SMA (20)'),
+            ('SMA_50', 'SMA (50)'),
+            ('RSI_14', 'RSI (14)'),
+            ('MACD', 'MACD'),
+            ('BB_upper', 'Bollinger Upper'),
+            ('BB_lower', 'Bollinger Lower')
+        ]
+        
+        for key, label in key_indicators:
+            if key in indicators and indicators[key] is not None:
+                value = indicators[key]
+                if 'RSI' in key or 'MACD' in key:
+                    md.append(f"| {label} | {value:.2f} |")
+                else:
+                    md.append(f"| {label} | ${value:.2f} |")
+        
+        md.append("")
+        md.append("*See technical_analysis.md for detailed analysis*")
+        md.append("")
+        
+        return md

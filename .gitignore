@@ -1,7 +1,9 @@
-# Data directory - cached data and generated reports
-*.csv
-data/**/*.json
-data/**/*.md
+# Data directory structure
+# Cache: ephemeral API responses (can be regenerated)
+data/**/cache/
+
+# Reports: generated analysis outputs (tracked for versioning)
+# data/**/reports/ - intentionally tracked
 
 # Python
 __pycache__/

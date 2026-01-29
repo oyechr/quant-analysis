@@ -20,7 +20,8 @@ from .report_sections import (
     HoldersSection,
     DividendsSection,
     AnalystRatingsSection,
-    NewsSection
+    NewsSection,
+    TechnicalAnalysisSection
 )
 
 logger = logging.getLogger(__name__)
@@ -56,9 +57,10 @@ class ReportGenerator:
     def generate_full_report(
         self,
         ticker: str,
-        period: str = "1mo",
+        period: str = "1y",
         output_format: str = "both",
-        use_cache: bool = True
+        use_cache: bool = True,
+        include_technical: bool = False
     ) -> Dict[str, Any]:
         """
         Generate comprehensive report with all available data
@@ -68,6 +70,7 @@ class ReportGenerator:
             period: Period for price data (1mo, 3mo, 6mo, 1y, 2y, 5y, etc.)
             output_format: "json", "markdown", or "both"
             use_cache: Whether to use cached data
+            include_technical: Whether to include technical analysis (requires 1y period)
             
         Returns:
             Dictionary with all fetched data and metadata
@@ -96,30 +99,46 @@ class ReportGenerator:
                 logger.error(f"Error processing {section_name} section: {e}")
                 report_data[section_name] = None
         
+        # Add technical analysis if requested
+        technical_analyzer = None
+        if include_technical:
+            try:
+                tech_section = TechnicalAnalysisSection()
+                technical_analyzer = tech_section.fetch_data(
+                    self.fetcher,
+                    ticker,
+                    use_cache=use_cache,
+                    period='1y'  # Force 1y for technical analysis
+                )
+                report_data['technical_analysis'] = tech_section.format_for_json(technical_analyzer)
+            except Exception as e:
+                logger.error(f"Error processing technical analysis: {e}")
+                report_data['technical_analysis'] = None
+        
         # Save outputs
         if output_format in ["json", "both"]:
             self._save_json_report(ticker, report_data)
         
         if output_format in ["markdown", "both"]:
-            self._save_markdown_report(ticker, report_data)
+            self._save_markdown_report(ticker, report_data, technical_analyzer)
         
         logger.info(f"Report generation complete for {ticker}")
         return report_data
     
     def _save_json_report(self, ticker: str, data: Dict[str, Any]):
         """Save report as JSON"""
-        ticker_dir = self.output_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
-        output_file = ticker_dir / "full_report.json"
+        reports_dir = self.output_dir / ticker / 'reports'
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "full_report.json"
         with open(output_file, 'w') as f:
             json.dump(data, f, indent=2, default=str)
         logger.info(f"JSON report saved: {output_file}")
     
-    def _save_markdown_report(self, ticker: str, data: Dict[str, Any]):
+    def _save_markdown_report(self, ticker: str, data: Dict[str, Any], technical_analyzer=None):
         """Save report as Markdown using section handlers"""
-        ticker_dir = self.output_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
-        output_file = ticker_dir / "report.md"
+        reports_dir = self.output_dir / ticker / 'reports'
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "report.md"
         
         md = []
         md.append(f"# {ticker} - Comprehensive Stock Report")
@@ -136,11 +155,43 @@ class ReportGenerator:
                 except Exception as e:
                     logger.warning(f"Error formatting markdown for {section_name}: {e}")
         
-        # Write file
+        # Add technical analysis summary if available
+        if technical_analyzer and data.get('technical_analysis'):
+            try:
+                tech_section = TechnicalAnalysisSection()
+                md.extend(tech_section.format_for_markdown(technical_analyzer))
+            except Exception as e:
+                logger.warning(f"Error formatting technical analysis markdown: {e}")
+        
+        # Write main report
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(md))
         
         logger.info(f"Markdown report saved: {output_file}")
+        
+        # Save detailed technical analysis markdown if available
+        if technical_analyzer:
+            self._save_technical_markdown(ticker, technical_analyzer)
+    
+    def _save_technical_markdown(self, ticker: str, technical_analyzer):
+        """Save detailed technical analysis as separate markdown file"""
+        reports_dir = self.output_dir / ticker / 'reports'
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "technical_analysis.md"
+        
+        md = []
+        md.append(f"# {ticker} - Technical Analysis Report")
+        md.append("")
+        md.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # Get detailed markdown from analyzer
+        md.extend(technical_analyzer.format_markdown())
+        
+        # Write file
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(md))
+        
+        logger.info(f"Technical analysis markdown saved: {output_file}")
 
 
 # Convenience function
