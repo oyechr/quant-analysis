@@ -179,6 +179,24 @@ class TechnicalAnalyzer:
         )
         return self.df
     
+    def calculate_adx(self, period: int = 14) -> pd.DataFrame:
+        """
+        Calculate ADX (Average Directional Index) - Trend Strength
+        
+        Args:
+            period: Lookback period
+            
+        Returns:
+            DataFrame with ADX column added
+        """
+        self.df[f'ADX_{period}'] = trend.adx(
+            self.df['High'],
+            self.df['Low'],
+            self.df['Close'],
+            window=period
+        )
+        return self.df
+    
     # ==================== Volume Indicators ====================
     
     def calculate_obv(self) -> pd.DataFrame:
@@ -206,6 +224,43 @@ class TechnicalAnalyzer:
         )
         return self.df
     
+    def calculate_mfi(self, period: int = 14) -> pd.DataFrame:
+        """
+        Calculate MFI (Money Flow Index) - Volume-weighted RSI
+        
+        Args:
+            period: Lookback period
+            
+        Returns:
+            DataFrame with MFI column added
+        """
+        self.df[f'MFI_{period}'] = volume.money_flow_index(
+            self.df['High'],
+            self.df['Low'],
+            self.df['Close'],
+            self.df['Volume'],
+            window=period
+        )
+        return self.df
+    
+    def calculate_williams_r(self, period: int = 14) -> pd.DataFrame:
+        """
+        Calculate Williams %R - Momentum Oscillator
+        
+        Args:
+            period: Lookback period
+            
+        Returns:
+            DataFrame with Williams %R column added
+        """
+        self.df[f'Williams_R_{period}'] = momentum.williams_r(
+            self.df['High'],
+            self.df['Low'],
+            self.df['Close'],
+            lbp=period
+        )
+        return self.df
+    
     # ==================== All-in-One Methods ====================
     
     def calculate_all_indicators(self) -> pd.DataFrame:
@@ -224,14 +279,17 @@ class TechnicalAnalyzer:
         # Momentum indicators
         self.calculate_rsi()
         self.calculate_stochastic()
+        self.calculate_williams_r()
         
         # Volatility indicators
         self.calculate_bollinger_bands()
         self.calculate_atr()
+        self.calculate_adx()
         
         # Volume indicators
         self.calculate_obv()
         self.calculate_vwap()
+        self.calculate_mfi()
         
         logger.info(f"Calculated {len(self.df.columns) - 6} indicators")  # Subtract OHLCV + 1
         return self.df
@@ -340,6 +398,36 @@ class TechnicalAnalyzer:
                 else:
                     signals['Bollinger_Bands'] = 'Price within bands - normal'
         
+        # ADX - Trend Strength
+        if 'ADX_14' in self.df.columns and not pd.isna(latest['ADX_14']):
+            adx = latest['ADX_14']
+            if adx > 25:
+                signals['ADX'] = f'Strong trend ({adx:.1f})'
+            elif adx > 20:
+                signals['ADX'] = f'Moderate trend ({adx:.1f})'
+            else:
+                signals['ADX'] = f'Weak/no trend ({adx:.1f})'
+        
+        # MFI - Money Flow
+        if 'MFI_14' in self.df.columns and not pd.isna(latest['MFI_14']):
+            mfi = latest['MFI_14']
+            if mfi > 80:
+                signals['MFI'] = 'Overbought (>80) - high buying pressure'
+            elif mfi < 20:
+                signals['MFI'] = 'Oversold (<20) - high selling pressure'
+            else:
+                signals['MFI'] = f'Neutral ({mfi:.1f})'
+        
+        # Williams %R
+        if 'Williams_R_14' in self.df.columns and not pd.isna(latest['Williams_R_14']):
+            williams = latest['Williams_R_14']
+            if williams > -20:
+                signals['Williams_R'] = 'Overbought (>-20) - potential reversal'
+            elif williams < -80:
+                signals['Williams_R'] = 'Oversold (<-80) - potential reversal'
+            else:
+                signals['Williams_R'] = f'Neutral ({williams:.1f})'
+        
         return signals
     
     def get_summary(self) -> Dict[str, Any]:
@@ -427,25 +515,82 @@ class TechnicalAnalyzer:
             interp = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
             md.append(f"| RSI (14) | {rsi:.2f} | {interp} |")
         
+        if 'MFI_14' in indicators and indicators['MFI_14'] is not None:
+            mfi = indicators['MFI_14']
+            interp = "Overbought" if mfi > 80 else "Oversold" if mfi < 20 else "Neutral"
+            md.append(f"| MFI (14) | {mfi:.2f} | {interp} |")
+        
         if 'Stoch_K' in indicators and indicators['Stoch_K'] is not None:
-            md.append(f"| Stochastic %K | {indicators['Stoch_K']:.2f} | |")
+            stoch_k = indicators['Stoch_K']
+            interp = "Overbought" if stoch_k > 80 else "Oversold" if stoch_k < 20 else "Neutral"
+            md.append(f"| Stochastic %K | {stoch_k:.2f} | {interp} |")
         if 'Stoch_D' in indicators and indicators['Stoch_D'] is not None:
-            md.append(f"| Stochastic %D | {indicators['Stoch_D']:.2f} | |")
+            stoch_d = indicators['Stoch_D']
+            interp = "Overbought" if stoch_d > 80 else "Oversold" if stoch_d < 20 else "Neutral"
+            md.append(f"| Stochastic %D | {stoch_d:.2f} | {interp} |")
+        
+        if 'Williams_R_14' in indicators and indicators['Williams_R_14'] is not None:
+            williams = indicators['Williams_R_14']
+            interp = "Overbought" if williams > -20 else "Oversold" if williams < -80 else "Neutral"
+            md.append(f"| Williams %R (14) | {williams:.2f} | {interp} |")
         md.append("")
         
-        # Volatility Indicators
-        md.append("### Volatility Indicators")
+        # Volatility & Trend Strength Indicators
+        md.append("### Volatility & Trend Strength")
         md.append("")
-        md.append("| Indicator | Value |")
-        md.append("|-----------|-------|")
+        md.append("| Indicator | Value | Interpretation |")
+        md.append("|-----------|-------|----------------|")
         
-        for key in ['BB_upper', 'BB_middle', 'BB_lower']:
-            if key in indicators and indicators[key] is not None:
-                label = key.replace('BB_', 'Bollinger ').replace('_', ' ').title()
-                md.append(f"| {label} | ${indicators[key]:.2f} |")
+        # Bollinger Bands with price position
+        bb_keys = ['BB_upper', 'BB_middle', 'BB_lower']
+        if all(key in indicators and indicators[key] is not None for key in bb_keys):
+            close = latest_data['close_price']
+            bb_upper = indicators['BB_upper']
+            bb_middle = indicators['BB_middle']
+            bb_lower = indicators['BB_lower']
+            
+            # Determine price position
+            if close > bb_upper:
+                bb_pos = "Above upper band"
+            elif close < bb_lower:
+                bb_pos = "Below lower band"
+            elif close > bb_middle:
+                bb_pos = "Upper half"
+            else:
+                bb_pos = "Lower half"
+            
+            md.append(f"| Bollinger Upper | ${bb_upper:.2f} | {bb_pos} |")
+            md.append(f"| Bollinger Middle | ${bb_middle:.2f} | |")
+            md.append(f"| Bollinger Lower | ${bb_lower:.2f} | |")
+        else:
+            # Fallback if not all BB values available
+            for key in bb_keys:
+                if key in indicators and indicators[key] is not None:
+                    label = key.replace('BB_', 'Bollinger ').replace('_', ' ').title()
+                    md.append(f"| {label} | ${indicators[key]:.2f} | |")
         
         if 'ATR_14' in indicators and indicators['ATR_14'] is not None:
-            md.append(f"| ATR (14) | ${indicators['ATR_14']:.2f} |")
+            current_atr = indicators['ATR_14']
+            # Compare to 20-day average to show if volatility is expanding/contracting
+            if 'ATR_14' in self.df.columns and len(self.df) >= 20:
+                atr_sma = self.df['ATR_14'].rolling(20).mean().iloc[-1]
+                if not pd.isna(atr_sma) and atr_sma > 0:
+                    if current_atr > atr_sma * 1.2:
+                        atr_interp = "Expanding (high)"
+                    elif current_atr < atr_sma * 0.8:
+                        atr_interp = "Contracting (low)"
+                    else:
+                        atr_interp = "Normal range"
+                else:
+                    atr_interp = "Volatility measure"
+            else:
+                atr_interp = "Volatility measure"
+            md.append(f"| ATR (14) | ${current_atr:.2f} | {atr_interp} |")
+        
+        if 'ADX_14' in indicators and indicators['ADX_14'] is not None:
+            adx = indicators['ADX_14']
+            strength = "Strong" if adx > 25 else "Moderate" if adx > 20 else "Weak"
+            md.append(f"| ADX (14) | {adx:.2f} | {strength} trend |")
         md.append("")
         
         # Volume Indicators

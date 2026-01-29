@@ -1,6 +1,6 @@
 # EXE.TO - Comprehensive Stock Report
 
-**Generated:** 2026-01-29T13:15:00.314148
+**Generated:** 2026-01-29T13:47:22.429117
 
 **Period:** 1y
 
@@ -182,6 +182,9 @@
 - **MA_Trend:** Bullish (Golden Cross)
 - **Price_Position:** Strong uptrend (above both MAs)
 - **Bollinger_Bands:** Price above upper band - overbought
+- **ADX:** Strong trend (28.4)
+- **MFI:** Neutral (72.2)
+- **Williams_R:** Overbought (>-20) - potential reversal
 
 ### Key Indicators
 

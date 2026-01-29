@@ -97,7 +97,7 @@ def main():
     print("Sample Data (Last 5 Days)")
     print("=" * 70)
     print("\nPrice + Key Indicators:")
-    display_cols = ['Close', 'SMA_20', 'SMA_50', 'RSI_14', 'MACD_12_26_9']
+    display_cols = ['Close', 'SMA_20', 'SMA_50', 'RSI_14', 'MACD', 'ADX_14']
     available_cols = [col for col in display_cols if col in df_with_indicators.columns]
     print(df_with_indicators[available_cols].tail())
     

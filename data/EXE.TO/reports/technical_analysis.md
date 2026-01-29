@@ -1,6 +1,6 @@
 # EXE.TO - Technical Analysis Report
 
-**Generated:** 2026-01-29 13:15:00
+**Generated:** 2026-01-29 13:47:22
 
 ## Technical Analysis
 
@@ -17,6 +17,9 @@
 **MA_Trend:** Bullish (Golden Cross)
 **Price_Position:** Strong uptrend (above both MAs)
 **Bollinger_Bands:** Price above upper band - overbought
+**ADX:** Strong trend (28.4)
+**MFI:** Neutral (72.2)
+**Williams_R:** Overbought (>-20) - potential reversal
 
 ### Trend Indicators
 
@@ -36,17 +39,20 @@
 | Indicator | Value | Interpretation |
 |-----------|-------|----------------|
 | RSI (14) | 69.02 | Neutral |
-| Stochastic %K | 81.69 | |
-| Stochastic %D | 87.07 | |
+| MFI (14) | 72.25 | Neutral |
+| Stochastic %K | 81.69 | Overbought |
+| Stochastic %D | 87.07 | Overbought |
+| Williams %R (14) | -18.31 | Overbought |
 
-### Volatility Indicators
+### Volatility & Trend Strength
 
-| Indicator | Value |
-|-----------|-------|
-| Bollinger Upper | $23.37 |
-| Bollinger Middle | $22.20 |
-| Bollinger Lower | $21.03 |
-| ATR (14) | $0.57 |
+| Indicator | Value | Interpretation |
+|-----------|-------|----------------|
+| Bollinger Upper | $23.37 | Above upper band |
+| Bollinger Middle | $22.20 | |
+| Bollinger Lower | $21.03 | |
+| ATR (14) | $0.57 | Normal range |
+| ADX (14) | 28.38 | Strong trend |
 
 ### Volume Indicators
 

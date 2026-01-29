@@ -1,6 +1,6 @@
 {
   "ticker": "EXE.TO",
-  "generated_at": "2026-01-29T13:15:00.314148",
+  "generated_at": "2026-01-29T13:47:22.429117",
   "period": "1y",
   "info": {
     "symbol": "EXE.TO",
@@ -884,12 +884,15 @@
         "RSI_14": 69.02338053880655,
         "Stoch_K": 81.69008913492397,
         "Stoch_D": 87.0687522137502,
+        "Williams_R_14": -18.309910865076027,
         "BB_upper": 23.373838114494106,
         "BB_middle": 22.20349998474121,
         "BB_lower": 21.033161854988315,
         "ATR_14": 0.5651895398646773,
+        "ADX_14": 28.375194500724543,
         "OBV": 12027000.0,
-        "VWAP": 22.63919247940178
+        "VWAP": 22.63919247940178,
+        "MFI_14": 72.24689906937037
       }
     },
     "signals": {
@@ -897,7 +900,10 @@
       "MACD": "Bullish",
       "MA_Trend": "Bullish (Golden Cross)",
       "Price_Position": "Strong uptrend (above both MAs)",
-      "Bollinger_Bands": "Price above upper band - overbought"
+      "Bollinger_Bands": "Price above upper band - overbought",
+      "ADX": "Strong trend (28.4)",
+      "MFI": "Neutral (72.2)",
+      "Williams_R": "Overbought (>-20) - potential reversal"
     },
     "data_points": 252,
     "date_range": {
