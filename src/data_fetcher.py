@@ -131,15 +131,13 @@ class DataFetcher:
             Dictionary with ticker metadata
         """
         ticker = ticker.upper()
-        ticker_dir = self.cache_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
-        cache_file = ticker_dir / "info.json"
+        cache_file = self._get_cache_file_path(ticker, "info.json")
         
         # Check cache
-        if use_cache and cache_file.exists():
-            logger.info(f"Loading cached info for {ticker}")
-            with open(cache_file, 'r') as f:
-                return json.load(f)
+        if use_cache:
+            cached = self._load_json_cache(cache_file)
+            if cached is not None:
+                return cached
         
         try:
             stock = yf.Ticker(ticker)
@@ -181,9 +179,7 @@ class DataFetcher:
             }
             
             # Cache the result
-            with open(cache_file, 'w') as f:
-                json.dump(result, f, indent=2)
-            logger.info(f"Cached info saved for {ticker}")
+            self._save_json_cache(cache_file, result)
             
             return result
             
@@ -208,23 +204,20 @@ class DataFetcher:
             Each containing quarterly and annual DataFrames
         """
         ticker = ticker.upper()
-        ticker_dir = self.cache_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
-        cache_file = ticker_dir / "fundamentals.json"
+        cache_file = self._get_cache_file_path(ticker, "fundamentals.json")
         
         # Check cache
-        if use_cache and cache_file.exists():
-            logger.info(f"Loading cached fundamentals for {ticker}")
-            with open(cache_file, 'r') as f:
-                cached = json.load(f)
-            return {
-                'income_stmt_quarterly': pd.DataFrame(cached['income_stmt_quarterly']),
-                'income_stmt_annual': pd.DataFrame(cached['income_stmt_annual']),
-                'balance_sheet_quarterly': pd.DataFrame(cached['balance_sheet_quarterly']),
-                'balance_sheet_annual': pd.DataFrame(cached['balance_sheet_annual']),
-                'cash_flow_quarterly': pd.DataFrame(cached['cash_flow_quarterly']),
-                'cash_flow_annual': pd.DataFrame(cached['cash_flow_annual']),
-            }
+        if use_cache:
+            cached = self._load_json_cache(cache_file)
+            if cached is not None:
+                return {
+                    'income_stmt_quarterly': pd.DataFrame(cached['income_stmt_quarterly']),
+                    'income_stmt_annual': pd.DataFrame(cached['income_stmt_annual']),
+                    'balance_sheet_quarterly': pd.DataFrame(cached['balance_sheet_quarterly']),
+                    'balance_sheet_annual': pd.DataFrame(cached['balance_sheet_annual']),
+                    'cash_flow_quarterly': pd.DataFrame(cached['cash_flow_quarterly']),
+                    'cash_flow_annual': pd.DataFrame(cached['cash_flow_annual']),
+                }
         
         try:
             logger.info(f"Fetching fundamentals for {ticker}")
@@ -255,9 +248,7 @@ class DataFetcher:
                 else:
                     cache_data[k] = {}
             
-            with open(cache_file, 'w') as f:
-                json.dump(cache_data, f, indent=2, default=str)
-            logger.info(f"Cached fundamentals for {ticker}")
+            self._save_json_cache(cache_file, cache_data)
             
             return result
             
@@ -288,19 +279,16 @@ class DataFetcher:
             Dictionary with 'earnings_history' and 'earnings_dates' DataFrames
         """
         ticker = ticker.upper()
-        ticker_dir = self.cache_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
-        cache_file = ticker_dir / "earnings.json"
+        cache_file = self._get_cache_file_path(ticker, "earnings.json")
         
         # Check cache
-        if use_cache and cache_file.exists():
-            logger.info(f"Loading cached earnings for {ticker}")
-            with open(cache_file, 'r') as f:
-                cached = json.load(f)
-            return {
-                'earnings_history': pd.DataFrame(cached.get('earnings_history', {})),
-                'earnings_dates': pd.DataFrame(cached.get('earnings_dates', {})),
-            }
+        if use_cache:
+            cached = self._load_json_cache(cache_file)
+            if cached is not None:
+                return {
+                    'earnings_history': pd.DataFrame(cached.get('earnings_history', {})),
+                    'earnings_dates': pd.DataFrame(cached.get('earnings_dates', {})),
+                }
         
         try:
             logger.info(f"Fetching earnings for {ticker}")
@@ -326,9 +314,7 @@ class DataFetcher:
                 else:
                     cache_data[k] = []
             
-            with open(cache_file, 'w') as f:
-                json.dump(cache_data, f, indent=2, default=str)
-            logger.info(f"Cached earnings for {ticker}")
+            self._save_json_cache(cache_file, cache_data)
             
             return result
             
@@ -355,19 +341,16 @@ class DataFetcher:
             Dictionary with 'institutional_holders' and 'mutualfund_holders'
         """
         ticker = ticker.upper()
-        ticker_dir = self.cache_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
-        cache_file = ticker_dir / "holders.json"
+        cache_file = self._get_cache_file_path(ticker, "holders.json")
         
         # Check cache
-        if use_cache and cache_file.exists():
-            logger.info(f"Loading cached holders for {ticker}")
-            with open(cache_file, 'r') as f:
-                cached = json.load(f)
-            return {
-                'institutional_holders': pd.DataFrame(cached.get('institutional_holders', {})),
-                'mutualfund_holders': pd.DataFrame(cached.get('mutualfund_holders', {})),
-            }
+        if use_cache:
+            cached = self._load_json_cache(cache_file)
+            if cached is not None:
+                return {
+                    'institutional_holders': pd.DataFrame(cached.get('institutional_holders', {})),
+                    'mutualfund_holders': pd.DataFrame(cached.get('mutualfund_holders', {})),
+                }
         
         try:
             logger.info(f"Fetching holders for {ticker}")
@@ -421,20 +404,17 @@ class DataFetcher:
             Dictionary with 'dividends', 'splits', and 'actions' DataFrames
         """
         ticker = ticker.upper()
-        ticker_dir = self.cache_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
-        cache_file = ticker_dir / "dividends.json"
+        cache_file = self._get_cache_file_path(ticker, "dividends.json")
         
         # Check cache
-        if use_cache and cache_file.exists():
-            logger.info(f"Loading cached dividends for {ticker}")
-            with open(cache_file, 'r') as f:
-                cached = json.load(f)
-            return {
-                'dividends': pd.DataFrame(cached.get('dividends', {})),
-                'splits': pd.DataFrame(cached.get('splits', {})),
-                'actions': pd.DataFrame(cached.get('actions', {})),
-            }
+        if use_cache:
+            cached = self._load_json_cache(cache_file)
+            if cached is not None:
+                return {
+                    'dividends': pd.DataFrame(cached.get('dividends', {})),
+                    'splits': pd.DataFrame(cached.get('splits', {})),
+                    'actions': pd.DataFrame(cached.get('actions', {})),
+                }
         
         try:
             logger.info(f"Fetching dividends for {ticker}")
@@ -485,9 +465,7 @@ class DataFetcher:
                 else:
                     cache_data[k] = []
             
-            with open(cache_file, 'w') as f:
-                json.dump(cache_data, f, indent=2, default=str)
-            logger.info(f"Cached dividends for {ticker}")
+            self._save_json_cache(cache_file, cache_data)
             
             return result
             
@@ -515,19 +493,16 @@ class DataFetcher:
             Dictionary with 'recommendations' and 'upgrades_downgrades' DataFrames
         """
         ticker = ticker.upper()
-        ticker_dir = self.cache_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
-        cache_file = ticker_dir / "analyst_ratings.json"
+        cache_file = self._get_cache_file_path(ticker, "analyst_ratings.json")
         
         # Check cache
-        if use_cache and cache_file.exists():
-            logger.info(f"Loading cached analyst ratings for {ticker}")
-            with open(cache_file, 'r') as f:
-                cached = json.load(f)
-            return {
-                'recommendations': pd.DataFrame(cached.get('recommendations', {})),
-                'upgrades_downgrades': pd.DataFrame(cached.get('upgrades_downgrades', {})),
-            }
+        if use_cache:
+            cached = self._load_json_cache(cache_file)
+            if cached is not None:
+                return {
+                    'recommendations': pd.DataFrame(cached.get('recommendations', {})),
+                    'upgrades_downgrades': pd.DataFrame(cached.get('upgrades_downgrades', {})),
+                }
         
         try:
             logger.info(f"Fetching analyst ratings for {ticker}")
@@ -561,9 +536,7 @@ class DataFetcher:
                 else:
                     cache_data[k] = []
             
-            with open(cache_file, 'w') as f:
-                json.dump(cache_data, f, indent=2, default=str)
-            logger.info(f"Cached analyst ratings for {ticker}")
+            self._save_json_cache(cache_file, cache_data)
             
             return result
             
@@ -590,15 +563,13 @@ class DataFetcher:
             List of news article dictionaries with title, publisher, link, etc.
         """
         ticker = ticker.upper()
-        ticker_dir = self.cache_dir / ticker
-        ticker_dir.mkdir(exist_ok=True)
-        cache_file = ticker_dir / "news.json"
+        cache_file = self._get_cache_file_path(ticker, "news.json")
         
         # Check cache
-        if use_cache and cache_file.exists():
-            logger.info(f"Loading cached news for {ticker}")
-            with open(cache_file, 'r') as f:
-                return json.load(f)
+        if use_cache:
+            cached = self._load_json_cache(cache_file)
+            if cached is not None:
+                return cached
         
         try:
             logger.info(f"Fetching news for {ticker}")
@@ -609,15 +580,60 @@ class DataFetcher:
             news = news_data if isinstance(news_data, list) else []
             
             # Cache the result
-            with open(cache_file, 'w') as f:
-                json.dump(news, f, indent=2, default=str)
-            logger.info(f"Cached news for {ticker}")
+            self._save_json_cache(cache_file, news)
             
             return news
             
         except Exception as e:
             logger.error(f"Error fetching news for {ticker}: {e}")
             return []
+    
+    # ==================== Cache Helper Methods ====================
+    
+    def _get_cache_file_path(self, ticker: str, filename: str) -> Path:
+        """
+        Get cache file path and ensure directory exists
+        
+        Args:
+            ticker: Stock ticker symbol
+            filename: Name of cache file (e.g., 'info.json', 'fundamentals.json')
+            
+        Returns:
+            Path object for the cache file
+        """
+        ticker_dir = self.cache_dir / ticker
+        ticker_dir.mkdir(exist_ok=True)
+        return ticker_dir / filename
+    
+    def _load_json_cache(self, cache_path: Path) -> Optional[Any]:
+        """
+        Load data from JSON cache file if it exists
+        
+        Args:
+            cache_path: Path to cache file
+            
+        Returns:
+            Cached data or None if cache doesn't exist
+        """
+        if cache_path.exists():
+            logger.info(f"Loading from cache: {cache_path}")
+            with open(cache_path, 'r') as f:
+                return json.load(f)
+        return None
+    
+    def _save_json_cache(self, cache_path: Path, data: Any) -> None:
+        """
+        Save data to JSON cache file
+        
+        Args:
+            cache_path: Path to cache file
+            data: Data to cache (must be JSON-serializable)
+        """
+        with open(cache_path, 'w') as f:
+            json.dump(data, f, indent=2, default=str)
+        logger.info(f"Saved to cache: {cache_path}")
+    
+    # ==================== Legacy Methods ====================
     
     def _get_cache_filename(
         self,
@@ -627,7 +643,7 @@ class DataFetcher:
         period: str,
         interval: str
     ) -> Path:
-        """Generate cache filename based on parameters"""
+        """Generate cache filename based on parameters (for CSV price data)"""
         # Create ticker-specific subdirectory
         ticker_dir = self.cache_dir / ticker
         ticker_dir.mkdir(exist_ok=True)
