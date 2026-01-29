@@ -8,6 +8,39 @@ Provides consistent DataFrame/Series to JSON conversion with proper handling of:
 
 import pandas as pd
 from typing import Dict, List, Any, Union, Sequence
+from datetime import datetime
+
+
+def format_date(date_value: Any, format_type: str = 'iso') -> str:
+    """
+    Format date/timestamp values consistently across the codebase
+    
+    Args:
+        date_value: pd.Timestamp, datetime, or string
+        format_type: 'iso' (YYYY-MM-DD) or 'readable' (Jan 29, 2026)
+        
+    Returns:
+        Formatted date string
+    """
+    # Convert to string first
+    date_str = str(date_value)
+    
+    if format_type == 'iso':
+        # Extract YYYY-MM-DD portion only (no time/milliseconds)
+        return date_str[:10]
+    elif format_type == 'readable':
+        # Parse and format as readable
+        try:
+            if isinstance(date_value, (pd.Timestamp, datetime)):
+                dt = date_value
+            else:
+                dt = pd.to_datetime(date_str)
+            return dt.strftime('%b %d, %Y')
+        except:
+            # Fallback to ISO if parsing fails
+            return date_str[:10]
+    else:
+        return date_str[:10]
 
 
 def dataframe_to_records(

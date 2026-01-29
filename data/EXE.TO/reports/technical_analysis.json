@@ -1,6 +1,31 @@
 {
+  "statistics": {
+    "price": {
+      "current": 23.399999618530277,
+      "high": 23.399999618530277,
+      "high_date": "2026-01-28",
+      "low": 9.920085906982422,
+      "low_date": "2025-02-03",
+      "mean": 15.019699951959035,
+      "std_dev": 3.626005785541875,
+      "std_dev_pct": 24.141665926348487
+    },
+    "returns": {
+      "period_return_pct": 133.8247016925807,
+      "daily_volatility_pct": 1.9237176996399648,
+      "annual_volatility_pct": 30.538071755643575
+    },
+    "volume": {
+      "current": 760100.0,
+      "average": 208967.46031746033,
+      "max": 820400.0,
+      "max_date": "2025-11-20",
+      "min": 44200.0,
+      "volume_vs_avg_pct": 263.74084216043354
+    }
+  },
   "latest_values": {
-    "date": "2026-01-28 00:00:00-05:00",
+    "date": "2026-01-28",
     "close_price": 23.399999618530277,
     "indicators": {
       "Dividends": 0.0,
@@ -16,12 +41,15 @@
       "RSI_14": 69.02338053880655,
       "Stoch_K": 81.69008913492397,
       "Stoch_D": 87.0687522137502,
+      "Williams_R_14": -18.309910865076027,
       "BB_upper": 23.373838114494106,
       "BB_middle": 22.20349998474121,
       "BB_lower": 21.033161854988315,
       "ATR_14": 0.5651895398646773,
+      "ADX_14": 28.375194500724543,
       "OBV": 12027000.0,
-      "VWAP": 22.63919247940178
+      "VWAP": 22.63919247940178,
+      "MFI_14": 72.24689906937037
     }
   },
   "signals": {
@@ -29,11 +57,14 @@
     "MACD": "Bullish",
     "MA_Trend": "Bullish (Golden Cross)",
     "Price_Position": "Strong uptrend (above both MAs)",
-    "Bollinger_Bands": "Price above upper band - overbought"
+    "Bollinger_Bands": "Price above upper band - overbought",
+    "ADX": "Strong trend (28.4)",
+    "MFI": "Neutral (72.2)",
+    "Williams_R": "Overbought (>-20) - potential reversal"
   },
   "data_points": 252,
   "date_range": {
-    "start": "2025-01-28 00:00:00-05:00",
-    "end": "2026-01-28 00:00:00-05:00"
+    "start": "2025-01-28",
+    "end": "2026-01-28"
   }
 }

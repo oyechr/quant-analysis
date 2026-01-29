@@ -10,6 +10,7 @@ import logging
 
 # Import ta submodules
 from ta import trend, momentum, volatility, volume
+from .serialization import format_date
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +262,74 @@ class TechnicalAnalyzer:
         )
         return self.df
     
+    def calculate_statistics(self) -> Dict[str, Any]:
+        """
+        Calculate statistical summary of price and volume data
+        
+        Returns:
+            Dictionary with statistical measures
+        """
+        if self.df.empty:
+            return {}
+        
+        close_prices = self.df['Close']
+        volume = self.df['Volume']
+        
+        # Calculate returns
+        returns = close_prices.pct_change().dropna()
+        
+        # Price statistics
+        current_price = float(close_prices.iloc[-1])
+        max_price = float(close_prices.max())
+        min_price = float(close_prices.min())
+        mean_price = float(close_prices.mean())
+        std_price = float(close_prices.std())
+        
+        # Period return
+        start_price = float(close_prices.iloc[0])
+        period_return = ((current_price - start_price) / start_price) * 100
+        
+        # Volatility (annualized from daily returns)
+        daily_volatility = float(returns.std())
+        annual_volatility = daily_volatility * (252 ** 0.5) * 100  # 252 trading days
+        
+        # Volume statistics
+        avg_volume = float(volume.mean())
+        max_volume = float(volume.max())
+        min_volume = float(volume.min())
+        current_volume = float(volume.iloc[-1])
+        
+        # Find dates for extremes
+        max_price_date = format_date(close_prices.idxmax())
+        min_price_date = format_date(close_prices.idxmin())
+        max_volume_date = format_date(volume.idxmax())
+        
+        return {
+            'price': {
+                'current': current_price,
+                'high': max_price,
+                'high_date': max_price_date,
+                'low': min_price,
+                'low_date': min_price_date,
+                'mean': mean_price,
+                'std_dev': std_price,
+                'std_dev_pct': (std_price / mean_price) * 100 if mean_price > 0 else 0
+            },
+            'returns': {
+                'period_return_pct': period_return,
+                'daily_volatility_pct': daily_volatility * 100,
+                'annual_volatility_pct': annual_volatility
+            },
+            'volume': {
+                'current': current_volume,
+                'average': avg_volume,
+                'max': max_volume,
+                'max_date': max_volume_date,
+                'min': min_volume,
+                'volume_vs_avg_pct': ((current_volume - avg_volume) / avg_volume) * 100 if avg_volume > 0 else 0
+            }
+        }
+    
     # ==================== All-in-One Methods ====================
     
     def calculate_all_indicators(self) -> pd.DataFrame:
@@ -311,7 +380,7 @@ class TechnicalAnalyzer:
         indicator_cols = [col for col in self.df.columns if col not in base_cols]
         
         result = {
-            'date': str(latest.name),
+            'date': format_date(latest.name),
             'close_price': float(latest['Close']),
             'indicators': {}
         }
@@ -438,12 +507,13 @@ class TechnicalAnalyzer:
             Dictionary with complete technical analysis summary
         """
         return {
+            'statistics': self.calculate_statistics(),
             'latest_values': self.get_latest_values(),
             'signals': self.generate_signals(),
             'data_points': len(self.df),
             'date_range': {
-                'start': str(self.df.index[0]) if not self.df.empty else None,
-                'end': str(self.df.index[-1]) if not self.df.empty else None
+                'start': format_date(self.df.index[0]) if not self.df.empty else None,
+                'end': format_date(self.df.index[-1]) if not self.df.empty else None
             }
         }
     
@@ -468,6 +538,40 @@ class TechnicalAnalyzer:
         md.append(f"**Analysis Period:** {start_date} to {end_date}")
         md.append(f"**Data Points:** {len(self.df)} trading days")
         md.append("")
+        
+        # Statistical Summary
+        stats = self.calculate_statistics()
+        if stats:
+            md.append("### Statistical Summary")
+            md.append("")
+            md.append("| Metric | Value |")
+            md.append("|--------|-------|")
+            
+            # Price statistics
+            price = stats.get('price', {})
+            if price:
+                md.append(f"| Current Price | ${price.get('current', 0):.2f} |")
+                md.append(f"| Period High | ${price.get('high', 0):.2f} ({price.get('high_date', 'N/A')}) |")
+                md.append(f"| Period Low | ${price.get('low', 0):.2f} ({price.get('low_date', 'N/A')}) |")
+                md.append(f"| Mean Price | ${price.get('mean', 0):.2f} |")
+                md.append(f"| Std Deviation | ${price.get('std_dev', 0):.2f} ({price.get('std_dev_pct', 0):.1f}%) |")
+            
+            # Returns
+            returns = stats.get('returns', {})
+            if returns:
+                md.append(f"| Period Return | {returns.get('period_return_pct', 0):+.2f}% |")
+                md.append(f"| Daily Volatility | {returns.get('daily_volatility_pct', 0):.2f}% |")
+                md.append(f"| Annual Volatility | {returns.get('annual_volatility_pct', 0):.1f}% |")
+            
+            # Volume
+            vol = stats.get('volume', {})
+            if vol:
+                md.append(f"| Current Volume | {vol.get('current', 0):,.0f} |")
+                md.append(f"| Average Volume | {vol.get('average', 0):,.0f} |")
+                md.append(f"| Volume vs Avg | {vol.get('volume_vs_avg_pct', 0):+.1f}% |")
+                md.append(f"| Max Volume | {vol.get('max', 0):,.0f} ({vol.get('max_date', 'N/A')}) |")
+            
+            md.append("")
         
         # Latest values
         latest_data = self.get_latest_values()

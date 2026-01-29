@@ -1,6 +1,6 @@
 # EXE.TO - Comprehensive Stock Report
 
-**Generated:** 2026-01-29T13:47:22.429117
+**Generated:** 2026-01-29T14:12:16.411777
 
 **Period:** 1y
 
@@ -173,7 +173,7 @@
 ## Technical Analysis Summary
 
 **Current Price:** $23.40
-**As of:** 2026-01-28 00:00:00-05:00
+**As of:** 2026-01-28
 
 ### Key Signals
 

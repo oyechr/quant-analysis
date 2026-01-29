@@ -172,6 +172,22 @@ class ReportGenerator:
         # Save detailed technical analysis markdown if available
         if technical_analyzer:
             self._save_technical_markdown(ticker, technical_analyzer)
+            self._save_technical_json(ticker, technical_analyzer)
+    
+    def _save_technical_json(self, ticker: str, technical_analyzer):
+        """Save detailed technical analysis as separate JSON file"""
+        reports_dir = self.output_dir / ticker / 'reports'
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "technical_analysis.json"
+        
+        # Get summary with all statistics, indicators, and signals
+        technical_data = technical_analyzer.get_summary()
+        
+        # Write file
+        with open(output_file, 'w') as f:
+            json.dump(technical_data, f, indent=2, default=str)
+        
+        logger.info(f"Technical analysis JSON saved: {output_file}")
     
     def _save_technical_markdown(self, ticker: str, technical_analyzer):
         """Save detailed technical analysis as separate markdown file"""

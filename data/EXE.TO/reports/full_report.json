@@ -1,6 +1,6 @@
 {
   "ticker": "EXE.TO",
-  "generated_at": "2026-01-29T13:47:22.429117",
+  "generated_at": "2026-01-29T14:12:16.411777",
   "period": "1y",
   "info": {
     "symbol": "EXE.TO",
@@ -867,8 +867,33 @@
     ]
   },
   "technical_analysis": {
+    "statistics": {
+      "price": {
+        "current": 23.399999618530277,
+        "high": 23.399999618530277,
+        "high_date": "2026-01-28",
+        "low": 9.920085906982422,
+        "low_date": "2025-02-03",
+        "mean": 15.019699951959035,
+        "std_dev": 3.626005785541875,
+        "std_dev_pct": 24.141665926348487
+      },
+      "returns": {
+        "period_return_pct": 133.8247016925807,
+        "daily_volatility_pct": 1.9237176996399648,
+        "annual_volatility_pct": 30.538071755643575
+      },
+      "volume": {
+        "current": 760100.0,
+        "average": 208967.46031746033,
+        "max": 820400.0,
+        "max_date": "2025-11-20",
+        "min": 44200.0,
+        "volume_vs_avg_pct": 263.74084216043354
+      }
+    },
     "latest_values": {
-      "date": "2026-01-28 00:00:00-05:00",
+      "date": "2026-01-28",
       "close_price": 23.399999618530277,
       "indicators": {
         "Dividends": 0.0,
@@ -907,8 +932,8 @@
     },
     "data_points": 252,
     "date_range": {
-      "start": "2025-01-28 00:00:00-05:00",
-      "end": "2026-01-28 00:00:00-05:00"
+      "start": "2025-01-28",
+      "end": "2026-01-28"
     }
   }
 }

@@ -1,14 +1,31 @@
 # EXE.TO - Technical Analysis Report
 
-**Generated:** 2026-01-29 13:47:22
+**Generated:** 2026-01-29 14:12:16
 
 ## Technical Analysis
 
 **Analysis Period:** 2025-01-28 to 2026-01-28
 **Data Points:** 252 trading days
 
+### Statistical Summary
+
+| Metric | Value |
+|--------|-------|
+| Current Price | $23.40 |
+| Period High | $23.40 (2026-01-28) |
+| Period Low | $9.92 (2025-02-03) |
+| Mean Price | $15.02 |
+| Std Deviation | $3.63 (24.1%) |
+| Period Return | +133.82% |
+| Daily Volatility | 1.92% |
+| Annual Volatility | 30.5% |
+| Current Volume | 760,100 |
+| Average Volume | 208,967 |
+| Volume vs Avg | +263.7% |
+| Max Volume | 820,400 (2025-11-20) |
+
 ### Current Price: $23.40
-*As of 2026-01-28 00:00:00-05:00*
+*As of 2026-01-28*
 
 ### Trading Signals
 
