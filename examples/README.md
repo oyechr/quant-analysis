@@ -83,13 +83,38 @@ python examples/05_technical_analysis.py
 
 ### 04_generate_report.py - Comprehensive Reports
 
-**Demonstrates:**
+**Command-Line Interface:**
+
+```bash
+# Basic usage (includes technical + fundamental analysis)
+python examples/04_generate_report.py AAPL
+
+# Custom period (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)
+python examples/04_generate_report.py TSLA --period 2y
+
+# Skip technical or fundamental analysis
+python examples/04_generate_report.py MSFT --no-technical
+python examples/04_generate_report.py NVDA --no-fundamental
+
+# Output format options
+python examples/04_generate_report.py GOOGL --format json
+python examples/04_generate_report.py AMZN --format markdown
+
+# Bypass cache (fetch fresh data)
+python examples/04_generate_report.py META --no-cache
+
+# Get help
+python examples/04_generate_report.py --help
+```
+
+**Features:**
 
 - Generating full stock reports (JSON + Markdown)
 - Integrating multiple data sources
 - Optional technical analysis (timing signals)
 - Optional fundamental analysis (intrinsic value)
 - Report section modularity
+- Command-line arguments for flexibility
 
 **Output:**
 

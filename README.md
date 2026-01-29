@@ -68,6 +68,22 @@ pip install -r requirements.txt
 
 ## Quick Start
 
+### Generate Comprehensive Report (Easiest)
+
+```bash
+# Generate full report with technical + fundamental analysis
+python examples/04_generate_report.py AAPL
+
+# Custom period
+python examples/04_generate_report.py TSLA --period 2y
+
+# Technical analysis only
+python examples/04_generate_report.py MSFT --no-fundamental
+
+# Markdown output only
+python examples/04_generate_report.py NVDA --format markdown
+```
+
 ### Basic Data Fetching
 
 ```python
