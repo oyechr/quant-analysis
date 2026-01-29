@@ -7,8 +7,9 @@ import yfinance as yf
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict, Any
 import logging
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -33,7 +34,7 @@ class DataFetcher:
         ticker: str,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        period: str = "1y",
+        period: str = "1mo",
         interval: str = "1d",
         use_cache: bool = True
     ) -> pd.DataFrame:
@@ -87,7 +88,7 @@ class DataFetcher:
         tickers: List[str],
         start: Optional[str] = None,
         end: Optional[str] = None,
-        period: str = "1y",
+        period: str = "1mo",
         interval: str = "1d",
         use_cache: bool = True
     ) -> dict[str, pd.DataFrame]:
@@ -118,23 +119,35 @@ class DataFetcher:
         
         return results
     
-    def get_ticker_info(self, ticker: str) -> dict:
+    def get_ticker_info(self, ticker: str, use_cache: bool = True) -> Dict[str, Any]:
         """
         Get detailed information about a ticker
         
         Args:
             ticker: Stock ticker symbol
+            use_cache: Whether to use cached data
             
         Returns:
             Dictionary with ticker metadata
         """
+        ticker = ticker.upper()
+        ticker_dir = self.cache_dir / ticker
+        ticker_dir.mkdir(exist_ok=True)
+        cache_file = ticker_dir / "info.json"
+        
+        # Check cache
+        if use_cache and cache_file.exists():
+            logger.info(f"Loading cached info for {ticker}")
+            with open(cache_file, 'r') as f:
+                return json.load(f)
+        
         try:
-            stock = yf.Ticker(ticker.upper())
+            stock = yf.Ticker(ticker)
             info = stock.info
             
-            # Extract key fields
-            return {
-                'symbol': ticker.upper(),
+            # Extract comprehensive fields
+            result = {
+                'symbol': ticker,
                 'name': info.get('longName', 'N/A'),
                 'sector': info.get('sector', 'N/A'),
                 'industry': info.get('industry', 'N/A'),
@@ -142,10 +155,253 @@ class DataFetcher:
                 'currency': info.get('currency', 'USD'),
                 'exchange': info.get('exchange', 'N/A'),
                 'website': info.get('website', 'N/A'),
+                # Valuation metrics
+                'pe_ratio': info.get('trailingPE', None),
+                'forward_pe': info.get('forwardPE', None),
+                'peg_ratio': info.get('pegRatio', None),
+                'price_to_book': info.get('priceToBook', None),
+                'price_to_sales': info.get('priceToSalesTrailing12Months', None),
+                # Profitability
+                'profit_margin': info.get('profitMargins', None),
+                'operating_margin': info.get('operatingMargins', None),
+                'roe': info.get('returnOnEquity', None),
+                'roa': info.get('returnOnAssets', None),
+                # Financial health
+                'debt_to_equity': info.get('debtToEquity', None),
+                'current_ratio': info.get('currentRatio', None),
+                'quick_ratio': info.get('quickRatio', None),
+                # Dividends
+                'dividend_yield': info.get('dividendYield', None),
+                'payout_ratio': info.get('payoutRatio', None),
+                # Other
+                'beta': info.get('beta', None),
+                '52w_high': info.get('fiftyTwoWeekHigh', None),
+                '52w_low': info.get('fiftyTwoWeekLow', None),
+                'avg_volume': info.get('averageVolume', None),
             }
+            
+            # Cache the result
+            with open(cache_file, 'w') as f:
+                json.dump(result, f, indent=2)
+            logger.info(f"Cached info saved for {ticker}")
+            
+            return result
+            
         except Exception as e:
             logger.error(f"Error fetching info for {ticker}: {e}")
             return {}
+    
+    def fetch_fundamentals(
+        self,
+        ticker: str,
+        use_cache: bool = True
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Fetch fundamental financial statements
+        
+        Args:
+            ticker: Stock ticker symbol
+            use_cache: Whether to use cached data
+            
+        Returns:
+            Dictionary with keys: 'income_stmt', 'balance_sheet', 'cash_flow'
+            Each containing quarterly and annual DataFrames
+        """
+        ticker = ticker.upper()
+        ticker_dir = self.cache_dir / ticker
+        ticker_dir.mkdir(exist_ok=True)
+        cache_file = ticker_dir / "fundamentals.json"
+        
+        # Check cache
+        if use_cache and cache_file.exists():
+            logger.info(f"Loading cached fundamentals for {ticker}")
+            with open(cache_file, 'r') as f:
+                cached = json.load(f)
+            return {
+                'income_stmt_quarterly': pd.DataFrame(cached['income_stmt_quarterly']),
+                'income_stmt_annual': pd.DataFrame(cached['income_stmt_annual']),
+                'balance_sheet_quarterly': pd.DataFrame(cached['balance_sheet_quarterly']),
+                'balance_sheet_annual': pd.DataFrame(cached['balance_sheet_annual']),
+                'cash_flow_quarterly': pd.DataFrame(cached['cash_flow_quarterly']),
+                'cash_flow_annual': pd.DataFrame(cached['cash_flow_annual']),
+            }
+        
+        try:
+            logger.info(f"Fetching fundamentals for {ticker}")
+            stock = yf.Ticker(ticker)
+            
+            result = {
+                'income_stmt_quarterly': stock.quarterly_income_stmt,
+                'income_stmt_annual': stock.income_stmt,
+                'balance_sheet_quarterly': stock.quarterly_balance_sheet,
+                'balance_sheet_annual': stock.balance_sheet,
+                'cash_flow_quarterly': stock.quarterly_cashflow,
+                'cash_flow_annual': stock.cashflow,
+            }
+            
+            # Cache as JSON (convert DataFrames to dict, handle Timestamps)
+            cache_data = {}
+            for k, v in result.items():
+                if not v.empty:
+                    # Convert to dict with string columns (handles Timestamps)
+                    df_dict = v.to_dict()
+                    # Convert Timestamp keys to strings
+                    cache_data[k] = {
+                        str(key): {str(inner_key): val for inner_key, val in inner_dict.items()}
+                        for key, inner_dict in df_dict.items()
+                    }
+                else:
+                    cache_data[k] = {}
+            
+            with open(cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+            logger.info(f"Cached fundamentals for {ticker}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error fetching fundamentals for {ticker}: {e}")
+            return {
+                'income_stmt_quarterly': pd.DataFrame(),
+                'income_stmt_annual': pd.DataFrame(),
+                'balance_sheet_quarterly': pd.DataFrame(),
+                'balance_sheet_annual': pd.DataFrame(),
+                'cash_flow_quarterly': pd.DataFrame(),
+                'cash_flow_annual': pd.DataFrame(),
+            }
+    
+    def fetch_earnings(
+        self,
+        ticker: str,
+        use_cache: bool = True
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Fetch earnings history and upcoming earnings dates
+        
+        Args:
+            ticker: Stock ticker symbol
+            use_cache: Whether to use cached data
+            
+        Returns:
+            Dictionary with 'earnings_history' and 'earnings_dates' DataFrames
+        """
+        ticker = ticker.upper()
+        ticker_dir = self.cache_dir / ticker
+        ticker_dir.mkdir(exist_ok=True)
+        cache_file = ticker_dir / "earnings.json"
+        
+        # Check cache
+        if use_cache and cache_file.exists():
+            logger.info(f"Loading cached earnings for {ticker}")
+            with open(cache_file, 'r') as f:
+                cached = json.load(f)
+            return {
+                'earnings_history': pd.DataFrame(cached.get('earnings_history', {})),
+                'earnings_dates': pd.DataFrame(cached.get('earnings_dates', {})),
+            }
+        
+        try:
+            logger.info(f"Fetching earnings for {ticker}")
+            stock = yf.Ticker(ticker)
+            
+            result = {
+                'earnings_history': stock.earnings_history if hasattr(stock, 'earnings_history') else pd.DataFrame(),
+                'earnings_dates': stock.earnings_dates if hasattr(stock, 'earnings_dates') else pd.DataFrame(),
+            }
+            
+            # Cache as JSON (handle Timestamps in columns/index)
+            cache_data = {}
+            for k, v in result.items():
+                if not v.empty:
+                    # Reset index to handle Timestamp indices
+                    df_reset = v.reset_index()
+                    # Convert ALL object columns that might contain Timestamps
+                    for col in df_reset.columns:
+                        if df_reset[col].dtype == 'object' or pd.api.types.is_datetime64_any_dtype(df_reset[col]):
+                            df_reset[col] = df_reset[col].astype(str)
+                    # Replace NaN with None for valid JSON
+                    cache_data[k] = df_reset.replace({float('nan'): None}).to_dict('records')
+                else:
+                    cache_data[k] = []
+            
+            with open(cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2, default=str)
+            logger.info(f"Cached earnings for {ticker}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error fetching earnings for {ticker}: {e}")
+            return {
+                'earnings_history': pd.DataFrame(),
+                'earnings_dates': pd.DataFrame(),
+            }
+    
+    def fetch_institutional_holders(
+        self,
+        ticker: str,
+        use_cache: bool = True
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Fetch institutional and mutual fund holders
+        
+        Args:
+            ticker: Stock ticker symbol
+            use_cache: Whether to use cached data
+            
+        Returns:
+            Dictionary with 'institutional_holders' and 'mutualfund_holders'
+        """
+        ticker = ticker.upper()
+        ticker_dir = self.cache_dir / ticker
+        ticker_dir.mkdir(exist_ok=True)
+        cache_file = ticker_dir / "holders.json"
+        
+        # Check cache
+        if use_cache and cache_file.exists():
+            logger.info(f"Loading cached holders for {ticker}")
+            with open(cache_file, 'r') as f:
+                cached = json.load(f)
+            return {
+                'institutional_holders': pd.DataFrame(cached.get('institutional_holders', {})),
+                'mutualfund_holders': pd.DataFrame(cached.get('mutualfund_holders', {})),
+            }
+        
+        try:
+            logger.info(f"Fetching holders for {ticker}")
+            stock = yf.Ticker(ticker)
+            
+            result = {
+                'institutional_holders': stock.institutional_holders,
+                'mutualfund_holders': stock.mutualfund_holders,
+            }
+            
+            # Cache as JSON (handle Timestamps in columns/index)
+            cache_data = {}
+            for k, v in result.items():
+                if not v.empty:
+                    # Reset index to handle Timestamp indices
+                    df_reset = v.reset_index()
+                    # Convert all datetime columns to strings
+                    for col in df_reset.select_dtypes(include=['datetime64']).columns:
+                        df_reset[col] = df_reset[col].astype(str)
+                    # Replace NaN with None for valid JSON
+                    cache_data[k] = df_reset.replace({float('nan'): None}).to_dict('records')
+                else:
+                    cache_data[k] = []
+            
+            with open(cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+            logger.info(f"Cached holders for {ticker}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error fetching holders for {ticker}: {e}")
+            return {
+                'institutional_holders': pd.DataFrame(),
+                'mutualfund_holders': pd.DataFrame(),
+            }
     
     def _get_cache_filename(
         self,
@@ -156,11 +412,15 @@ class DataFetcher:
         interval: str
     ) -> Path:
         """Generate cache filename based on parameters"""
+        # Create ticker-specific subdirectory
+        ticker_dir = self.cache_dir / ticker
+        ticker_dir.mkdir(exist_ok=True)
+        
         if start and end:
-            filename = f"{ticker}_{start}_{end}_{interval}.csv"
+            filename = f"{start}_{end}_{interval}.csv"
         else:
-            filename = f"{ticker}_{period}_{interval}.csv"
-        return self.cache_dir / filename
+            filename = f"{period}_{interval}.csv"
+        return ticker_dir / filename
     
     def clear_cache(self, ticker: Optional[str] = None):
         """
@@ -170,24 +430,28 @@ class DataFetcher:
             ticker: If specified, only clear cache for this ticker. Otherwise clear all.
         """
         if ticker:
-            pattern = f"{ticker.upper()}_*.csv"
-            for file in self.cache_dir.glob(pattern):
-                file.unlink()
-                logger.info(f"Deleted cache file: {file}")
+            ticker = ticker.upper()
+            ticker_dir = self.cache_dir / ticker
+            if ticker_dir.exists():
+                import shutil
+                shutil.rmtree(ticker_dir)
+                logger.info(f"Deleted cache directory: {ticker_dir}")
         else:
-            for file in self.cache_dir.glob("*.csv"):
-                file.unlink()
-            logger.info("Cleared all cache files")
+            import shutil
+            for ticker_dir in self.cache_dir.iterdir():
+                if ticker_dir.is_dir():
+                    shutil.rmtree(ticker_dir)
+            logger.info("Cleared all cache directories")
 
 
 # Convenience functions
-def fetch_ticker(ticker: str, period: str = "1y", **kwargs) -> pd.DataFrame:
+def fetch_ticker(ticker: str, period: str = "1mo", **kwargs) -> pd.DataFrame:
     """Quick fetch for a single ticker"""
     fetcher = DataFetcher()
     return fetcher.fetch_ticker(ticker, period=period, **kwargs)
 
 
-def fetch_multiple(tickers: List[str], period: str = "1y", **kwargs) -> dict[str, pd.DataFrame]:
+def fetch_multiple(tickers: List[str], period: str = "1mo", **kwargs) -> dict[str, pd.DataFrame]:
     """Quick fetch for multiple tickers"""
     fetcher = DataFetcher()
     return fetcher.fetch_multiple_tickers(tickers, period=period, **kwargs)

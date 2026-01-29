@@ -11,10 +11,10 @@ def main():
     
     # Example 1: Fetch single ticker
     print("=" * 60)
-    print("Example 1: Fetch Apple (AAPL) - Last 1 year")
+    print("Example 1: Fetch Exelixis (EXE.TO) - Last 1 month")
     print("=" * 60)
     
-    aapl_data = fetcher.fetch_ticker("AAPL", period="1y")
+    aapl_data = fetcher.fetch_ticker("EXE.TO", period="1mo")
     print(f"\nData shape: {aapl_data.shape}")
     print(f"Date range: {aapl_data.index[0]} to {aapl_data.index[-1]}")
     print("\nFirst 5 rows:")

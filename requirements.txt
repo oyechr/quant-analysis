@@ -2,6 +2,7 @@
 yfinance>=0.2.36
 pandas>=2.2.0
 numpy>=1.26.0
+lxml>=5.0.0
 
 # Visualization
 plotly>=5.18.0
