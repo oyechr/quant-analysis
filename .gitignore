@@ -1,5 +1,7 @@
-# Data directory
+# Data directory - cached data and generated reports
 *.csv
+data/**/*.json
+data/**/*.md
 
 # Python
 __pycache__/

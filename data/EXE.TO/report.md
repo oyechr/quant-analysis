@@ -1,6 +1,6 @@
 # EXE.TO - Comprehensive Stock Report
 
-**Generated:** 2026-01-29T10:07:16.145960
+**Generated:** 2026-01-29T10:32:36.419074
 
 **Period:** 1mo
 
