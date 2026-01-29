@@ -3,6 +3,7 @@ Example: Generate Comprehensive Reports
 Demonstrates using ReportGenerator to create JSON and Markdown reports
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -13,6 +14,38 @@ from src.report_generator import ReportGenerator
 
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="Generate comprehensive stock analysis reports"
+    )
+    parser.add_argument("ticker", help="Stock ticker symbol (e.g., AAPL, MSFT, TSLA)")
+    parser.add_argument(
+        "--period",
+        default="1y",
+        help="Data period (default: 1y). Options: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max",
+    )
+    parser.add_argument(
+        "--no-technical",
+        action="store_true",
+        help="Exclude technical analysis from report",
+    )
+    parser.add_argument(
+        "--no-fundamental",
+        action="store_true",
+        help="Exclude fundamental analysis from report",
+    )
+    parser.add_argument(
+        "--no-cache", action="store_true", help="Fetch fresh data (ignore cache)"
+    )
+    parser.add_argument(
+        "--format",
+        choices=["json", "markdown", "both"],
+        default="both",
+        help="Output format (default: both)",
+    )
+
+    args = parser.parse_args()
+
     # Initialize report generator
     generator = ReportGenerator(output_dir="data")
 
@@ -20,80 +53,50 @@ def main():
     print("Generating Comprehensive Stock Reports")
     print("=" * 70)
 
-    # Example 1: Generate full report (both JSON and Markdown)
-    ticker = "EXE.TO"
+    # Generate report with user-specified options
+    ticker = args.ticker.upper()
     print(f"\nGenerating report for {ticker}...")
 
     report_data = generator.generate_full_report(
         ticker=ticker,
-        period="1y",  # Use 1y to share cache with technical analysis
-        output_format="both",  # Creates both JSON and Markdown
-        use_cache=True,
+        period=args.period,
+        output_format=args.format,
+        use_cache=not args.no_cache,
+        include_technical=not args.no_technical,
+        include_fundamental=not args.no_fundamental,
     )
 
     print(f"\n✓ Report generated for {ticker}")
-    print(f"  - JSON: data/{ticker}/reports/full_report.json")
-    print(f"  - Markdown: data/{ticker}/reports/report.md")
-
-    # Example 2: Generate report with technical analysis
-    print("\n" + "=" * 70)
-    print("Generating Report with Technical Analysis")
-    print("=" * 70)
-
-    print(f"\nGenerating enhanced report for {ticker}...")
-    report_data = generator.generate_full_report(
-        ticker=ticker,
-        period="1y",  # Same period - reuses cache from Example 1
-        output_format="both",
-        use_cache=True,
-        include_technical=True,  # Enable technical analysis
-        include_fundamental=True,  # Enable fundamental analysis
-    )
-
-    print(f"\n✓ Enhanced report generated for {ticker}")
-    print(f"  - JSON: data/{ticker}/reports/full_report.json")
-    print(f"  - Markdown: data/{ticker}/reports/report.md")
-    print(f"  - Technical Analysis: data/{ticker}/reports/technical_analysis.md + .json")
-    print(f"  - Fundamental Analysis: data/{ticker}/reports/fundamental_analysis.md + .json")
-
-    # # Example 3: Generate multiple reports
-    # print("\n" + "=" * 70)
-    # print("Generating Reports for Multiple Tickers")
-    # print("=" * 70)
-    #
-    # tickers = ["MSFT", "GOOGL", "NVDA"]
-    # for ticker in tickers:
-    #     print(f"\nGenerating report for {ticker}...")
-    #     generator.generate_full_report(
-    #         ticker=ticker,
-    #         period="1mo",
-    #         output_format="both"
-    #     )
-    #     print(f"  ✓ {ticker} report complete")
-
-    # # Example 3: Generate only Markdown (for reading)
-    # print("\n" + "=" * 70)
-    # print("Generating Markdown-Only Report")
-    # print("=" * 70)
-    #
-    # ticker = "TSLA"
-    # print(f"\nGenerating Markdown report for {ticker}...")
-    # generator.generate_full_report(
-    #     ticker=ticker,
-    #     period="1m",
-    #     output_format="markdown"  # Only creates .md file
-    # )
-    # print(f"  ✓ Markdown report: data/{ticker}_report.md")
-    # print(f"  (Open in VS Code for formatted preview)")
+    if args.format in ["both", "json"]:
+        print(f"  - JSON: data/{ticker}/reports/full_report.json")
+    if args.format in ["both", "markdown"]:
+        print(f"  - Markdown: data/{ticker}/reports/report.md")
+    if not args.no_technical:
+        print(
+            f"  - Technical Analysis: data/{ticker}/reports/technical_analysis.md + .json"
+        )
+    if not args.no_fundamental:
+        print(
+            f"  - Fundamental Analysis: data/{ticker}/reports/fundamental_analysis.md + .json"
+        )
 
     # Summary
     print("\n" + "=" * 70)
-    print("All Reports Generated!")
+    print("Report Generation Complete!")
     print("=" * 70)
+    print(f"\nTicker: {ticker}")
+    print(f"Period: {args.period}")
+    print(f"Cache: {'Used' if not args.no_cache else 'Bypassed'}")
     print("\nView reports:")
     print("  - JSON files: Machine-readable, complete data")
-    print("  - Markdown files: Human-readable, formatted (right-click → 'Open Preview')")
-    print("\nFiles saved in: data/<TICKER>/")
+    print(
+        "  - Markdown files: Human-readable, formatted (right-click → 'Open Preview')"
+    )
+    print(f"\nFiles saved in: data/{ticker}/reports/")
+    print("\nUsage examples:")
+    print("  python examples\\04_generate_report.py AAPL")
+    print("  python examples\\04_generate_report.py TSLA --period 2y")
+    print("  python examples\\04_generate_report.py MSFT --no-cache --format markdown")
 
 
 if __name__ == "__main__":
