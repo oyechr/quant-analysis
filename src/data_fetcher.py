@@ -6,10 +6,15 @@ Handles fetching historical market data from Yahoo Finance
 import yfinance as yf
 import pandas as pd
 from pathlib import Path
-from datetime import datetime, timedelta
-from typing import Optional, List, Union, Dict, Any
+from typing import Optional, List, Dict, Any
 import logging
 import json
+
+from .serialization import (
+    dataframe_to_records,
+    dataframe_to_json_dict,
+    series_to_dataframe
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -232,21 +237,11 @@ class DataFetcher:
                 'cash_flow_annual': stock.cashflow,
             }
             
-            # Cache as JSON (convert DataFrames to dict, handle Timestamps and NaN)
-            cache_data = {}
-            for k, v in result.items():
-                if not v.empty:
-                    # Replace NaN with None first
-                    v_clean = v.replace({float('nan'): None})
-                    # Convert to dict with string columns (handles Timestamps)
-                    df_dict = v_clean.to_dict()
-                    # Convert Timestamp keys to strings and handle None values
-                    cache_data[k] = {
-                        str(key): {str(inner_key): val if val is not None else None for inner_key, val in inner_dict.items()}
-                        for key, inner_dict in df_dict.items()
-                    }
-                else:
-                    cache_data[k] = {}
+            # Cache as JSON using serialization utility
+            cache_data = {
+                k: dataframe_to_json_dict(v) if not v.empty else {}
+                for k, v in result.items()
+            }
             
             self._save_json_cache(cache_file, cache_data)
             
@@ -299,20 +294,11 @@ class DataFetcher:
                 'earnings_dates': stock.earnings_dates if hasattr(stock, 'earnings_dates') else pd.DataFrame(),
             }
             
-            # Cache as JSON (handle Timestamps in columns/index)
-            cache_data = {}
-            for k, v in result.items():
-                if not v.empty:
-                    # Reset index to handle Timestamp indices
-                    df_reset = v.reset_index()
-                    # Convert ALL object columns that might contain Timestamps
-                    for col in df_reset.columns:
-                        if df_reset[col].dtype == 'object' or pd.api.types.is_datetime64_any_dtype(df_reset[col]):
-                            df_reset[col] = df_reset[col].astype(str)
-                    # Replace NaN with None for valid JSON
-                    cache_data[k] = df_reset.replace({float('nan'): None}).to_dict('records')
-                else:
-                    cache_data[k] = []
+            # Cache as JSON using serialization utility
+            cache_data = {
+                k: dataframe_to_records(v) if not v.empty else []
+                for k, v in result.items()
+            }
             
             self._save_json_cache(cache_file, cache_data)
             
@@ -361,23 +347,13 @@ class DataFetcher:
                 'mutualfund_holders': stock.mutualfund_holders,
             }
             
-            # Cache as JSON (handle Timestamps in columns/index)
-            cache_data = {}
-            for k, v in result.items():
-                if not v.empty:
-                    # Reset index to handle Timestamp indices
-                    df_reset = v.reset_index()
-                    # Convert all datetime columns to strings
-                    for col in df_reset.select_dtypes(include=['datetime64']).columns:
-                        df_reset[col] = df_reset[col].astype(str)
-                    # Replace NaN with None for valid JSON
-                    cache_data[k] = df_reset.replace({float('nan'): None}).to_dict('records')
-                else:
-                    cache_data[k] = []
+            # Cache as JSON using serialization utility
+            cache_data = {
+                k: dataframe_to_records(v, preserve_index=False) if not v.empty else []
+                for k, v in result.items()
+            }
             
-            with open(cache_file, 'w') as f:
-                json.dump(cache_data, f, indent=2)
-            logger.info(f"Cached holders for {ticker}")
+            self._save_json_cache(cache_file, cache_data)
             
             return result
             
@@ -392,7 +368,7 @@ class DataFetcher:
         self,
         ticker: str,
         use_cache: bool = True
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, pd.DataFrame]:
         """
         Fetch dividend and stock split history
         
@@ -425,25 +401,16 @@ class DataFetcher:
             splits_data = getattr(stock, 'splits', pd.Series())
             actions_data = getattr(stock, 'actions', pd.DataFrame())
             
-            # Convert Series to DataFrame for consistency
-            if isinstance(dividends_data, pd.Series) and not dividends_data.empty:
-                dividends_df = dividends_data.to_frame(name='Dividends')
-                dividends_df.index.name = 'Date'  # Preserve index name
-            else:
-                dividends_df = pd.DataFrame()
-            
-            if isinstance(splits_data, pd.Series) and not splits_data.empty:
-                splits_df = splits_data.to_frame(name='Stock Splits')
-                splits_df.index.name = 'Date'  # Preserve index name
-            else:
-                splits_df = pd.DataFrame()
+            # Convert Series to DataFrame using utility
+            dividends_df = series_to_dataframe(dividends_data, 'Dividends', 'Date') if isinstance(dividends_data, pd.Series) else pd.DataFrame()
+            splits_df = series_to_dataframe(splits_data, 'Stock Splits', 'Date') if isinstance(splits_data, pd.Series) else pd.DataFrame()
             
             if not isinstance(actions_data, pd.DataFrame):
                 actions_df = pd.DataFrame()
             else:
                 actions_df = actions_data
                 if not actions_df.empty:
-                    actions_df.index.name = 'Date'  # Preserve index name
+                    actions_df.index.name = 'Date'
             
             result = {
                 'dividends': dividends_df,
@@ -451,19 +418,11 @@ class DataFetcher:
                 'actions': actions_df,
             }
             
-            # Cache as JSON
-            cache_data = {}
-            for k, v in result.items():
-                if not v.empty:
-                    # Reset index to handle Timestamp indices
-                    df_reset = v.reset_index()
-                    # Convert datetime columns to strings
-                    for col in df_reset.select_dtypes(include=['datetime64']).columns:
-                        df_reset[col] = df_reset[col].astype(str)
-                    # Replace NaN with None for valid JSON
-                    cache_data[k] = df_reset.replace({float('nan'): None}).to_dict('records')
-                else:
-                    cache_data[k] = []
+            # Cache as JSON using serialization utility
+            cache_data = {
+                k: dataframe_to_records(v) if not v.empty else []
+                for k, v in result.items()
+            }
             
             self._save_json_cache(cache_file, cache_data)
             
@@ -481,7 +440,7 @@ class DataFetcher:
         self,
         ticker: str,
         use_cache: bool = True
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, pd.DataFrame]:
         """
         Fetch analyst recommendations and price targets
         
@@ -521,20 +480,11 @@ class DataFetcher:
                 'upgrades_downgrades': upgrades_df,
             }
             
-            # Cache as JSON
-            cache_data = {}
-            for k, v in result.items():
-                if not v.empty:
-                    # Reset index to handle Timestamp indices
-                    df_reset = v.reset_index()
-                    # Convert all object columns that might contain Timestamps
-                    for col in df_reset.columns:
-                        if df_reset[col].dtype == 'object' or pd.api.types.is_datetime64_any_dtype(df_reset[col]):
-                            df_reset[col] = df_reset[col].astype(str)
-                    # Replace NaN with None for valid JSON
-                    cache_data[k] = df_reset.replace({float('nan'): None}).to_dict('records')
-                else:
-                    cache_data[k] = []
+            # Cache as JSON using serialization utility
+            cache_data = {
+                k: dataframe_to_records(v) if not v.empty else []
+                for k, v in result.items()
+            }
             
             self._save_json_cache(cache_file, cache_data)
             

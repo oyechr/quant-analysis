@@ -4,6 +4,9 @@ pandas>=2.2.0
 numpy>=1.26.0
 lxml>=5.0.0
 
+# Technical analysis
+ta>=0.11.0
+
 # Visualization
 plotly>=5.18.0
 matplotlib>=3.8.0
