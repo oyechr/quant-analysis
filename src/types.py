@@ -4,12 +4,14 @@ Provides TypedDict definitions for structured data returned by DataFetcher metho
 Improves IDE autocomplete, type checking, and documentation
 """
 
-from typing import TypedDict, Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional, TypedDict
+
 import pandas as pd
 
 
 class TickerInfo(TypedDict, total=False):
     """Information about a stock ticker"""
+
     symbol: str
     name: str
     sector: str
@@ -42,6 +44,7 @@ class TickerInfo(TypedDict, total=False):
 
 class FundamentalsData(TypedDict):
     """Fundamental financial statements"""
+
     income_stmt_quarterly: pd.DataFrame
     income_stmt_annual: pd.DataFrame
     balance_sheet_quarterly: pd.DataFrame
@@ -52,18 +55,21 @@ class FundamentalsData(TypedDict):
 
 class EarningsData(TypedDict):
     """Earnings history and dates"""
+
     earnings_history: pd.DataFrame
     earnings_dates: pd.DataFrame
 
 
 class HoldersData(TypedDict):
     """Institutional and mutual fund holders"""
+
     institutional_holders: pd.DataFrame
     mutualfund_holders: pd.DataFrame
 
 
 class DividendsData(TypedDict):
     """Dividend and stock split history"""
+
     dividends: pd.DataFrame
     splits: pd.DataFrame
     actions: pd.DataFrame
@@ -71,12 +77,14 @@ class DividendsData(TypedDict):
 
 class AnalystRatingsData(TypedDict):
     """Analyst recommendations and upgrades/downgrades"""
+
     recommendations: pd.DataFrame
     upgrades_downgrades: pd.DataFrame
 
 
 class NewsArticle(TypedDict, total=False):
     """News article structure from yfinance"""
+
     content: Dict[str, Any]  # Contains title, provider, clickThroughUrl, etc.
 
 
