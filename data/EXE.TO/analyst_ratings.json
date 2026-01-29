@@ -1,0 +1,52 @@
+{
+  "recommendations": [
+    {
+      "index": 0,
+      "period": "0m",
+      "strongBuy": 3,
+      "buy": 2,
+      "hold": 0,
+      "sell": 0,
+      "strongSell": 0
+    },
+    {
+      "index": 1,
+      "period": "-1m",
+      "strongBuy": 3,
+      "buy": 2,
+      "hold": 1,
+      "sell": 0,
+      "strongSell": 0
+    },
+    {
+      "index": 2,
+      "period": "-2m",
+      "strongBuy": 1,
+      "buy": 1,
+      "hold": 1,
+      "sell": 0,
+      "strongSell": 0
+    },
+    {
+      "index": 3,
+      "period": "-3m",
+      "strongBuy": 2,
+      "buy": 3,
+      "hold": 3,
+      "sell": 0,
+      "strongSell": 0
+    }
+  ],
+  "upgrades_downgrades": [
+    {
+      "GradeDate": "2024-03-11 17:33:51",
+      "Firm": "TD Securities",
+      "ToGrade": "Hold",
+      "FromGrade": "Hold",
+      "Action": "main",
+      "priceTargetAction": "Raises",
+      "currentPriceTarget": 7.5,
+      "priorPriceTarget": 7.0
+    }
+  ]
+}

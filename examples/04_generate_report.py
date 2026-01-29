@@ -26,7 +26,7 @@ def main():
     
     report_data = generator.generate_full_report(
         ticker=ticker,
-        period="1y",
+        period="1mo",
         output_format="both",  # Creates both JSON and Markdown
         use_cache=True
     )

@@ -33,7 +33,7 @@ class ReportGenerator:
     def generate_full_report(
         self,
         ticker: str,
-        period: str = "1y",
+        period: str = "1mo",
         output_format: str = "both",
         use_cache: bool = True
     ) -> Dict[str, Any]:
@@ -106,8 +106,8 @@ class ReportGenerator:
         report_data['earnings'] = {
             'history_count': len(earnings['earnings_history']),
             'dates_count': len(earnings['earnings_dates']),
-            'latest_earnings': earnings['earnings_history'].head(3).replace({float('nan'): None}).to_dict('records') if not earnings['earnings_history'].empty else [],
-            'upcoming_dates': earnings['earnings_dates'].head(3).replace({float('nan'): None}).to_dict('records') if not earnings['earnings_dates'].empty else []
+            'latest_earnings': earnings['earnings_history'].head(3).reset_index().replace({float('nan'): None}).to_dict('records') if not earnings['earnings_history'].empty else [],
+            'upcoming_dates': earnings['earnings_dates'].head(3).reset_index().replace({float('nan'): None}).to_dict('records') if not earnings['earnings_dates'].empty else []
         }
         
         # 5. Institutional holders
@@ -118,6 +118,34 @@ class ReportGenerator:
             'mutualfund_count': len(holders['mutualfund_holders']),
             'top_institutional': holders['institutional_holders'].head(5).replace({float('nan'): None}).to_dict('records') if not holders['institutional_holders'].empty else [],
             'top_mutualfund': holders['mutualfund_holders'].head(5).replace({float('nan'): None}).to_dict('records') if not holders['mutualfund_holders'].empty else []
+        }
+        
+        # 6. Dividends
+        logger.info(f"Fetching dividends for {ticker}")
+        dividends = self.fetcher.fetch_dividends(ticker, use_cache=use_cache)
+        report_data['dividends'] = {
+            'dividend_count': len(dividends['dividends']),
+            'split_count': len(dividends['splits']),
+            'recent_dividends': dividends['dividends'].tail(10).reset_index().replace({float('nan'): None}).to_dict('records') if not dividends['dividends'].empty else [],
+            'recent_splits': dividends['splits'].tail(5).reset_index().replace({float('nan'): None}).to_dict('records') if not dividends['splits'].empty else []
+        }
+        
+        # 7. Analyst Ratings
+        logger.info(f"Fetching analyst ratings for {ticker}")
+        analyst = self.fetcher.fetch_analyst_ratings(ticker, use_cache=use_cache)
+        report_data['analyst_ratings'] = {
+            'recommendation_count': len(analyst['recommendations']),
+            'upgrade_downgrade_count': len(analyst['upgrades_downgrades']),
+            'recent_recommendations': analyst['recommendations'].head(10).replace({float('nan'): None}).to_dict('records') if not analyst['recommendations'].empty else [],
+            'recent_changes': analyst['upgrades_downgrades'].head(10).replace({float('nan'): None}).to_dict('records') if not analyst['upgrades_downgrades'].empty else []
+        }
+        
+        # 8. News
+        logger.info(f"Fetching news for {ticker}")
+        news = self.fetcher.fetch_news(ticker, use_cache=False)  # Always fresh news
+        report_data['news'] = {
+            'article_count': len(news),
+            'recent_articles': news[:10] if news else []  # Top 10 most recent
         }
         
         # Save outputs
@@ -234,6 +262,84 @@ class ReportGenerator:
                 value = f"${h.get('Value', 0):,}" if h.get('Value') else 'N/A'
                 holder_name = str(h.get('Holder', 'N/A'))[:50]  # Truncate long names
                 md.append(f"| {holder_name} | {pct} | {shares} | {value} |")
+        
+        # Dividends
+        dividends = data['dividends']
+        md.append("\n## Dividends & Stock Splits")
+        md.append(f"\n- **Total Dividend Payments:** {dividends['dividend_count']}")
+        md.append(f"- **Stock Splits:** {dividends['split_count']}")
+        
+        if dividends['recent_dividends']:
+            md.append("\n### Recent Dividends (Last 10)")
+            md.append("\n| Date | Amount |")
+            md.append("|------|--------|")
+            for d in dividends['recent_dividends']:
+                date = d.get('Date', 'N/A')
+                amount = f"${d.get('Dividends', 0):.4f}" if d.get('Dividends') else 'N/A'
+                md.append(f"| {date} | {amount} |")
+        
+        if dividends['recent_splits']:
+            md.append("\n### Stock Splits")
+            md.append("\n| Date | Split Ratio |")
+            md.append("|------|-------------|")
+            for s in dividends['recent_splits']:
+                date = s.get('Date', 'N/A')
+                ratio = s.get('Stock Splits', 'N/A')
+                md.append(f"| {date} | {ratio} |")
+        
+        # Analyst Ratings
+        analyst = data['analyst_ratings']
+        md.append("\n## Analyst Ratings")
+        md.append(f"\n- **Total Recommendations:** {analyst['recommendation_count']}")
+        md.append(f"- **Upgrades/Downgrades:** {analyst['upgrade_downgrade_count']}")
+        
+        # Show recommendation summary by period
+        if analyst['recent_recommendations']:
+            md.append("\n### Recommendation Summary")
+            md.append("\n| Period | Strong Buy | Buy | Hold | Sell | Strong Sell |")
+            md.append("|--------|-----------|-----|------|------|-------------|")
+            for r in analyst['recent_recommendations'][:10]:
+                period = r.get('period', 'N/A')
+                strong_buy = r.get('strongBuy', 0)
+                buy = r.get('buy', 0)
+                hold = r.get('hold', 0)
+                sell = r.get('sell', 0)
+                strong_sell = r.get('strongSell', 0)
+                md.append(f"| {period} | {strong_buy} | {buy} | {hold} | {sell} | {strong_sell} |")
+        
+        # Show recent upgrades/downgrades
+        if analyst['recent_changes']:
+            md.append("\n### Recent Upgrades/Downgrades")
+            md.append("\n| Firm | Action | From | To | Price Target |")
+            md.append("|------|--------|------|----|--------------| ")
+            for r in analyst['recent_changes'][:10]:
+                firm = str(r.get('Firm', 'N/A'))[:30]
+                action = r.get('Action', 'N/A')
+                from_grade = r.get('FromGrade', '-')
+                to_grade = r.get('ToGrade', 'N/A')
+                price_target = r.get('currentPriceTarget', 'N/A')
+                if price_target != 'N/A' and price_target is not None:
+                    price_target = f"${price_target}"
+                md.append(f"| {firm} | {action} | {from_grade} | {to_grade} | {price_target} |")
+        
+        # News
+        news = data['news']
+        md.append("\n## Recent News")
+        md.append(f"\n- **Articles Found:** {news['article_count']}")
+        
+        if news['recent_articles']:
+            md.append("\n### Headlines (Last 10)")
+            for i, article in enumerate(news['recent_articles'][:10], 1):
+                # Access nested content structure
+                content = article.get('content', {})
+                title = content.get('title', 'No title')
+                provider = content.get('provider', {})
+                publisher = provider.get('displayName', 'Unknown')
+                click_through = content.get('clickThroughUrl', {})
+                link = click_through.get('url', '#')
+                md.append(f"\n{i}. **{title}**")
+                md.append(f"   - Publisher: {publisher}")
+                md.append(f"   - [Read more]({link})")
         
         # Write file
         with open(output_file, 'w', encoding='utf-8') as f:

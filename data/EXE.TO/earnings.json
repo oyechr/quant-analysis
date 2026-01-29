@@ -1,0 +1,163 @@
+{
+  "earnings_history": [
+    {
+      "quarter": "2024-12-31",
+      "epsActual": 0.23,
+      "epsEstimate": 0.18,
+      "epsDifference": 0.05,
+      "surprisePercent": 0.2778
+    }
+  ],
+  "earnings_dates": [
+    {
+      "Earnings Date": "2026-02-26 16:00:00-05:00",
+      "EPS Estimate": null,
+      "Reported EPS": null,
+      "Surprise(%)": null
+    },
+    {
+      "Earnings Date": "2025-02-27 17:00:00-05:00",
+      "EPS Estimate": 0.18,
+      "Reported EPS": 0.23,
+      "Surprise(%)": 27.78
+    },
+    {
+      "Earnings Date": "2018-11-08 17:00:00-05:00",
+      "EPS Estimate": 0.09,
+      "Reported EPS": 0.1,
+      "Surprise(%)": 11.11
+    },
+    {
+      "Earnings Date": "2018-08-09 16:00:00-04:00",
+      "EPS Estimate": 0.08,
+      "Reported EPS": 0.07,
+      "Surprise(%)": -12.5
+    },
+    {
+      "Earnings Date": "2015-05-07 17:00:00-04:00",
+      "EPS Estimate": 0.03,
+      "Reported EPS": 0.01,
+      "Surprise(%)": -66.67
+    },
+    {
+      "Earnings Date": "2015-02-25 17:00:00-05:00",
+      "EPS Estimate": 0.09,
+      "Reported EPS": 0.01,
+      "Surprise(%)": -85.97
+    },
+    {
+      "Earnings Date": "2014-11-06 17:00:00-05:00",
+      "EPS Estimate": 0.12,
+      "Reported EPS": 0.05,
+      "Surprise(%)": -57.54
+    },
+    {
+      "Earnings Date": "2014-08-06 17:00:00-04:00",
+      "EPS Estimate": 0.15,
+      "Reported EPS": 0.09,
+      "Surprise(%)": -42.24
+    },
+    {
+      "Earnings Date": "2014-05-07 14:00:00-04:00",
+      "EPS Estimate": 0.09,
+      "Reported EPS": null,
+      "Surprise(%)": -101.09
+    },
+    {
+      "Earnings Date": "2014-02-26 17:00:00-05:00",
+      "EPS Estimate": 0.07,
+      "Reported EPS": -0.02,
+      "Surprise(%)": -127.03
+    },
+    {
+      "Earnings Date": "2013-11-06 17:00:00-05:00",
+      "EPS Estimate": 0.1,
+      "Reported EPS": 0.05,
+      "Surprise(%)": -51.24
+    },
+    {
+      "Earnings Date": "2013-08-08 17:00:00-04:00",
+      "EPS Estimate": 0.05,
+      "Reported EPS": 0.04,
+      "Surprise(%)": -4.57
+    },
+    {
+      "Earnings Date": "2013-05-09 14:00:00-04:00",
+      "EPS Estimate": 0.13,
+      "Reported EPS": 0.03,
+      "Surprise(%)": -79.23
+    },
+    {
+      "Earnings Date": "2013-02-27 18:00:00-05:00",
+      "EPS Estimate": 0.18,
+      "Reported EPS": 0.14,
+      "Surprise(%)": -21.49
+    },
+    {
+      "Earnings Date": "2012-11-07 15:00:00-05:00",
+      "EPS Estimate": 0.11,
+      "Reported EPS": -0.04,
+      "Surprise(%)": -134.82
+    },
+    {
+      "Earnings Date": "2012-08-09 17:00:00-04:00",
+      "EPS Estimate": 0.22,
+      "Reported EPS": 0.06,
+      "Surprise(%)": -70.86
+    },
+    {
+      "Earnings Date": "2011-06-07 14:00:00-04:00",
+      "EPS Estimate": 0.22,
+      "Reported EPS": 0.11,
+      "Surprise(%)": -50.0
+    },
+    {
+      "Earnings Date": "2011-03-01 17:00:00-05:00",
+      "EPS Estimate": 0.1,
+      "Reported EPS": 0.16,
+      "Surprise(%)": 60.0
+    },
+    {
+      "Earnings Date": "2010-11-04 19:00:00-04:00",
+      "EPS Estimate": 0.25,
+      "Reported EPS": 0.07,
+      "Surprise(%)": -72.0
+    },
+    {
+      "Earnings Date": "2010-08-05 17:00:00-04:00",
+      "EPS Estimate": 0.22,
+      "Reported EPS": 0.17,
+      "Surprise(%)": -22.73
+    },
+    {
+      "Earnings Date": "2010-05-06 16:00:00-04:00",
+      "EPS Estimate": 0.18,
+      "Reported EPS": 0.19,
+      "Surprise(%)": 5.56
+    },
+    {
+      "Earnings Date": "2010-02-23 17:00:00-05:00",
+      "EPS Estimate": 0.26,
+      "Reported EPS": 0.21,
+      "Surprise(%)": -19.23
+    },
+    {
+      "Earnings Date": "2009-11-04 17:00:00-05:00",
+      "EPS Estimate": 0.16,
+      "Reported EPS": 0.24,
+      "Surprise(%)": 50.0
+    },
+    {
+      "Earnings Date": "2008-02-21 17:00:00-05:00",
+      "EPS Estimate": 0.4,
+      "Reported EPS": 0.16,
+      "Surprise(%)": -60.0
+    },
+    {
+      "Earnings Date": "2007-11-06 12:00:00-05:00",
+      "EPS Estimate": 0.36,
+      "Reported EPS": 0.23,
+      "Surprise(%)": -36.11
+    }
+  ]
+}

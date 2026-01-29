@@ -239,22 +239,24 @@ class DataFetcher:
                 'cash_flow_annual': stock.cashflow,
             }
             
-            # Cache as JSON (convert DataFrames to dict, handle Timestamps)
+            # Cache as JSON (convert DataFrames to dict, handle Timestamps and NaN)
             cache_data = {}
             for k, v in result.items():
                 if not v.empty:
+                    # Replace NaN with None first
+                    v_clean = v.replace({float('nan'): None})
                     # Convert to dict with string columns (handles Timestamps)
-                    df_dict = v.to_dict()
-                    # Convert Timestamp keys to strings
+                    df_dict = v_clean.to_dict()
+                    # Convert Timestamp keys to strings and handle None values
                     cache_data[k] = {
-                        str(key): {str(inner_key): val for inner_key, val in inner_dict.items()}
+                        str(key): {str(inner_key): val if val is not None else None for inner_key, val in inner_dict.items()}
                         for key, inner_dict in df_dict.items()
                     }
                 else:
                     cache_data[k] = {}
             
             with open(cache_file, 'w') as f:
-                json.dump(cache_data, f, indent=2)
+                json.dump(cache_data, f, indent=2, default=str)
             logger.info(f"Cached fundamentals for {ticker}")
             
             return result
@@ -402,6 +404,220 @@ class DataFetcher:
                 'institutional_holders': pd.DataFrame(),
                 'mutualfund_holders': pd.DataFrame(),
             }
+    
+    def fetch_dividends(
+        self,
+        ticker: str,
+        use_cache: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Fetch dividend and stock split history
+        
+        Args:
+            ticker: Stock ticker symbol
+            use_cache: Whether to use cached data
+            
+        Returns:
+            Dictionary with 'dividends', 'splits', and 'actions' DataFrames
+        """
+        ticker = ticker.upper()
+        ticker_dir = self.cache_dir / ticker
+        ticker_dir.mkdir(exist_ok=True)
+        cache_file = ticker_dir / "dividends.json"
+        
+        # Check cache
+        if use_cache and cache_file.exists():
+            logger.info(f"Loading cached dividends for {ticker}")
+            with open(cache_file, 'r') as f:
+                cached = json.load(f)
+            return {
+                'dividends': pd.DataFrame(cached.get('dividends', {})),
+                'splits': pd.DataFrame(cached.get('splits', {})),
+                'actions': pd.DataFrame(cached.get('actions', {})),
+            }
+        
+        try:
+            logger.info(f"Fetching dividends for {ticker}")
+            stock = yf.Ticker(ticker)
+            
+            # Get data and convert Series to DataFrame if needed
+            dividends_data = getattr(stock, 'dividends', pd.Series())
+            splits_data = getattr(stock, 'splits', pd.Series())
+            actions_data = getattr(stock, 'actions', pd.DataFrame())
+            
+            # Convert Series to DataFrame for consistency
+            if isinstance(dividends_data, pd.Series) and not dividends_data.empty:
+                dividends_df = dividends_data.to_frame(name='Dividends')
+                dividends_df.index.name = 'Date'  # Preserve index name
+            else:
+                dividends_df = pd.DataFrame()
+            
+            if isinstance(splits_data, pd.Series) and not splits_data.empty:
+                splits_df = splits_data.to_frame(name='Stock Splits')
+                splits_df.index.name = 'Date'  # Preserve index name
+            else:
+                splits_df = pd.DataFrame()
+            
+            if not isinstance(actions_data, pd.DataFrame):
+                actions_df = pd.DataFrame()
+            else:
+                actions_df = actions_data
+                if not actions_df.empty:
+                    actions_df.index.name = 'Date'  # Preserve index name
+            
+            result = {
+                'dividends': dividends_df,
+                'splits': splits_df,
+                'actions': actions_df,
+            }
+            
+            # Cache as JSON
+            cache_data = {}
+            for k, v in result.items():
+                if not v.empty:
+                    # Reset index to handle Timestamp indices
+                    df_reset = v.reset_index()
+                    # Convert datetime columns to strings
+                    for col in df_reset.select_dtypes(include=['datetime64']).columns:
+                        df_reset[col] = df_reset[col].astype(str)
+                    # Replace NaN with None for valid JSON
+                    cache_data[k] = df_reset.replace({float('nan'): None}).to_dict('records')
+                else:
+                    cache_data[k] = []
+            
+            with open(cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2, default=str)
+            logger.info(f"Cached dividends for {ticker}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error fetching dividends for {ticker}: {e}")
+            return {
+                'dividends': pd.DataFrame(),
+                'splits': pd.DataFrame(),
+                'actions': pd.DataFrame(),
+            }
+    
+    def fetch_analyst_ratings(
+        self,
+        ticker: str,
+        use_cache: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Fetch analyst recommendations and price targets
+        
+        Args:
+            ticker: Stock ticker symbol
+            use_cache: Whether to use cached data
+            
+        Returns:
+            Dictionary with 'recommendations' and 'upgrades_downgrades' DataFrames
+        """
+        ticker = ticker.upper()
+        ticker_dir = self.cache_dir / ticker
+        ticker_dir.mkdir(exist_ok=True)
+        cache_file = ticker_dir / "analyst_ratings.json"
+        
+        # Check cache
+        if use_cache and cache_file.exists():
+            logger.info(f"Loading cached analyst ratings for {ticker}")
+            with open(cache_file, 'r') as f:
+                cached = json.load(f)
+            return {
+                'recommendations': pd.DataFrame(cached.get('recommendations', {})),
+                'upgrades_downgrades': pd.DataFrame(cached.get('upgrades_downgrades', {})),
+            }
+        
+        try:
+            logger.info(f"Fetching analyst ratings for {ticker}")
+            stock = yf.Ticker(ticker)
+            
+            # Get data safely
+            recommendations_data = getattr(stock, 'recommendations', None)
+            upgrades_data = getattr(stock, 'upgrades_downgrades', None)
+            
+            # Ensure we have DataFrames
+            recommendations_df = recommendations_data if isinstance(recommendations_data, pd.DataFrame) else pd.DataFrame()
+            upgrades_df = upgrades_data if isinstance(upgrades_data, pd.DataFrame) else pd.DataFrame()
+            
+            result = {
+                'recommendations': recommendations_df,
+                'upgrades_downgrades': upgrades_df,
+            }
+            
+            # Cache as JSON
+            cache_data = {}
+            for k, v in result.items():
+                if not v.empty:
+                    # Reset index to handle Timestamp indices
+                    df_reset = v.reset_index()
+                    # Convert all object columns that might contain Timestamps
+                    for col in df_reset.columns:
+                        if df_reset[col].dtype == 'object' or pd.api.types.is_datetime64_any_dtype(df_reset[col]):
+                            df_reset[col] = df_reset[col].astype(str)
+                    # Replace NaN with None for valid JSON
+                    cache_data[k] = df_reset.replace({float('nan'): None}).to_dict('records')
+                else:
+                    cache_data[k] = []
+            
+            with open(cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2, default=str)
+            logger.info(f"Cached analyst ratings for {ticker}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error fetching analyst ratings for {ticker}: {e}")
+            return {
+                'recommendations': pd.DataFrame(),
+                'upgrades_downgrades': pd.DataFrame(),
+            }
+    
+    def fetch_news(
+        self,
+        ticker: str,
+        use_cache: bool = False  # News is time-sensitive, default to fresh
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch recent news articles for a ticker
+        
+        Args:
+            ticker: Stock ticker symbol
+            use_cache: Whether to use cached data (default False for time-sensitive news)
+            
+        Returns:
+            List of news article dictionaries with title, publisher, link, etc.
+        """
+        ticker = ticker.upper()
+        ticker_dir = self.cache_dir / ticker
+        ticker_dir.mkdir(exist_ok=True)
+        cache_file = ticker_dir / "news.json"
+        
+        # Check cache
+        if use_cache and cache_file.exists():
+            logger.info(f"Loading cached news for {ticker}")
+            with open(cache_file, 'r') as f:
+                return json.load(f)
+        
+        try:
+            logger.info(f"Fetching news for {ticker}")
+            stock = yf.Ticker(ticker)
+            
+            # Get news safely
+            news_data = getattr(stock, 'news', [])
+            news = news_data if isinstance(news_data, list) else []
+            
+            # Cache the result
+            with open(cache_file, 'w') as f:
+                json.dump(news, f, indent=2, default=str)
+            logger.info(f"Cached news for {ticker}")
+            
+            return news
+            
+        except Exception as e:
+            logger.error(f"Error fetching news for {ticker}: {e}")
+            return []
     
     def _get_cache_filename(
         self,

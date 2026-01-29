@@ -1,0 +1,95 @@
+{
+  "institutional_holders": [
+    {
+      "index": 0,
+      "Date Reported": "2025-10-31",
+      "Holder": "DFA INVESTMENT TRUST CO-The Canadian Small Company Series",
+      "pctHeld": 0.0045,
+      "Shares": 420755,
+      "Value": 9845666,
+      "pctChange": 0.0
+    },
+    {
+      "index": 1,
+      "Date Reported": "2025-10-31",
+      "Holder": "DFA INVESTMENT DIMENSIONS GROUP INC-Intl Core Eqy. 2 PORT.",
+      "pctHeld": 0.0033000002,
+      "Shares": 312083,
+      "Value": 7302742,
+      "pctChange": -0.0355
+    },
+    {
+      "index": 2,
+      "Date Reported": "2025-12-31",
+      "Holder": "iShares Trust-iShares Core MSCI Total International Stock ETF",
+      "pctHeld": 0.0026,
+      "Shares": 242961,
+      "Value": 5685287,
+      "pctChange": 0.0
+    },
+    {
+      "index": 3,
+      "Date Reported": "2025-12-31",
+      "Holder": "-SSgA SPDR ETFS Europe I-SPDR MSCI All Country World Investable",
+      "pctHeld": 0.0017,
+      "Shares": 156579,
+      "Value": 3663948,
+      "pctChange": 0.0346
+    },
+    {
+      "index": 4,
+      "Date Reported": "2025-10-31",
+      "Holder": "Dimensional ETF Trust-Dimensional International Small Cap ETF",
+      "pctHeld": 0.0015,
+      "Shares": 142840,
+      "Value": 3342455,
+      "pctChange": 0.10479999
+    },
+    {
+      "index": 5,
+      "Date Reported": "2025-10-31",
+      "Holder": "Dimensional ETF Trust-Dimensional International Core Equity 2 ETF",
+      "pctHeld": 0.001,
+      "Shares": 94394,
+      "Value": 2208819,
+      "pctChange": 0.0
+    },
+    {
+      "index": 6,
+      "Date Reported": "2025-12-31",
+      "Holder": "American Century ETF Trust-Avantis International Equity ETF",
+      "pctHeld": 0.00090000004,
+      "Shares": 85738,
+      "Value": 2006269,
+      "pctChange": 0.0
+    },
+    {
+      "index": 7,
+      "Date Reported": "2025-09-30",
+      "Holder": "College Retirement Equities Fd.-College Retirement Equities Fd. - Stoc",
+      "pctHeld": 0.00059999997,
+      "Shares": 55736,
+      "Value": 1304222,
+      "pctChange": 0.0
+    },
+    {
+      "index": 8,
+      "Date Reported": "2025-10-31",
+      "Holder": "Dimensional ETF Trust-Dimensional World ex U.S. Core Equity 2 ETF",
+      "pctHeld": 0.00059999997,
+      "Shares": 52939,
+      "Value": 1238772,
+      "pctChange": 0.0
+    },
+    {
+      "index": 9,
+      "Date Reported": "2025-12-31",
+      "Holder": "SPDR INDEX SHARES FUNDS-SPDR(R) S&P(R) International Small Cap ETF",
+      "pctHeld": 0.00059999997,
+      "Shares": 52076,
+      "Value": 1218578,
+      "pctChange": 0.0
+    }
+  ],
+  "mutualfund_holders": []
+}
