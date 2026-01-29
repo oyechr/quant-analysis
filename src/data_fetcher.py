@@ -9,12 +9,14 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 import logging
 import json
+from datetime import datetime
 
 from .serialization import (
     dataframe_to_records,
     dataframe_to_json_dict,
     series_to_dataframe
 )
+from .config import get_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +35,90 @@ class DataFetcher:
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
+        self.config = get_config()
+    
+    def validate_ticker(self, ticker: str) -> bool:
+        """
+        Validate ticker symbol exists and is accessible
+        
+        Args:
+            ticker: Stock ticker symbol
+            
+        Returns:
+            True if ticker is valid, False otherwise
+        """
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            # Valid tickers return a dict with at least some data
+            # Empty or error responses will have very few fields
+            return len(info) > 5 and (
+                info.get('symbol') is not None or 
+                info.get('longName') is not None
+            )
+        except Exception as e:
+            logger.debug(f"Ticker validation failed for {ticker}: {e}")
+            return False
+    
+    def _validate_params(
+        self, 
+        period: Optional[str], 
+        interval: str, 
+        start: Optional[str], 
+        end: Optional[str]
+    ):
+        """
+        Validate fetch parameters
+        
+        Args:
+            period: Period string
+            interval: Interval string
+            start: Start date string
+            end: End date string
+            
+        Raises:
+            ValueError: If parameters are invalid
+        """
+        # Validate period
+        if period and not self.config.validate_period(period):
+            valid_options = sorted(self.config.valid_periods) if self.config.valid_periods else []
+            raise ValueError(
+                f"Invalid period '{period}'. "
+                f"Valid options: {valid_options}"
+            )
+        
+        # Validate interval
+        if not self.config.validate_interval(interval):
+            valid_options = sorted(self.config.valid_intervals) if self.config.valid_intervals else []
+            raise ValueError(
+                f"Invalid interval '{interval}'. "
+                f"Valid options: {valid_options}"
+            )
+        
+        # Validate date range if provided
+        if start and end:
+            try:
+                start_date = datetime.strptime(start, '%Y-%m-%d')
+                end_date = datetime.strptime(end, '%Y-%m-%d')
+                
+                if start_date >= end_date:
+                    raise ValueError(
+                        f"Start date '{start}' must be before end date '{end}'"
+                    )
+                
+                if end_date > datetime.now():
+                    logger.warning(
+                        f"End date '{end}' is in the future, "
+                        f"using current date instead"
+                    )
+                    
+            except ValueError as e:
+                if "does not match format" in str(e):
+                    raise ValueError(
+                        f"Invalid date format. Use YYYY-MM-DD. "
+                        f"Got start='{start}', end='{end}'"
+                    ) from e
+                raise
         
     def fetch_ticker(
         self,
@@ -56,14 +142,34 @@ class DataFetcher:
             
         Returns:
             DataFrame with columns: Open, High, Low, Close, Volume, Adj Close
+            
+        Raises:
+            ValueError: If ticker is invalid or parameters are incorrect
+            ConnectionError: If network request fails
+            RuntimeError: If Yahoo Finance API returns an error
         """
         ticker = ticker.upper()
+        
+        # Validate parameters
+        self._validate_params(period, interval, start, end)
+        
+        # Validate ticker symbol
+        if not self.validate_ticker(ticker):
+            raise ValueError(
+                f"Invalid or inaccessible ticker symbol: '{ticker}'. "
+                f"Please verify the symbol exists."
+            )
+        
         cache_file = self._get_cache_filename(ticker, start, end, period, interval)
         
         # Check cache
         if use_cache and cache_file.exists():
             logger.info(f"Loading cached data for {ticker} from {cache_file}")
-            return pd.read_csv(cache_file, index_col=0, parse_dates=True)
+            try:
+                return pd.read_csv(cache_file, index_col=0, parse_dates=True)
+            except Exception as e:
+                logger.warning(f"Failed to load cache for {ticker}: {e}")
+                logger.info("Fetching fresh data instead")
         
         # Fetch from Yahoo Finance
         logger.info(f"Fetching data for {ticker} from Yahoo Finance")
@@ -76,17 +182,57 @@ class DataFetcher:
                 data = stock.history(period=period, interval=interval)
             
             if data.empty:
-                raise ValueError(f"No data returned for ticker {ticker}")
+                raise ValueError(
+                    f"No data returned for ticker {ticker}. "
+                    f"This may indicate an invalid ticker, delisted stock, "
+                    f"or no data available for the specified period/interval."
+                )
             
             # Save to cache
-            data.to_csv(cache_file)
-            logger.info(f"Cached data saved to {cache_file}")
+            try:
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                data.to_csv(cache_file)
+                logger.info(f"Cached data saved to {cache_file}")
+            except PermissionError:
+                logger.warning(f"Permission denied writing cache to {cache_file}")
+            except OSError as e:
+                logger.warning(f"Failed to write cache: {e}")
             
             return data
             
-        except Exception as e:
-            logger.error(f"Error fetching data for {ticker}: {e}")
+        except ValueError:
+            # Re-raise ValueError (ticker/param validation)
             raise
+        except ConnectionError as e:
+            logger.error(f"Network error fetching {ticker}: {e}")
+            raise ConnectionError(
+                f"Failed to connect to Yahoo Finance for {ticker}. "
+                f"Check your internet connection."
+            ) from e
+        except Exception as e:
+            error_msg = str(e).lower()
+            
+            # Detect specific error types
+            if "404" in error_msg or "not found" in error_msg:
+                raise ValueError(
+                    f"Ticker '{ticker}' not found. "
+                    f"Verify the symbol is correct."
+                ) from e
+            elif "timeout" in error_msg:
+                raise ConnectionError(
+                    f"Request timeout for {ticker}. "
+                    f"Yahoo Finance may be slow or unreachable."
+                ) from e
+            elif "rate limit" in error_msg or "429" in error_msg:
+                raise RuntimeError(
+                    f"Yahoo Finance rate limit exceeded. "
+                    f"Please wait a few minutes before retrying."
+                ) from e
+            else:
+                logger.error(f"Unexpected error fetching {ticker}: {e}")
+                raise RuntimeError(
+                    f"Failed to fetch data for {ticker}: {e}"
+                ) from e
     
     def fetch_multiple_tickers(
         self,
@@ -133,7 +279,11 @@ class DataFetcher:
             use_cache: Whether to use cached data
             
         Returns:
-            Dictionary with ticker metadata
+            Dictionary with ticker metadata (empty dict if fetch fails)
+            
+        Note:
+            Returns empty dict on failure rather than raising exception
+            to allow other report sections to continue
         """
         ticker = ticker.upper()
         cache_file = self._get_cache_file_path(ticker, "info.json")
@@ -142,11 +292,20 @@ class DataFetcher:
         if use_cache:
             cached = self._load_json_cache(cache_file)
             if cached is not None:
+                logger.info(f"Loaded cached ticker info for {ticker}")
                 return cached
         
         try:
             stock = yf.Ticker(ticker)
             info = stock.info
+            
+            # Validate we got meaningful data
+            if not info or len(info) < 5:
+                logger.warning(
+                    f"Minimal or no information returned for {ticker}. "
+                    f"Ticker may be invalid or delisted."
+                )
+                return {}
             
             # Extract comprehensive fields
             result = {
@@ -184,12 +343,16 @@ class DataFetcher:
             }
             
             # Cache the result
-            self._save_json_cache(cache_file, result)
+            try:
+                self._save_json_cache(cache_file, result)
+            except (PermissionError, OSError) as e:
+                logger.warning(f"Failed to cache ticker info for {ticker}: {e}")
             
             return result
             
         except Exception as e:
             logger.error(f"Error fetching info for {ticker}: {e}")
+            logger.info("Returning empty dict to allow other sections to continue")
             return {}
     
     def fetch_fundamentals(
@@ -563,25 +726,49 @@ class DataFetcher:
             cache_path: Path to cache file
             
         Returns:
-            Cached data or None if cache doesn't exist
+            Cached data or None if cache doesn't exist or is invalid
         """
-        if cache_path.exists():
+        if not cache_path.exists():
+            return None
+        
+        try:
             logger.info(f"Loading from cache: {cache_path}")
             with open(cache_path, 'r') as f:
                 return json.load(f)
-        return None
+        except json.JSONDecodeError as e:
+            logger.warning(f"Invalid JSON in cache file {cache_path}: {e}")
+            logger.info("Cache will be regenerated")
+            return None
+        except PermissionError:
+            logger.warning(f"Permission denied reading cache: {cache_path}")
+            return None
+        except OSError as e:
+            logger.warning(f"OS error reading cache {cache_path}: {e}")
+            return None
     
     def _save_json_cache(self, cache_path: Path, data: Any) -> None:
         """
-        Save data to JSON cache file
+        Save data to JSON cache file with error handling
         
         Args:
             cache_path: Path to cache file
             data: Data to cache (must be JSON-serializable)
+            
+        Note:
+            Logs warnings on failure but does not raise exceptions
+            to avoid breaking the main fetch operations
         """
-        with open(cache_path, 'w') as f:
-            json.dump(data, f, indent=2, default=str)
-        logger.info(f"Saved to cache: {cache_path}")
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cache_path, 'w') as f:
+                json.dump(data, f, indent=2, default=str)
+            logger.info(f"Saved to cache: {cache_path}")
+        except PermissionError:
+            logger.warning(f"Permission denied writing cache to {cache_path}")
+        except OSError as e:
+            logger.warning(f"OS error saving cache to {cache_path}: {e}")
+        except TypeError as e:
+            logger.warning(f"Data not JSON-serializable for {cache_path}: {e}")
     
     # ==================== Legacy Methods ====================
     

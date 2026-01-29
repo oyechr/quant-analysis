@@ -366,6 +366,11 @@ class FundamentalAnalyzer:
             Z-Score value or None if insufficient data
         """
         if self.balance_sheet_a is None or self.income_stmt_a is None:
+            logger.warning(
+                f"Cannot calculate Altman Z-Score: Missing financial statements "
+                f"(balance_sheet={self.balance_sheet_a is not None}, "
+                f"income_stmt={self.income_stmt_a is not None})"
+            )
             return None
         
         # Get balance sheet items
@@ -385,6 +390,19 @@ class FundamentalAnalyzer:
         # Calculate components
         if not all([current_assets, current_liabilities, total_assets, retained_earnings, 
                     total_liabilities, ebit, revenue, market_cap]):
+            missing = []
+            if not current_assets: missing.append('Current Assets')
+            if not current_liabilities: missing.append('Current Liabilities')
+            if not total_assets: missing.append('Total Assets')
+            if not retained_earnings: missing.append('Retained Earnings')
+            if not total_liabilities: missing.append('Total Liabilities')
+            if not ebit: missing.append('EBIT')
+            if not revenue: missing.append('Revenue')
+            if not market_cap: missing.append('Market Cap')
+            
+            logger.warning(
+                f"Altman Z-Score incomplete: Missing {', '.join(missing)}"
+            )
             return None
         
         # Type assertions for narrowing Optional[float] -> float
@@ -435,6 +453,14 @@ class FundamentalAnalyzer:
             F-Score (0-9) or None if insufficient data
         """
         if self.balance_sheet_a is None or self.income_stmt_a is None or self.cash_flow_a is None:
+            missing = []
+            if self.balance_sheet_a is None: missing.append('balance sheet')
+            if self.income_stmt_a is None: missing.append('income statement')  
+            if self.cash_flow_a is None: missing.append('cash flow')
+            
+            logger.warning(
+                f"Cannot calculate Piotroski F-Score: Missing {', '.join(missing)}"
+            )
             return None
         
         score = 0

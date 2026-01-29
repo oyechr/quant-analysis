@@ -17,19 +17,32 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 ### Technical Analysis
 
 - **Trend Indicators:** SMA, EMA, MACD
-- **Momentum Indicators:** RSI, Stochastic Oscillator
-- **Volatility Indicators:** Bollinger Bands, ATR
-- **Volume Indicators:** OBV, VWAP
+- **Momentum Indicators:** RSI, Stochastic Oscillator, Williams %R
+- **Volatility Indicators:** Bollinger Bands, ATR, ADX
+- **Volume Indicators:** OBV, VWAP, MFI
+- **Statistical Summaries:** Price ranges, returns, volatility metrics
 - Automated signal generation (buy/sell signals)
-- Comprehensive technical reports
+- Comprehensive technical reports (JSON + Markdown)
+
+### Fundamental Analysis
+
+- **Growth Metrics:** Revenue, Earnings, FCF growth (1Y, 3Y, 5Y CAGR)
+- **Free Cash Flow Analysis:** FCF yield, FCF margin, FCF per share
+- **Profitability Margins:** Gross, EBITDA, Operating, Net margins with trends
+- **Efficiency Ratios:** Asset turnover, inventory turnover, receivables/payables, cash conversion cycle
+- **DuPont Analysis:** ROE decomposition (Margin × Turnover × Leverage)
+- **Quality Scores:** Altman Z-Score (bankruptcy risk), Piotroski F-Score (fundamental strength)
+- Graceful handling of missing financial data
+- Dual output format (JSON + Markdown)
 
 ### Report Generation
 
 - JSON reports with complete data aggregation
 - Markdown reports for human-readable analysis
-- Modular section-based architecture
-- Separate detailed technical analysis reports
+- Modular section-based architecture (10 section types)
+- Separate detailed technical and fundamental analysis reports
 - Automatic report versioning via Git
+- Dual output strategy for both human and machine consumption
 
 ### Code Quality
 
@@ -90,6 +103,27 @@ signals = analyzer.generate_signals()
 summary = analyzer.get_summary()
 ```
 
+### Fundamental Analysis
+
+```python
+from src.fundamental_analysis import FundamentalAnalyzer
+
+# Fetch required data
+info = fetcher.get_ticker_info("AAPL")
+fundamentals = fetcher.fetch_fundamentals("AAPL")
+price_data = fetcher.fetch_ticker("AAPL", period="1y")
+
+# Analyze fundamentals
+analyzer = FundamentalAnalyzer(info, fundamentals, price_data)
+analyzer.calculate_all()
+
+# Get summary with all metrics
+summary = analyzer.get_summary()
+
+# Format as markdown
+markdown_report = analyzer.format_markdown()
+```
+
 ### Generate Reports
 
 ```python
@@ -97,12 +131,13 @@ from src.report_generator import ReportGenerator
 
 generator = ReportGenerator()
 
-# Generate comprehensive report with technical analysis
+# Generate comprehensive report with technical and fundamental analysis
 report = generator.generate_full_report(
     ticker="AAPL",
     period="1y",
     output_format="both",  # JSON + Markdown
-    include_technical=True
+    include_technical=True,    # Entry/exit timing signals
+    include_fundamental=True   # Intrinsic value assessment
 )
 ```
 
@@ -112,9 +147,10 @@ report = generator.generate_full_report(
 quant-analysis/
 ├── src/
 │   ├── data_fetcher.py           # Yahoo Finance data fetching with caching
-│   ├── technical_analysis.py     # Technical indicators and signal generation
+│   ├── technical_analysis.py     # Technical indicators and signal generation (654 lines)
+│   ├── fundamental_analysis.py   # Fundamental metrics and quality scores (767 lines)
 │   ├── report_generator.py       # Report aggregation and formatting
-│   ├── report_sections.py        # Modular report section handlers
+│   ├── report_sections.py        # Modular report section handlers (10 sections)
 │   ├── serialization.py          # DataFrame/JSON conversion utilities
 │   └── types.py                  # Type definitions for documentation
 ├── data/                         # Data directory (organized by ticker)
@@ -122,18 +158,22 @@ quant-analysis/
 │       ├── cache/                # Ephemeral API responses (gitignored)
 │       │   ├── prices_1y_1d.csv
 │       │   ├── info.json
+│       │   ├── fundamentals.json
 │       │   └── ...
 │       └── reports/              # Generated analysis reports (tracked)
 │           ├── full_report.json
 │           ├── report.md
 │           ├── technical_analysis.json
-│           └── technical_analysis.md
+│           ├── technical_analysis.md
+│           ├── fundamental_analysis.json
+│           └── fundamental_analysis.md
 ├── examples/                     # Example usage scripts
 │   ├── 01_basic_fetch.py
 │   ├── 02_inspect_data.py
 │   ├── 03_test_fundamentals.py
 │   ├── 04_generate_report.py
-│   └── 05_technical_analysis.py
+│   ├── 05_technical_analysis.py
+│   └── README.md                 # Detailed examples documentation
 └── tests/                        # Unit tests (planned)
 ```
 
@@ -166,11 +206,35 @@ Run from project root:
 python examples/04_generate_report.py
 ```
 
-## Future Enhancements
+## Development Roadmap
 
-- Risk metrics (Beta, Sharpe Ratio, Sortino Ratio)
-- Portfolio correlation analysis
-- Backtesting framework
-- Interactive visualizations
+### Phase 1: Foundation ✅ (Completed)
+
+- ✅ Data fetching with intelligent caching
+- ✅ Technical analysis (16+ indicators)
+- ✅ Fundamental analysis (growth, margins, efficiency, quality scores)
+- ✅ Comprehensive report generation
+- ✅ Type safety and error handling
+
+### Phase 2: Risk & Portfolio Analysis (Next)
+
+- Risk metrics (Beta, Sharpe Ratio, Sortino Ratio, Max Drawdown, VaR)
+- Multi-ticker correlation analysis
+- Portfolio optimization (efficient frontier)
+- Relative strength and sector comparisons
+
+### Phase 3: Advanced Features
+
+- Backtesting framework for strategy validation
+- Interactive visualizations (Plotly/Matplotlib)
+- Configuration system for user parameters
+- Enhanced error handling and validation
+
+### Phase 4: Deployment & Tooling
+
+- Unit test coverage
+- CLI interface
+- REST API wrapper
+- Interactive dashboard (Streamlit)
 - ML-based forecasting
 - Real-time data streaming

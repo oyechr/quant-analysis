@@ -87,23 +87,27 @@ python examples/05_technical_analysis.py
 
 - Generating full stock reports (JSON + Markdown)
 - Integrating multiple data sources
-- Optional technical analysis inclusion
+- Optional technical analysis (timing signals)
+- Optional fundamental analysis (intrinsic value)
 - Report section modularity
 
 **Output:**
 
 ```
 data/TICKER/reports/
-├── full_report.json           # Complete data aggregation
-├── report.md                  # Human-readable report
-├── technical_analysis.json    # Technical indicators (if enabled)
-└── technical_analysis.md      # Detailed analysis (if enabled)
+├── full_report.json              # Complete data aggregation
+├── report.md                     # Human-readable report
+├── technical_analysis.json       # Technical indicators (if enabled)
+├── technical_analysis.md         # Entry/exit signals (if enabled)
+├── fundamental_analysis.json     # Fundamental metrics (if enabled)
+└── fundamental_analysis.md       # Valuation analysis (if enabled)
 ```
 
 **Features:**
 
 - Aggregates price data, fundamentals, earnings, holders, dividends, ratings, news
-- Optional technical analysis with 13+ indicators
+- Optional technical analysis with 16+ indicators (timing signals)
+- Optional fundamental analysis with growth, margins, efficiency, quality scores (intrinsic value)
 - Markdown formatting for readability
 - Automatic cache/report separation
 
@@ -154,8 +158,10 @@ data/
     reports/                    # Analysis outputs (tracked)
       full_report.json          # Comprehensive report
       report.md                 # Markdown report
-      technical_analysis.json   # Technical indicators
+      technical_analysis.json   # Technical indicators (timing)
       technical_analysis.md     # Detailed technical report
+      fundamental_analysis.json # Fundamental metrics (value)
+      fundamental_analysis.md   # Detailed fundamental report
 ```
 
 **Why separate cache and reports?**
@@ -207,10 +213,18 @@ for ticker in tickers:
 
 ## Next Steps
 
-Potential enhancements:
+**Completed Features:**
 
-- Risk metrics (Sharpe ratio, max drawdown)
-- Portfolio correlation analysis
+- ✅ Data fetching with caching
+- ✅ Technical analysis (16+ indicators)
+- ✅ Fundamental analysis (growth, margins, efficiency, quality scores)
+- ✅ Comprehensive reporting (JSON + Markdown)
+
+**Planned Enhancements:**
+
+- Risk metrics (Sharpe ratio, Sortino ratio, max drawdown, Beta, VaR)
+- Portfolio correlation and optimization
+- Multi-ticker comparative analysis
 - Backtesting trading strategies
 - Real-time data monitoring
 - Interactive dashboards
