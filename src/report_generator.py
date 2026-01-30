@@ -23,6 +23,7 @@ from .report_sections import (
     NewsSection,
     PriceDataSection,
     ReportSection,
+    RiskAnalysisSection,
     TechnicalAnalysisSection,
 )
 
@@ -64,6 +65,7 @@ class ReportGenerator:
         use_cache: bool = True,
         include_technical: bool = False,
         include_fundamental: bool = False,
+        include_risk: bool = False,
     ) -> Dict[str, Any]:
         """
         Generate comprehensive report with all available data
@@ -75,6 +77,7 @@ class ReportGenerator:
             use_cache: Whether to use cached data
             include_technical: Whether to include technical analysis (requires 1y period)
             include_fundamental: Whether to include fundamental analysis
+            include_risk: Whether to include risk metrics and performance analysis
 
         Returns:
             Dictionary with all fetched data and metadata
@@ -136,13 +139,28 @@ class ReportGenerator:
                 logger.error(f"Error processing fundamental analysis: {e}")
                 report_data["fundamental_analysis"] = None
 
+        # Add risk analysis if requested
+        risk_analyzer_tuple = None
+        if include_risk:
+            try:
+                risk_section = RiskAnalysisSection()
+                # Reuse price data from fundamental analysis if available
+                price_data = self.fetcher.fetch_ticker(ticker, period=period, use_cache=use_cache)
+                risk_analyzer_tuple = risk_section.fetch_data(
+                    self.fetcher, ticker, use_cache=use_cache, price_data=price_data, period=period
+                )
+                report_data["risk_analysis"] = risk_section.format_for_json(risk_analyzer_tuple)
+            except Exception as e:
+                logger.error(f"Error processing risk analysis: {e}")
+                report_data["risk_analysis"] = None
+
         # Save outputs
         if output_format in ["json", "both"]:
             self._save_json_report(ticker, report_data)
 
         if output_format in ["markdown", "both"]:
             self._save_markdown_report(
-                ticker, report_data, technical_analyzer, fundamental_analyzer
+                ticker, report_data, technical_analyzer, fundamental_analyzer, risk_analyzer_tuple
             )
 
         logger.info(f"Report generation complete for {ticker}")
@@ -158,7 +176,7 @@ class ReportGenerator:
         logger.info(f"JSON report saved: {output_file}")
 
     def _save_markdown_report(
-        self, ticker: str, data: Dict[str, Any], technical_analyzer=None, fundamental_analyzer=None
+        self, ticker: str, data: Dict[str, Any], technical_analyzer=None, fundamental_analyzer=None, risk_analyzer_tuple=None
     ):
         """Save report as Markdown using section handlers"""
         reports_dir = self.output_dir / ticker / "reports"
@@ -196,6 +214,14 @@ class ReportGenerator:
             except Exception as e:
                 logger.warning(f"Error formatting technical analysis markdown: {e}")
 
+        # Add risk analysis summary if available
+        if risk_analyzer_tuple and data.get("risk_analysis"):
+            try:
+                risk_section = RiskAnalysisSection()
+                md.extend(risk_section.format_for_markdown(risk_analyzer_tuple))
+            except Exception as e:
+                logger.warning(f"Error formatting risk analysis markdown: {e}")
+
         # Write main report
         with open(output_file, "w", encoding="utf-8") as f:
             f.write("\n".join(md))
@@ -211,6 +237,11 @@ class ReportGenerator:
         if fundamental_analyzer:
             self._save_fundamental_markdown(ticker, fundamental_analyzer)
             self._save_fundamental_json(ticker, fundamental_analyzer)
+
+        # Save detailed risk analysis markdown if available
+        if risk_analyzer_tuple:
+            self._save_risk_markdown(ticker, risk_analyzer_tuple)
+            self._save_risk_json(ticker, risk_analyzer_tuple)
 
     def _save_technical_json(self, ticker: str, technical_analyzer):
         """Save detailed technical analysis as separate JSON file"""
@@ -281,6 +312,161 @@ class ReportGenerator:
             f.write("\n".join(md))
 
         logger.info(f"Fundamental analysis markdown saved: {output_file}")
+
+    def _save_risk_json(self, ticker: str, risk_analyzer_tuple):
+        """Save detailed risk analysis as separate JSON file"""
+        reports_dir = self.output_dir / ticker / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "risk_analysis.json"
+
+        if not isinstance(risk_analyzer_tuple, tuple) or len(risk_analyzer_tuple) < 2:
+            logger.warning("Invalid risk analyzer data for JSON export")
+            return
+
+        _, metrics, _ = risk_analyzer_tuple
+
+        # Write file
+        with open(output_file, "w") as f:
+            json.dump(metrics, f, indent=2, default=str)
+
+        logger.info(f"Risk analysis JSON saved: {output_file}")
+
+    def _save_risk_markdown(self, ticker: str, risk_analyzer_tuple):
+        """Save detailed risk analysis as separate markdown file"""
+        reports_dir = self.output_dir / ticker / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "risk_analysis.md"
+
+        if not isinstance(risk_analyzer_tuple, tuple) or len(risk_analyzer_tuple) < 2:
+            logger.warning("Invalid risk analyzer data for markdown export")
+            return
+
+        _, metrics, _ = risk_analyzer_tuple
+
+        md = []
+        md.append(f"# {ticker} - Risk Analysis Report")
+        md.append("")
+        md.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        md.append("")
+
+        # Returns Analysis
+        md.append("## Returns Analysis")
+        md.append("")
+        if "returns" in metrics and metrics["returns"]:
+            returns = metrics["returns"]
+            md.append("### Daily Returns")
+            md.append("")
+            md.append(f"- **Mean:** {returns.get('daily_mean', 0):.4%}")
+            md.append(f"- **Std Dev:** {returns.get('daily_std', 0):.4%}")
+            md.append(f"- **Min (worst day):** {returns.get('daily_min', 0):.4%}")
+            md.append(f"- **Max (best day):** {returns.get('daily_max', 0):.4%}")
+            md.append("")
+            md.append("### Period Performance")
+            md.append("")
+            md.append(f"- **Cumulative Return:** {returns.get('cumulative_return', 0):.2%}")
+            md.append(f"- **Annualized Return:** {returns.get('annualized_return', 0):.2%}")
+            md.append("")
+            md.append("### Trading Statistics")
+            md.append("")
+            md.append(f"- **Total Days:** {returns.get('total_trading_days', 0)}")
+            md.append(f"- **Positive Days:** {returns.get('positive_days', 0)}")
+            md.append(f"- **Negative Days:** {returns.get('negative_days', 0)}")
+            md.append(f"- **Win Rate:** {returns.get('win_rate', 0):.2%}")
+            md.append("")
+
+        # Volatility Analysis
+        md.append("## Volatility Analysis")
+        md.append("")
+        if "volatility" in metrics and metrics["volatility"]:
+            vol = metrics["volatility"]
+            md.append(f"- **Daily Volatility:** {vol.get('daily_volatility', 0):.4%}")
+            md.append(f"- **Annualized Volatility:** {vol.get('annualized_volatility', 0):.2%}")
+            md.append(f"- **Downside Deviation:** {vol.get('downside_deviation', 0):.2%}")
+            md.append("")
+
+        # Risk-Adjusted Returns
+        md.append("## Risk-Adjusted Returns")
+        md.append("")
+        sharpe = metrics.get("sharpe_ratio", 0)
+        sortino = metrics.get("sortino_ratio", 0)
+        md.append(f"- **Sharpe Ratio:** {sharpe:.2f}")
+        if sharpe > 1:
+            md.append("  - Good risk-adjusted performance")
+        elif sharpe > 0:
+            md.append("  - Positive but modest risk-adjusted return")
+        else:
+            md.append("  - Underperforming risk-free rate")
+        md.append("")
+        md.append(f"- **Sortino Ratio:** {sortino:.2f}")
+        if sortino > sharpe:
+            md.append("  - Better downside risk profile than overall volatility suggests")
+        md.append("  - (Higher is better - focuses on downside risk)")
+        md.append("")
+
+        # Drawdown Analysis
+        md.append("## Drawdown Analysis")
+        md.append("")
+        if "drawdown" in metrics and metrics["drawdown"]:
+            dd = metrics["drawdown"]
+            md.append(f"- **Maximum Drawdown:** {dd.get('max_drawdown', 0):.2%}")
+            md.append(f"- **Max DD Date:** {dd.get('max_drawdown_date', 'N/A')}")
+            md.append(f"- **Current Drawdown:** {dd.get('current_drawdown', 0):.2%}")
+            md.append(f"- **Days Since Peak:** {dd.get('days_since_peak', 0)}")
+            if dd.get('recovery_days'):
+                md.append(f"- **Recovery Time:** {dd.get('recovery_days')} days")
+            md.append(f"- **At Peak:** {'Yes' if dd.get('is_recovered') else 'No'}")
+            md.append("")
+
+        # Market Risk
+        md.append("## Market Risk (vs Benchmark)")
+        md.append("")
+        if "market_risk" in metrics and metrics["market_risk"]:
+            mr = metrics["market_risk"]
+            md.append(f"**Benchmark:** {mr.get('benchmark', 'N/A')}")
+            md.append("")
+            md.append(f"- **Beta:** {mr.get('beta', 0):.2f}")
+            if mr.get('beta', 0) > 1:
+                md.append("  - More volatile than market")
+            elif mr.get('beta', 0) < 1:
+                md.append("  - Less volatile than market")
+            else:
+                md.append("  - Moves with market")
+            md.append(f"- **Alpha:** {mr.get('alpha', 0):.2%}")
+            if mr.get('alpha', 0) > 0:
+                md.append("  - Outperforming benchmark (risk-adjusted)")
+            md.append(f"- **Correlation:** {mr.get('correlation', 0):.2f}")
+            md.append(f"- **R-squared:** {mr.get('r_squared', 0):.2%}")
+            md.append("")
+
+        # Tail Risk (VaR)
+        md.append("## Tail Risk (Value at Risk)")
+        md.append("")
+        if "var_95" in metrics and metrics["var_95"]:
+            var95 = metrics["var_95"]
+            md.append("### 95% Confidence Level")
+            md.append("")
+            md.append(f"- **VaR (Historical):** {var95.get('var_historical', 0):.2%}")
+            md.append(f"- **CVaR (Expected):** {var95.get('cvar_historical', 0):.2%}")
+            md.append(f"- **VaR (Parametric):** {var95.get('var_parametric', 0):.2%}")
+            md.append("- *5% chance of losing more than VaR in a day*")
+            md.append("")
+
+        if "var_99" in metrics and metrics["var_99"]:
+            var99 = metrics["var_99"]
+            md.append("### 99% Confidence Level")
+            md.append("")
+            md.append(f"- **VaR (Historical):** {var99.get('var_historical', 0):.2%}")
+            md.append(f"- **CVaR (Expected):** {var99.get('cvar_historical', 0):.2%}")
+            md.append("- *1% chance of losing more than VaR in a day*")
+            md.append("")
+            md.append(f"**Worst Historical Day:** {var99.get('worst_day', 0):.2%}")
+            md.append("")
+
+        # Write file
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(md))
+
+        logger.info(f"Risk analysis markdown saved: {output_file}")
 
 
 # Convenience function

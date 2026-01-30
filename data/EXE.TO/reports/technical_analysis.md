@@ -1,6 +1,6 @@
 # EXE.TO - Technical Analysis Report
 
-**Generated:** 2026-01-29 15:51:13
+**Generated:** 2026-01-30 11:05:08
 
 ## Technical Analysis
 

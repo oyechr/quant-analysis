@@ -35,6 +35,11 @@ def main():
         help="Exclude fundamental analysis from report",
     )
     parser.add_argument(
+        "--no-risk",
+        action="store_true",
+        help="Exclude risk analysis from report",
+    )
+    parser.add_argument(
         "--no-cache", action="store_true", help="Fetch fresh data (ignore cache)"
     )
     parser.add_argument(
@@ -64,6 +69,7 @@ def main():
         use_cache=not args.no_cache,
         include_technical=not args.no_technical,
         include_fundamental=not args.no_fundamental,
+        include_risk=not args.no_risk,
     )
 
     print(f"\n✓ Report generated for {ticker}")
@@ -78,6 +84,10 @@ def main():
     if not args.no_fundamental:
         print(
             f"  - Fundamental Analysis: data/{ticker}/reports/fundamental_analysis.md + .json"
+        )
+    if not args.no_risk:
+        print(
+            f"  - Risk Analysis: data/{ticker}/reports/risk_analysis.md + .json"
         )
 
     # Summary

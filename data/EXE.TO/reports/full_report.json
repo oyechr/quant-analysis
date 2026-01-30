@@ -1,6 +1,6 @@
 {
   "ticker": "EXE.TO",
-  "generated_at": "2026-01-29T15:51:04.283863",
+  "generated_at": "2026-01-30T11:04:59.923592",
   "period": "1y",
   "info": {
     "symbol": "EXE.TO",
@@ -992,6 +992,56 @@
         "altman_z": 3.6670361339727804,
         "piotroski_f": 7
       }
+    }
+  },
+  "risk_analysis": {
+    "returns": {
+      "daily_mean": 0.0035683691919401296,
+      "daily_std": 0.01923717699639965,
+      "daily_min": -0.05910660952009328,
+      "daily_max": 0.15683819895809226,
+      "cumulative_return": 1.3382470169258074,
+      "annualized_return": 1.3461732117886478,
+      "total_trading_days": 251,
+      "positive_days": 134,
+      "negative_days": 115,
+      "win_rate": 0.5338645418326693
+    },
+    "volatility": {
+      "daily_volatility": 0.01923717699639965,
+      "annualized_volatility": 0.30538071755643575,
+      "downside_deviation": 0.1393806172293532
+    },
+    "sharpe_ratio": 2.943306713084005,
+    "sortino_ratio": 6.432022579478392,
+    "drawdown": {
+      "max_drawdown": -0.159179098442083,
+      "max_drawdown_date": "2025-08-01",
+      "current_drawdown": 0.0,
+      "days_since_peak": 0,
+      "recovery_days": 56,
+      "is_recovered": true
+    },
+    "market_risk": {
+      "beta": 0.27472486010547664,
+      "alpha": 0.8784589315904519,
+      "correlation": 0.16616033898384377,
+      "r_squared": 0.027609258251225875,
+      "benchmark": "^GSPC"
+    },
+    "var_95": {
+      "confidence_level": 0.95,
+      "var_historical": -0.020333321218023778,
+      "cvar_historical": -0.027882164905694336,
+      "var_parametric": -0.028346704453172018,
+      "worst_day": -0.05910660952009328
+    },
+    "var_99": {
+      "confidence_level": 0.99,
+      "var_historical": -0.02913802957290484,
+      "cvar_historical": -0.04060996715808862,
+      "var_parametric": -0.04026519773829596,
+      "worst_day": -0.05910660952009328
     }
   }
 }

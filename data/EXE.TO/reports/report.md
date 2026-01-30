@@ -1,6 +1,6 @@
 # EXE.TO - Comprehensive Stock Report
 
-**Generated:** 2026-01-29T15:51:04.283863
+**Generated:** 2026-01-30T11:04:59.923592
 
 **Period:** 1y
 
@@ -254,3 +254,31 @@
 | Bollinger Lower | $21.03 |
 
 *See technical_analysis.md for detailed analysis*
+
+
+## Risk Analysis Summary
+
+### Performance
+
+**Cumulative Return:** 133.82%
+**Annualized Return:** 134.62%
+**Win Rate:** 53.39%
+
+### Risk Metrics
+
+**Annualized Volatility:** 30.54%
+**Sharpe Ratio:** 2.94
+**Sortino Ratio:** 6.43
+
+### Drawdown
+
+**Maximum Drawdown:** -15.92%
+**Current Drawdown:** 0.00%
+
+### Market Risk
+
+**Beta:** 0.27
+**Alpha:** 87.85%
+**Correlation:** 0.17
+
+*See risk_analysis.md for detailed risk metrics*

@@ -604,3 +604,110 @@ class FundamentalAnalysisSection(ReportSection):
         if hasattr(raw_data, "format_markdown"):
             return raw_data.format_markdown()
         return []
+
+
+class RiskAnalysisSection(ReportSection):
+    """Handle risk metrics and performance analysis"""
+
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Any:
+        """
+        Calculate risk metrics
+
+        Returns:
+            Tuple of (RiskMetrics instance, metrics dict, benchmark_data)
+        """
+        from .risk_metrics import RiskMetrics
+        from .config import get_config
+
+        price_data = kwargs.get("price_data")
+        if price_data is None or price_data.empty:
+            period = kwargs.get("period", "1y")
+            price_data = fetcher.fetch_ticker(ticker, period=period, use_cache=use_cache)
+
+        # Fetch benchmark data once (cache-aware)
+        config = get_config()
+        benchmark_ticker = config.benchmark_ticker
+        benchmark_data = kwargs.get("benchmark_data")
+        if not isinstance(benchmark_data, pd.DataFrame) or benchmark_data.empty:
+            # Get date range from stock price data
+            start_date = price_data.index.min()
+            end_date = price_data.index.max()
+            benchmark_data = fetcher.fetch_ticker(
+                benchmark_ticker,
+                start=start_date.strftime("%Y-%m-%d"),
+                end=end_date.strftime("%Y-%m-%d"),
+                use_cache=use_cache,
+            )
+
+        # Calculate all metrics (pass benchmark to avoid re-fetch)
+        risk_analyzer = RiskMetrics()
+        metrics = risk_analyzer.calculate_all_metrics(price_data, benchmark_data=benchmark_data)
+
+        # Return tuple: (analyzer, metrics, benchmark) for dual formatting
+        return (risk_analyzer, metrics, benchmark_data)
+
+    def format_for_json(self, raw_data: Any) -> Any:
+        """Format risk metrics for JSON"""
+        if isinstance(raw_data, tuple) and len(raw_data) >= 2:
+            _, metrics, _ = raw_data
+            return metrics
+        return None
+
+    def format_for_markdown(self, raw_data: Any) -> List[str]:
+        """Format risk analysis summary for main report"""
+        md = []
+        md.append("\n## Risk Analysis Summary")
+        md.append("")
+
+        if not isinstance(raw_data, tuple) or len(raw_data) < 2:
+            md.append("*Risk analysis not available*")
+            return md
+
+        _, metrics, _ = raw_data
+
+        # Performance overview
+        if "returns" in metrics and metrics["returns"]:
+            returns = metrics["returns"]
+            md.append("### Performance")
+            md.append("")
+            md.append(f"**Cumulative Return:** {returns.get('cumulative_return', 0):.2%}")
+            md.append(f"**Annualized Return:** {returns.get('annualized_return', 0):.2%}")
+            md.append(f"**Win Rate:** {returns.get('win_rate', 0):.2%}")
+            md.append("")
+
+        # Risk metrics
+        if "volatility" in metrics and metrics["volatility"]:
+            vol = metrics["volatility"]
+            sharpe = metrics.get("sharpe_ratio", 0)
+            sortino = metrics.get("sortino_ratio", 0)
+
+            md.append("### Risk Metrics")
+            md.append("")
+            md.append(f"**Annualized Volatility:** {vol.get('annualized_volatility', 0):.2%}")
+            md.append(f"**Sharpe Ratio:** {sharpe:.2f}")
+            md.append(f"**Sortino Ratio:** {sortino:.2f}")
+            md.append("")
+
+        # Drawdown
+        if "drawdown" in metrics and metrics["drawdown"]:
+            dd = metrics["drawdown"]
+            md.append("### Drawdown")
+            md.append("")
+            md.append(f"**Maximum Drawdown:** {dd.get('max_drawdown', 0):.2%}")
+            md.append(f"**Current Drawdown:** {dd.get('current_drawdown', 0):.2%}")
+            md.append("")
+
+        # Market risk
+        if "market_risk" in metrics and metrics["market_risk"]:
+            mr = metrics["market_risk"]
+            md.append("### Market Risk")
+            md.append("")
+            md.append(f"**Beta:** {mr.get('beta', 0):.2f}")
+            md.append(f"**Alpha:** {mr.get('alpha', 0):.2%}")
+            md.append(f"**Correlation:** {mr.get('correlation', 0):.2f}")
+            md.append("")
+
+        md.append("*See risk_analysis.md for detailed risk metrics*")
+        md.append("")
+
+        return md

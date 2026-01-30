@@ -110,6 +110,67 @@ def main():
     print("  (Higher is better - focuses on downside risk)")
 
     print("\n" + "=" * 70)
+    print("DRAWDOWN ANALYSIS")
+    print("=" * 70)
+
+    if "drawdown" in metrics and metrics["drawdown"]:
+        dd = metrics["drawdown"]
+        print(f"\nDrawdown Metrics:")
+        print(f"  Maximum Drawdown:  {dd.get('max_drawdown', 0):.2%}")
+        print(f"  Max DD Date:       {dd.get('max_drawdown_date', 'N/A')}")
+        print(f"  Current Drawdown:  {dd.get('current_drawdown', 0):.2%}")
+        print(f"  Days Since Peak:   {dd.get('days_since_peak', 0)}")
+        if dd.get('recovery_days'):
+            print(f"  Recovery Time:     {dd.get('recovery_days')} days")
+        print(f"  At Peak:           {'Yes' if dd.get('is_recovered') else 'No'}")
+    else:
+        print("\n⚠️  Drawdown data not available")
+
+    print("\n" + "=" * 70)
+    print("MARKET RISK (vs Benchmark)")
+    print("=" * 70)
+
+    if "market_risk" in metrics and metrics["market_risk"]:
+        mr = metrics["market_risk"]
+        print(f"\nBeta & Alpha:")
+        print(f"  Benchmark:         {mr.get('benchmark', 'N/A')}")
+        print(f"  Beta:              {mr.get('beta', 0):.2f}")
+        if mr.get('beta', 0) > 1:
+            print("    → More volatile than market")
+        elif mr.get('beta', 0) < 1:
+            print("    → Less volatile than market")
+        else:
+            print("    → Moves with market")
+        print(f"  Alpha:             {mr.get('alpha', 0):.2%}")
+        if mr.get('alpha', 0) > 0:
+            print("    → Outperforming benchmark (risk-adjusted)")
+        print(f"  Correlation:       {mr.get('correlation', 0):.2f}")
+        print(f"  R-squared:         {mr.get('r_squared', 0):.2%}")
+    else:
+        print("\n⚠️  Market risk data not available")
+
+    print("\n" + "=" * 70)
+    print("TAIL RISK (Value at Risk)")
+    print("=" * 70)
+
+    if "var_95" in metrics and metrics["var_95"]:
+        var95 = metrics["var_95"]
+        print(f"\n95% Confidence Level:")
+        print(f"  VaR (Historical):  {var95.get('var_historical', 0):.2%}")
+        print(f"  CVaR (Expected):   {var95.get('cvar_historical', 0):.2%}")
+        print(f"  VaR (Parametric):  {var95.get('var_parametric', 0):.2%}")
+        print("  → 5% chance of losing more than VaR in a day")
+
+    if "var_99" in metrics and metrics["var_99"]:
+        var99 = metrics["var_99"]
+        print(f"\n99% Confidence Level:")
+        print(f"  VaR (Historical):  {var99.get('var_historical', 0):.2%}")
+        print(f"  CVaR (Expected):   {var99.get('cvar_historical', 0):.2%}")
+        print("  → 1% chance of losing more than VaR in a day")
+
+        print(f"\nWorst Historical Day: {var99.get('worst_day', 0):.2%}")
+
+    print("\n" + "=" * 70)
     print("Risk Metrics Test Complete!")
     print("=" * 70)
 
