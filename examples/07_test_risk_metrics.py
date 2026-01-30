@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data_fetcher import DataFetcher
-from src.risk_metrics import RiskMetrics
+from src.analysis import RiskMetrics
 
 
 def main():

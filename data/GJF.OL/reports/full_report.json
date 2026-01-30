@@ -1,0 +1,748 @@
+{
+  "ticker": "GJF.OL",
+  "generated_at": "2026-01-30T12:16:30.975854",
+  "period": "1y",
+  "info": {
+    "symbol": "GJF.OL",
+    "name": "Gjensidige Forsikring ASA",
+    "sector": "Financial Services",
+    "industry": "Insurance - Property & Casualty",
+    "market_cap": 137485910016,
+    "currency": "NOK",
+    "exchange": "OSL",
+    "website": "https://www.gjensidige.com",
+    "pe_ratio": 21.929825,
+    "forward_pe": 15.942842,
+    "peg_ratio": null,
+    "price_to_book": 5.2233706,
+    "price_to_sales": 2.9604936,
+    "profit_margin": 0.14118,
+    "operating_margin": 0.17075,
+    "roe": 0.23625,
+    "roa": 0.03147,
+    "debt_to_equity": 18.652,
+    "current_ratio": 4.212,
+    "quick_ratio": 2.893,
+    "dividend_yield": 3.66,
+    "payout_ratio": 0.71709996,
+    "beta": null,
+    "52w_high": 303.0,
+    "52w_low": 215.8,
+    "avg_volume": 311377
+  },
+  "price_data": {
+    "shape": [
+      251,
+      7
+    ],
+    "date_range": {
+      "start": "2025-01-30 00:00:00+01:00",
+      "end": "2026-01-30 00:00:00+01:00"
+    },
+    "latest": {
+      "date": "2026-01-30 00:00:00+01:00",
+      "open": 273.79998779296875,
+      "high": 275.79998779296875,
+      "low": 272.6000061035156,
+      "close": 275.0,
+      "volume": 60019
+    },
+    "statistics": {
+      "high_52w": 303.0,
+      "low_52w": 214.8271896701389,
+      "avg_volume": 315728.3107569721,
+      "volatility": 0.012969269751607317
+    }
+  },
+  "fundamentals": {
+    "income_stmt_quarterly": {
+      "shape": [
+        25,
+        5
+      ],
+      "has_data": true
+    },
+    "income_stmt_annual": {
+      "shape": [
+        34,
+        4
+      ],
+      "has_data": true
+    },
+    "balance_sheet_quarterly": {
+      "shape": [
+        56,
+        5
+      ],
+      "has_data": true
+    },
+    "balance_sheet_annual": {
+      "shape": [
+        57,
+        4
+      ],
+      "has_data": true
+    },
+    "cash_flow_quarterly": {
+      "shape": [
+        23,
+        5
+      ],
+      "has_data": true
+    },
+    "cash_flow_annual": {
+      "shape": [
+        26,
+        4
+      ],
+      "has_data": true
+    }
+  },
+  "earnings": {
+    "history_count": 4,
+    "dates_count": 25,
+    "latest_earnings": [
+      {
+        "quarter": "2025-03-31 00:00:00",
+        "epsActual": 2.53,
+        "epsEstimate": 2.47816,
+        "epsDifference": 0.05,
+        "surprisePercent": 0.0209
+      },
+      {
+        "quarter": "2025-06-30 00:00:00",
+        "epsActual": 4.42,
+        "epsEstimate": 3.22915,
+        "epsDifference": 1.19,
+        "surprisePercent": 0.3688
+      },
+      {
+        "quarter": "2025-09-30 00:00:00",
+        "epsActual": 3.04,
+        "epsEstimate": 3.71693,
+        "epsDifference": -0.68,
+        "surprisePercent": -0.1821
+      }
+    ],
+    "upcoming_dates": [
+      {
+        "Earnings Date": "2026-04-28 11:00:00-04:00",
+        "EPS Estimate": 3.72,
+        "Reported EPS": null,
+        "Surprise(%)": null
+      },
+      {
+        "Earnings Date": "2026-01-29 01:00:00-05:00",
+        "EPS Estimate": 3.11,
+        "Reported EPS": 2.56,
+        "Surprise(%)": -17.62
+      },
+      {
+        "Earnings Date": "2025-10-22 20:00:00-04:00",
+        "EPS Estimate": 3.72,
+        "Reported EPS": 3.04,
+        "Surprise(%)": -18.21
+      }
+    ]
+  },
+  "holders": {
+    "institutional_count": 1,
+    "mutualfund_count": 10,
+    "top_institutional": [
+      {
+        "Date Reported": "2025-09-30 00:00:00",
+        "Holder": "Pacer Advisors, Inc.",
+        "pctHeld": 0.0,
+        "Shares": 1542,
+        "Value": 424050,
+        "pctChange": -0.066599995
+      }
+    ],
+    "top_mutualfund": [
+      {
+        "Date Reported": "2025-10-31 00:00:00",
+        "Holder": "VANGUARD STAR FUNDS-Vanguard Total International Stock Index Fund",
+        "pctHeld": 0.0053,
+        "Shares": 2666120,
+        "Value": 733183000,
+        "pctChange": 0.0124
+      },
+      {
+        "Date Reported": "2025-09-30 00:00:00",
+        "Holder": "VANGUARD TAX-MANAGED FUNDS-Vanguard Developed Markets Index Fund",
+        "pctHeld": 0.0034,
+        "Shares": 1702706,
+        "Value": 468244150,
+        "pctChange": 0.0372
+      },
+      {
+        "Date Reported": "2025-12-31 00:00:00",
+        "Holder": "iShares Trust-iShares Core MSCI EAFE ETF",
+        "pctHeld": 0.0028,
+        "Shares": 1379213,
+        "Value": 379283575,
+        "pctChange": 0.0
+      },
+      {
+        "Date Reported": "2025-12-31 00:00:00",
+        "Holder": "SEI INSTITUTIONAL INVESTMENTS TRUST-SIIT World Equity EX-US Fund",
+        "pctHeld": 0.002,
+        "Shares": 976659,
+        "Value": 268581225,
+        "pctChange": 0.0
+      },
+      {
+        "Date Reported": "2025-11-30 00:00:00",
+        "Holder": "Fidelity Concord Street Trust-Fidelity International Index Fund",
+        "pctHeld": 0.0014,
+        "Shares": 704095,
+        "Value": 193626125,
+        "pctChange": -0.0019
+      }
+    ]
+  },
+  "dividends": {
+    "dividend_count": 19,
+    "split_count": 0,
+    "recent_dividends": [
+      {
+        "Date": "2018-04-06 00:00:00+02:00",
+        "Dividends": 7.1
+      },
+      {
+        "Date": "2019-03-29 00:00:00+01:00",
+        "Dividends": 7.1
+      },
+      {
+        "Date": "2020-09-22 00:00:00+02:00",
+        "Dividends": 12.25
+      },
+      {
+        "Date": "2021-01-27 00:00:00+01:00",
+        "Dividends": 2.4
+      },
+      {
+        "Date": "2021-03-25 00:00:00+01:00",
+        "Dividends": 7.4
+      },
+      {
+        "Date": "2021-11-08 00:00:00+01:00",
+        "Dividends": 4.0
+      },
+      {
+        "Date": "2022-03-25 00:00:00+01:00",
+        "Dividends": 7.7
+      },
+      {
+        "Date": "2023-03-24 00:00:00+01:00",
+        "Dividends": 8.25
+      },
+      {
+        "Date": "2024-03-21 00:00:00+01:00",
+        "Dividends": 8.75
+      },
+      {
+        "Date": "2025-03-21 00:00:00+01:00",
+        "Dividends": 10.0
+      }
+    ],
+    "recent_splits": []
+  },
+  "analyst_ratings": {
+    "recommendation_count": 4,
+    "upgrade_downgrade_count": 0,
+    "recent_recommendations": [
+      {
+        "period": "0m",
+        "strongBuy": 1,
+        "buy": 4,
+        "hold": 7,
+        "sell": 0,
+        "strongSell": 1
+      },
+      {
+        "period": "-1m",
+        "strongBuy": 2,
+        "buy": 4,
+        "hold": 6,
+        "sell": 0,
+        "strongSell": 1
+      },
+      {
+        "period": "-2m",
+        "strongBuy": 2,
+        "buy": 3,
+        "hold": 7,
+        "sell": 0,
+        "strongSell": 1
+      },
+      {
+        "period": "-3m",
+        "strongBuy": 2,
+        "buy": 2,
+        "hold": 7,
+        "sell": 0,
+        "strongSell": 2
+      }
+    ],
+    "recent_changes": []
+  },
+  "news": {
+    "article_count": 4,
+    "recent_articles": [
+      {
+        "id": "1da70bc2-f4ea-3945-8ea1-78efb37d8f73",
+        "content": {
+          "id": "1da70bc2-f4ea-3945-8ea1-78efb37d8f73",
+          "contentType": "STORY",
+          "title": "3 European Stocks Estimated To Be Up To 48.6% Undervalued Offering A 29.9% Discount Opportunity",
+          "description": "",
+          "summary": "As European markets grapple with geopolitical tensions and economic uncertainties, the pan-European STOXX Europe 600 Index recently declined by 1.54%, reflecting broader concerns in the region. In this environment, identifying undervalued stocks can provide investors with potential opportunities to capitalize on market inefficiencies, especially when these stocks are trading at significant discounts relative to their intrinsic value.",
+          "pubDate": "2025-06-23T05:41:16Z",
+          "displayTime": "2025-06-23T05:41:16Z",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://media.zenfs.com/en/simply_wall_st__316/64306ded08622a838132aa4cadf007ad",
+            "originalWidth": 1194,
+            "originalHeight": 432,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/WVt2FvadDqexmfyC8nmCeA--~B/aD00MzI7dz0xMTk0O2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/simply_wall_st__316/64306ded08622a838132aa4cadf007ad",
+                "width": 1194,
+                "height": 432,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/IHHXnKfMqs44_XW4Eh2j.A--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/simply_wall_st__316/64306ded08622a838132aa4cadf007ad",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Simply Wall St.",
+            "url": "https://simplywall.st/"
+          },
+          "canonicalUrl": {
+            "url": "https://finance.yahoo.com/news/3-european-stocks-estimated-48-054116654.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/news/3-european-stocks-estimated-48-054116654.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": false
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": null
+        }
+      },
+      {
+        "id": "e69643a6-4077-3c79-ade1-30db42751044",
+        "content": {
+          "id": "e69643a6-4077-3c79-ade1-30db42751044",
+          "contentType": "STORY",
+          "title": "3 European Stocks Estimated To Be Trading Up To 49.3% Below Intrinsic Value",
+          "description": "",
+          "summary": "As European markets experience a positive upswing, with the pan-European STOXX Europe 600 Index rising by 3.44% amid easing tariff concerns, investors are keenly observing opportunities for potential value investments. In this context, identifying stocks that are trading below their intrinsic value can be particularly appealing, offering a chance to capitalize on market optimism while potentially mitigating risks associated with broader economic uncertainties.",
+          "pubDate": "2025-05-05T05:37:45Z",
+          "displayTime": "2025-05-05T05:37:45Z",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://media.zenfs.com/en/simply_wall_st__316/64306ded08622a838132aa4cadf007ad",
+            "originalWidth": 1194,
+            "originalHeight": 432,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/WVt2FvadDqexmfyC8nmCeA--~B/aD00MzI7dz0xMTk0O2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/simply_wall_st__316/64306ded08622a838132aa4cadf007ad",
+                "width": 1194,
+                "height": 432,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/IHHXnKfMqs44_XW4Eh2j.A--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/simply_wall_st__316/64306ded08622a838132aa4cadf007ad",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Simply Wall St.",
+            "url": "https://simplywall.st/"
+          },
+          "canonicalUrl": {
+            "url": "https://finance.yahoo.com/news/3-european-stocks-estimated-trading-053745655.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/news/3-european-stocks-estimated-trading-053745655.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": false
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": null
+        }
+      },
+      {
+        "id": "5e97b35f-0831-33d6-a739-86fb9411426b",
+        "content": {
+          "id": "5e97b35f-0831-33d6-a739-86fb9411426b",
+          "contentType": "STORY",
+          "title": "European Market: 3 Stocks That Might Be Priced Below Their Estimated Worth",
+          "description": "",
+          "summary": "As European markets grapple with the impact of new U.S. trade tariffs and broader economic uncertainties, investors are increasingly focused on identifying opportunities in stocks that may be trading below their intrinsic value. In this context, understanding the fundamentals and potential resilience of a company can be crucial for spotting undervalued stocks that could offer long-term growth despite current market challenges.",
+          "pubDate": "2025-04-01T05:07:52Z",
+          "displayTime": "2025-04-01T05:07:52Z",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://media.zenfs.com/en/simply_wall_st__316/64306ded08622a838132aa4cadf007ad",
+            "originalWidth": 1194,
+            "originalHeight": 432,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/WVt2FvadDqexmfyC8nmCeA--~B/aD00MzI7dz0xMTk0O2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/simply_wall_st__316/64306ded08622a838132aa4cadf007ad",
+                "width": 1194,
+                "height": 432,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/IHHXnKfMqs44_XW4Eh2j.A--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/simply_wall_st__316/64306ded08622a838132aa4cadf007ad",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Simply Wall St.",
+            "url": "https://simplywall.st/"
+          },
+          "canonicalUrl": {
+            "url": "https://finance.yahoo.com/news/european-market-3-stocks-might-050752787.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/news/european-market-3-stocks-might-050752787.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": false
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": null
+        }
+      },
+      {
+        "id": "55b600b0-c25e-3cb4-ac3c-0c70b8c4113e",
+        "content": {
+          "id": "55b600b0-c25e-3cb4-ac3c-0c70b8c4113e",
+          "contentType": "STORY",
+          "title": "3 European Stocks Estimated To Be Undervalued In March 2025",
+          "description": "",
+          "summary": "As European markets navigate a complex landscape of mixed inflation data and economic contractions in major economies like Germany and France, the pan-European STOXX Europe 600 Index has shown resilience by posting its longest streak of weekly gains since August 2012. Against this backdrop, identifying stocks that may be undervalued becomes particularly pertinent for investors seeking opportunities amidst uncertainty.",
+          "pubDate": "2025-03-03T05:07:58Z",
+          "displayTime": "2025-03-03T05:07:58Z",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://media.zenfs.com/en/simply_wall_st__316/9cc9200f9fa3f0cb0e6329649f4afac4",
+            "originalWidth": 1194,
+            "originalHeight": 432,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/xK1FoCzweReo1iFmMRKojA--~B/aD00MzI7dz0xMTk0O2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/simply_wall_st__316/9cc9200f9fa3f0cb0e6329649f4afac4",
+                "width": 1194,
+                "height": 432,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/_BgJJ3IwLUmbBFvO2fRDDQ--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/simply_wall_st__316/9cc9200f9fa3f0cb0e6329649f4afac4",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Simply Wall St.",
+            "url": "https://simplywall.st/"
+          },
+          "canonicalUrl": {
+            "url": "https://finance.yahoo.com/news/3-european-stocks-estimated-undervalued-050758590.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/news/3-european-stocks-estimated-undervalued-050758590.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": false
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": null
+        }
+      }
+    ]
+  },
+  "technical_analysis": {
+    "statistics": {
+      "price": {
+        "current": 275.0,
+        "high": 302.0,
+        "high_date": "2025-12-30",
+        "low": 215.40261840820312,
+        "low_date": "2025-02-21",
+        "mean": 263.9314749668319,
+        "std_dev": 23.428441957931046,
+        "std_dev_pct": 8.87671391253176
+      },
+      "returns": {
+        "period_return_pct": 22.85437369450527,
+        "daily_volatility_pct": 1.2969269751607317,
+        "annual_volatility_pct": 20.588077469319238
+      },
+      "volume": {
+        "current": 60019.0,
+        "average": 315728.3107569721,
+        "max": 2084483.0,
+        "max_date": "2025-11-24",
+        "min": 60019.0,
+        "volume_vs_avg_pct": -80.99030148544428
+      }
+    },
+    "latest_values": {
+      "date": "2026-01-30",
+      "close_price": 275.0,
+      "indicators": {
+        "Dividends": 0.0,
+        "Stock Splits": 0.0,
+        "SMA_20": 280.5399993896484,
+        "SMA_50": 284.3399987792969,
+        "SMA_200": 273.46000030517575,
+        "EMA_12": 276.25494656777937,
+        "EMA_26": 280.4671129608633,
+        "MACD": -4.212166393083919,
+        "MACD_signal": -3.615444921107194,
+        "MACD_diff": -0.5967214719767249,
+        "RSI_14": 42.48401950569877,
+        "Stoch_K": 51.063812518363285,
+        "Stoch_D": 40.707878607060515,
+        "Williams_R_14": -48.936187481636715,
+        "BB_upper": 297.8036506937028,
+        "BB_middle": 280.5399993896484,
+        "BB_lower": 263.276348085594,
+        "ATR_14": 5.356336919602168,
+        "ADX_14": 37.18798576317228,
+        "OBV": -349600.0,
+        "VWAP": 275.6936537834821,
+        "MFI_14": 35.31134688233199
+      }
+    },
+    "signals": {
+      "RSI": "Neutral (42.5)",
+      "MACD": "Bearish",
+      "MA_Trend": "Bullish (Golden Cross)",
+      "Bollinger_Bands": "Price within bands - normal",
+      "ADX": "Strong trend (37.2)",
+      "MFI": "Neutral (35.3)",
+      "Williams_R": "Neutral (-48.9)"
+    },
+    "data_points": 251,
+    "date_range": {
+      "start": "2025-01-30",
+      "end": "2026-01-30"
+    }
+  },
+  "fundamental_analysis": {
+    "ticker": "GJF.OL",
+    "company_name": "Gjensidige Forsikring ASA",
+    "sector": "Financial Services",
+    "industry": "Insurance - Property & Casualty",
+    "analysis": {
+      "growth_rates": {
+        "revenue": {
+          "1y": 9.050556136412144,
+          "3y_cagr": 8.424955720838433,
+          "5y_cagr": null
+        },
+        "earnings": {
+          "1y": 24.431760417120532,
+          "3y_cagr": -10.378250756436403,
+          "5y_cagr": null
+        },
+        "fcf": {
+          "1y": null,
+          "3y_cagr": null,
+          "current": null
+        }
+      },
+      "fcf_metrics": {},
+      "margins": {
+        "current": {
+          "net_margin": 12.735263586882468
+        },
+        "trend": {
+          "current": 12.735263586882468,
+          "1y_ago": 11.161037761081529,
+          "2y_ago": 11.581362287300523
+        }
+      },
+      "efficiency": {
+        "asset_turnover": 0.23537915273698248
+      },
+      "dupont": {
+        "net_margin": 12.735263586882468,
+        "asset_turnover": 0.23537915273698248,
+        "equity_multiplier": 6.593750240316218,
+        "roe_calculated": 19.765528272722378,
+        "roe_reported": 23.625
+      },
+      "quality_scores": {
+        "altman_z": null,
+        "piotroski_f": 2
+      }
+    }
+  },
+  "risk_analysis": {
+    "returns": {
+      "daily_mean": 0.0009070359067771911,
+      "daily_std": 0.012969269751607317,
+      "daily_min": -0.051318580125661484,
+      "daily_max": 0.07786257212398606,
+      "cumulative_return": 0.22854373694505448,
+      "annualized_return": 0.23056836788772528,
+      "total_trading_days": 250,
+      "positive_days": 121,
+      "negative_days": 121,
+      "win_rate": 0.484
+    },
+    "volatility": {
+      "daily_volatility": 0.012969269751607317,
+      "annualized_volatility": 0.20588077469319238,
+      "downside_deviation": 0.1408461435917542
+    },
+    "sharpe_ratio": 1.108277975489626,
+    "sortino_ratio": 1.6304791909706955,
+    "information_ratio": 0.0,
+    "calmar_ratio": 1.902503701916174,
+    "drawdown": {
+      "max_drawdown": -0.12119207319044908,
+      "max_drawdown_date": "2026-01-23",
+      "current_drawdown": -0.08940397350993377,
+      "days_since_peak": 21,
+      "recovery_days": null,
+      "is_recovered": false
+    },
+    "market_risk": {},
+    "var_95": {
+      "confidence_level": 0.95,
+      "var_historical": -0.01605327144039206,
+      "cvar_historical": -0.029332815145589795,
+      "var_parametric": -0.020926341010337492,
+      "worst_day": -0.051318580125661484
+    },
+    "var_99": {
+      "confidence_level": 0.99,
+      "var_historical": -0.03577061523160884,
+      "cvar_historical": -0.044354330984609315,
+      "var_parametric": -0.02972925998863036,
+      "worst_day": -0.051318580125661484
+    },
+    "rolling_ratios": {
+      "sharpe_30d": {
+        "current": -2.0813438082991267,
+        "mean": 1.4653474428636852,
+        "min": -2.639230042663098,
+        "max": 6.547828724708094,
+        "std": 2.0235850845261503
+      },
+      "sortino_30d": {
+        "current": -2.372536931331678,
+        "mean": 3.2597836648277583,
+        "min": -3.5345189592983353,
+        "max": 14.597134698383158,
+        "std": 4.4991692995097905
+      },
+      "sharpe_60d": {
+        "current": 0.2808125826107424,
+        "mean": 1.400565139561032,
+        "min": -0.8468158345583932,
+        "max": 3.826732278462624,
+        "std": 1.1985696758632756
+      },
+      "sortino_60d": {
+        "current": 0.32494009506220595,
+        "mean": 2.7958037979377286,
+        "min": -1.1984306561539202,
+        "max": 8.751068368291484,
+        "std": 2.5341087174211316
+      },
+      "sharpe_90d": {
+        "current": 0.10463412618973764,
+        "mean": 1.3954457442724053,
+        "min": -0.7442855932347737,
+        "max": 3.40970238022292,
+        "std": 0.9476038330465231
+      },
+      "sortino_90d": {
+        "current": 0.12905456302776203,
+        "mean": 2.5914057700433766,
+        "min": -0.9048866245438862,
+        "max": 7.025886936913044,
+        "std": 1.813173112805988
+      }
+    }
+  }
+}

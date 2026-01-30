@@ -13,7 +13,7 @@ import pandas as pd
 import yfinance as yf
 
 from .config import get_config
-from .serialization import dataframe_to_json_dict, dataframe_to_records, series_to_dataframe
+from .utils.serialization import dataframe_to_json_dict, dataframe_to_records, series_to_dataframe
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

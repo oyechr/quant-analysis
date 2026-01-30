@@ -1,0 +1,50 @@
+{
+  "ticker": "GJF.OL",
+  "company_name": "Gjensidige Forsikring ASA",
+  "sector": "Financial Services",
+  "industry": "Insurance - Property & Casualty",
+  "analysis": {
+    "growth_rates": {
+      "revenue": {
+        "1y": 9.050556136412144,
+        "3y_cagr": 8.424955720838433,
+        "5y_cagr": null
+      },
+      "earnings": {
+        "1y": 24.431760417120532,
+        "3y_cagr": -10.378250756436403,
+        "5y_cagr": null
+      },
+      "fcf": {
+        "1y": null,
+        "3y_cagr": null,
+        "current": null
+      }
+    },
+    "fcf_metrics": {},
+    "margins": {
+      "current": {
+        "net_margin": 12.735263586882468
+      },
+      "trend": {
+        "current": 12.735263586882468,
+        "1y_ago": 11.161037761081529,
+        "2y_ago": 11.581362287300523
+      }
+    },
+    "efficiency": {
+      "asset_turnover": 0.23537915273698248
+    },
+    "dupont": {
+      "net_margin": 12.735263586882468,
+      "asset_turnover": 0.23537915273698248,
+      "equity_multiplier": 6.593750240316218,
+      "roe_calculated": 19.765528272722378,
+      "roe_reported": 23.625
+    },
+    "quality_scores": {
+      "altman_z": null,
+      "piotroski_f": 2
+    }
+  }
+}

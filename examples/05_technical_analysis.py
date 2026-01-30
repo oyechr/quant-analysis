@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import json
 
 from src.data_fetcher import DataFetcher
-from src.technical_analysis import TechnicalAnalyzer
+from src.analysis import TechnicalAnalyzer
 
 
 def main():

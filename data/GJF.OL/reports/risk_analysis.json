@@ -1,0 +1,90 @@
+{
+  "returns": {
+    "daily_mean": 0.0009070359067771911,
+    "daily_std": 0.012969269751607317,
+    "daily_min": -0.051318580125661484,
+    "daily_max": 0.07786257212398606,
+    "cumulative_return": 0.22854373694505448,
+    "annualized_return": 0.23056836788772528,
+    "total_trading_days": 250,
+    "positive_days": 121,
+    "negative_days": 121,
+    "win_rate": 0.484
+  },
+  "volatility": {
+    "daily_volatility": 0.012969269751607317,
+    "annualized_volatility": 0.20588077469319238,
+    "downside_deviation": 0.1408461435917542
+  },
+  "sharpe_ratio": 1.108277975489626,
+  "sortino_ratio": 1.6304791909706955,
+  "information_ratio": 0.0,
+  "calmar_ratio": 1.902503701916174,
+  "drawdown": {
+    "max_drawdown": -0.12119207319044908,
+    "max_drawdown_date": "2026-01-23",
+    "current_drawdown": -0.08940397350993377,
+    "days_since_peak": 21,
+    "recovery_days": null,
+    "is_recovered": false
+  },
+  "market_risk": {},
+  "var_95": {
+    "confidence_level": 0.95,
+    "var_historical": -0.01605327144039206,
+    "cvar_historical": -0.029332815145589795,
+    "var_parametric": -0.020926341010337492,
+    "worst_day": -0.051318580125661484
+  },
+  "var_99": {
+    "confidence_level": 0.99,
+    "var_historical": -0.03577061523160884,
+    "cvar_historical": -0.044354330984609315,
+    "var_parametric": -0.02972925998863036,
+    "worst_day": -0.051318580125661484
+  },
+  "rolling_ratios": {
+    "sharpe_30d": {
+      "current": -2.0813438082991267,
+      "mean": 1.4653474428636852,
+      "min": -2.639230042663098,
+      "max": 6.547828724708094,
+      "std": 2.0235850845261503
+    },
+    "sortino_30d": {
+      "current": -2.372536931331678,
+      "mean": 3.2597836648277583,
+      "min": -3.5345189592983353,
+      "max": 14.597134698383158,
+      "std": 4.4991692995097905
+    },
+    "sharpe_60d": {
+      "current": 0.2808125826107424,
+      "mean": 1.400565139561032,
+      "min": -0.8468158345583932,
+      "max": 3.826732278462624,
+      "std": 1.1985696758632756
+    },
+    "sortino_60d": {
+      "current": 0.32494009506220595,
+      "mean": 2.7958037979377286,
+      "min": -1.1984306561539202,
+      "max": 8.751068368291484,
+      "std": 2.5341087174211316
+    },
+    "sharpe_90d": {
+      "current": 0.10463412618973764,
+      "mean": 1.3954457442724053,
+      "min": -0.7442855932347737,
+      "max": 3.40970238022292,
+      "std": 0.9476038330465231
+    },
+    "sortino_90d": {
+      "current": 0.12905456302776203,
+      "mean": 2.5914057700433766,
+      "min": -0.9048866245438862,
+      "max": 7.025886936913044,
+      "std": 1.813173112805988
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "statistics": {
+    "price": {
+      "current": 275.0,
+      "high": 302.0,
+      "high_date": "2025-12-30",
+      "low": 215.40261840820312,
+      "low_date": "2025-02-21",
+      "mean": 263.9314749668319,
+      "std_dev": 23.428441957931046,
+      "std_dev_pct": 8.87671391253176
+    },
+    "returns": {
+      "period_return_pct": 22.85437369450527,
+      "daily_volatility_pct": 1.2969269751607317,
+      "annual_volatility_pct": 20.588077469319238
+    },
+    "volume": {
+      "current": 60019.0,
+      "average": 315728.3107569721,
+      "max": 2084483.0,
+      "max_date": "2025-11-24",
+      "min": 60019.0,
+      "volume_vs_avg_pct": -80.99030148544428
+    }
+  },
+  "latest_values": {
+    "date": "2026-01-30",
+    "close_price": 275.0,
+    "indicators": {
+      "Dividends": 0.0,
+      "Stock Splits": 0.0,
+      "SMA_20": 280.5399993896484,
+      "SMA_50": 284.3399987792969,
+      "SMA_200": 273.46000030517575,
+      "EMA_12": 276.25494656777937,
+      "EMA_26": 280.4671129608633,
+      "MACD": -4.212166393083919,
+      "MACD_signal": -3.615444921107194,
+      "MACD_diff": -0.5967214719767249,
+      "RSI_14": 42.48401950569877,
+      "Stoch_K": 51.063812518363285,
+      "Stoch_D": 40.707878607060515,
+      "Williams_R_14": -48.936187481636715,
+      "BB_upper": 297.8036506937028,
+      "BB_middle": 280.5399993896484,
+      "BB_lower": 263.276348085594,
+      "ATR_14": 5.356336919602168,
+      "ADX_14": 37.18798576317228,
+      "OBV": -349600.0,
+      "VWAP": 275.6936537834821,
+      "MFI_14": 35.31134688233199
+    }
+  },
+  "signals": {
+    "RSI": "Neutral (42.5)",
+    "MACD": "Bearish",
+    "MA_Trend": "Bullish (Golden Cross)",
+    "Bollinger_Bands": "Price within bands - normal",
+    "ADX": "Strong trend (37.2)",
+    "MFI": "Neutral (35.3)",
+    "Williams_R": "Neutral (-48.9)"
+  },
+  "data_points": 251,
+  "date_range": {
+    "start": "2025-01-30",
+    "end": "2026-01-30"
+  }
+}

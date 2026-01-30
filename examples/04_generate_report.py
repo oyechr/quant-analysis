@@ -10,7 +10,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.report_generator import ReportGenerator
+from src.reporting import ReportGenerator
 
 
 def main():

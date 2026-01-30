@@ -124,7 +124,7 @@ def test_data_quality_warnings():
     print("Test 5: Data Quality Warnings (Check Logs)")
     print("=" * 70)
 
-    from src.fundamental_analysis import FundamentalAnalyzer
+    from src.analysis import FundamentalAnalyzer
 
     print("\nTesting with empty financial data...")
 

@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.data_fetcher import DataFetcher
-from src.serialization import format_date
+from src.utils import format_date
 
 
 def inspect_data(ticker: str, period: str = "1y", use_cache: bool = True):
