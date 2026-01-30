@@ -1,6 +1,6 @@
 # GJF.OL - Fundamental Analysis Report
 
-**Generated:** 2026-01-30 15:39:07
+**Generated:** 2026-01-30 16:15:19
 
 ## Fundamental Analysis
 
@@ -17,7 +17,7 @@
 | Metric | Value |
 |--------|-------|
 | Free Cash Flow | $3,812,000,000 |
-| FCF Yield | 2.77% |
+| FCF Yield | 2.78% |
 | FCF Margin | 9.44% |
 
 ### Profitability Margins

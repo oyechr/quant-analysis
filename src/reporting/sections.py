@@ -11,7 +11,7 @@ import pandas as pd
 
 from ..analysis.fundamental import FundamentalAnalyzer
 from ..analysis.valuation import ValuationAnalyzer
-from ..utils.report import format_number, format_percent, safe_get
+from ..utils.report import format_number, format_percent, get_currency_symbol, safe_get
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class ReportSection(ABC):
         pass
 
     @abstractmethod
-    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         """
         Format data as markdown lines
 
@@ -72,7 +72,7 @@ class InfoSection(ReportSection):
     def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         return raw_data
 
-    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         md = []
         md.append("\n## Company Information")
         md.append(f"\n- **Name:** {safe_get(raw_data, 'name')}")
@@ -152,10 +152,11 @@ class PriceDataSection(ReportSection):
     def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         return raw_data
 
-    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         if not raw_data:
             return []
 
+        symbol = get_currency_symbol(currency)
         md = []
         md.append("\n## Price Data Summary")
         md.append(
@@ -163,14 +164,14 @@ class PriceDataSection(ReportSection):
         )
         md.append(f"- **Data Points:** {raw_data['shape'][0]} days")
         md.append(f"\n### Latest Price ({raw_data['latest']['date']})")
-        md.append(f"- **Close:** ${raw_data['latest']['close']:.2f}")
-        md.append(f"- **Open:** ${raw_data['latest']['open']:.2f}")
-        md.append(f"- **High:** ${raw_data['latest']['high']:.2f}")
-        md.append(f"- **Low:** ${raw_data['latest']['low']:.2f}")
+        md.append(f"- **Close:** {symbol}{raw_data['latest']['close']:.2f}")
+        md.append(f"- **Open:** {symbol}{raw_data['latest']['open']:.2f}")
+        md.append(f"- **High:** {symbol}{raw_data['latest']['high']:.2f}")
+        md.append(f"- **Low:** {symbol}{raw_data['latest']['low']:.2f}")
         md.append(f"- **Volume:** {raw_data['latest']['volume']:,}")
         md.append(f"\n### Statistics")
-        md.append(f"- **52W High:** ${raw_data['statistics']['high_52w']:.2f}")
-        md.append(f"- **52W Low:** ${raw_data['statistics']['low_52w']:.2f}")
+        md.append(f"- **52W High:** {symbol}{raw_data['statistics']['high_52w']:.2f}")
+        md.append(f"- **52W Low:** {symbol}{raw_data['statistics']['low_52w']:.2f}")
         md.append(f"- **Avg Volume:** {raw_data['statistics']['avg_volume']:,.0f}")
         md.append(f"- **Volatility (std):** {raw_data['statistics']['volatility']:.4f}")
 
@@ -188,7 +189,7 @@ class FundamentalsSection(ReportSection):
     def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         return raw_data
 
-    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         md = []
         md.append("\n## Fundamental Data Availability")
         for key, val in raw_data.items():
@@ -230,7 +231,7 @@ class EarningsSection(ReportSection):
     def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         return raw_data
 
-    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         md = []
         md.append("\n## Earnings")
         md.append(f"\n- **Historical Earnings:** {raw_data['history_count']} records")
@@ -278,11 +279,13 @@ class HoldersSection(ReportSection):
     def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         return raw_data
 
-    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         md = []
         md.append("\n## Institutional Ownership")
         md.append(f"\n- **Institutional Holders:** {raw_data['institutional_count']}")
         md.append(f"- **Mutual Fund Holders:** {raw_data['mutualfund_count']}")
+        
+        symbol = get_currency_symbol(currency)
 
         if raw_data["top_institutional"]:
             md.append("\n### Top Institutional Holders")
@@ -291,7 +294,7 @@ class HoldersSection(ReportSection):
             for h in raw_data["top_institutional"]:
                 pct = format_percent(h.get("pctHeld"))
                 shares = f"{h.get('Shares', 0):,}" if h.get("Shares") else "N/A"
-                value = f"${h.get('Value', 0):,}" if h.get("Value") else "N/A"
+                value = f"{symbol}{h.get('Value', 0):,}" if h.get("Value") else "N/A"
                 holder_name = str(h.get("Holder", "N/A"))[:50]
                 md.append(f"| {holder_name} | {pct} | {shares} | {value} |")
 
@@ -330,11 +333,14 @@ class DividendsSection(ReportSection):
     def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         return raw_data
 
-    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         md = []
         md.append("\n## Dividends & Stock Splits")
         md.append(f"\n- **Total Dividend Payments:** {raw_data['dividend_count']}")
         md.append(f"- **Stock Splits:** {raw_data['split_count']}")
+        
+        # Use currency parameter
+        symbol = get_currency_symbol(currency)
 
         if raw_data["recent_dividends"]:
             md.append("\n### Recent Dividends (Last 10)")
@@ -342,7 +348,7 @@ class DividendsSection(ReportSection):
             md.append("|------|--------|")
             for d in raw_data["recent_dividends"]:
                 date = d.get("Date", "N/A")
-                amount = f"${d.get('Dividends', 0):.4f}" if d.get("Dividends") else "N/A"
+                amount = f"{symbol}{d.get('Dividends', 0):.4f}" if d.get("Dividends") else "N/A"
                 md.append(f"| {date} | {amount} |")
 
         if raw_data["recent_splits"]:
@@ -384,7 +390,7 @@ class AnalystRatingsSection(ReportSection):
     def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         return raw_data
 
-    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         md = []
         md.append("\n## Analyst Ratings")
         md.append(f"\n- **Total Recommendations:** {raw_data['recommendation_count']}")
@@ -414,7 +420,8 @@ class AnalystRatingsSection(ReportSection):
                 to_grade = r.get("ToGrade", "N/A")
                 price_target = r.get("currentPriceTarget", "N/A")
                 if price_target != "N/A" and price_target is not None:
-                    price_target = f"${price_target}"
+                    symbol = get_currency_symbol(currency)
+                    price_target = f"{symbol}{price_target}"
                 md.append(f"| {firm} | {action} | {from_grade} | {to_grade} | {price_target} |")
 
         return md
@@ -431,7 +438,7 @@ class NewsSection(ReportSection):
     def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         return raw_data
 
-    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         md = []
         md.append("\n## Recent News")
         md.append(f"\n- **Articles Found:** {raw_data['article_count']}")
@@ -462,9 +469,13 @@ class TechnicalAnalysisSection(ReportSection):
         # Fetch 1 year of data for 200-day SMA calculation
         period = kwargs.get("period", "1y")
         price_data = fetcher.fetch_ticker(ticker, period=period, use_cache=use_cache)
+        
+        # Get currency from ticker info
+        ticker_info = fetcher.get_ticker_info(ticker, use_cache=use_cache)
+        currency = ticker_info.get("currency", "USD")
 
         # Calculate all indicators
-        analyzer = TechnicalAnalyzer(price_data)
+        analyzer = TechnicalAnalyzer(price_data, currency=currency)
         analyzer.calculate_all_indicators()
 
         # Return analyzer instance for formatting
@@ -476,7 +487,7 @@ class TechnicalAnalysisSection(ReportSection):
             return raw_data.get_summary()
         return None
 
-    def format_for_markdown(self, raw_data: Any) -> List[str]:
+    def format_for_markdown(self, raw_data: Any, currency: str = "USD") -> List[str]:
         """Format technical analysis summary for main report"""
         md = []
         md.append("\n## Technical Analysis Summary")
@@ -489,9 +500,11 @@ class TechnicalAnalysisSection(ReportSection):
         # Get summary data
         latest = raw_data.get_latest_values()
         signals = raw_data.generate_signals()
+        
+        symbol = get_currency_symbol(currency)
 
         # Current price
-        md.append(f"**Current Price:** ${latest['close_price']:.2f}")
+        md.append(f"**Current Price:** {symbol}{latest['close_price']:.2f}")
         md.append(f"**As of:** {latest['date']}")
         md.append("")
 
@@ -525,7 +538,7 @@ class TechnicalAnalysisSection(ReportSection):
                 if "RSI" in key or "MACD" in key:
                     md.append(f"| {label} | {value:.2f} |")
                 else:
-                    md.append(f"| {label} | ${value:.2f} |")
+                    md.append(f"| {label} | {symbol}{value:.2f} |")
 
         md.append("")
         md.append("*See technical_analysis.md for detailed analysis*")
@@ -559,7 +572,7 @@ class FundamentalAnalysisSection(ReportSection):
             return raw_data.get_summary()
         return None
 
-    def format_for_markdown(self, raw_data: Any) -> List[str]:
+    def format_for_markdown(self, raw_data: Any, currency: str = "USD") -> List[str]:
         """Format for Markdown - use analyzer's format_markdown()"""
         if hasattr(raw_data, "format_markdown"):
             return raw_data.format_markdown()
@@ -613,7 +626,7 @@ class RiskAnalysisSection(ReportSection):
             return metrics
         return None
 
-    def format_for_markdown(self, raw_data: Any) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         """Format risk analysis summary for main report"""
         md = []
         md.append("\n## Risk Analysis Summary")
@@ -707,7 +720,7 @@ class ValuationAnalysisSection(ReportSection):
         """Format valuation data for JSON"""
         return raw_data  # Already in good format
 
-    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+    def format_for_markdown(self, raw_data: Dict[str, Any], currency: str = "USD") -> List[str]:
         """Format valuation analysis as markdown"""
         md = ["## Valuation Analysis", ""]
 
@@ -715,6 +728,8 @@ class ValuationAnalysisSection(ReportSection):
         dcf = raw_data.get("dcf_valuation", {})
         md.append("### DCF (Discounted Cash Flow) Valuation")
         md.append("")
+        
+        symbol = get_currency_symbol(currency)
 
         if dcf.get("error"):
             md.append(f"⚠️ {dcf['error']}")
@@ -723,8 +738,8 @@ class ValuationAnalysisSection(ReportSection):
             current = dcf.get("current_price")
             discount = dcf.get("discount_premium_pct", 0)
 
-            md.append(f"**Intrinsic Value:** ${intrinsic:.2f}")
-            md.append(f"**Current Price:** ${current:.2f}")
+            md.append(f"**Intrinsic Value:** {symbol}{intrinsic:.2f}")
+            md.append(f"**Current Price:** {symbol}{current:.2f}")
 
             if discount < 0:
                 md.append(
@@ -742,7 +757,7 @@ class ValuationAnalysisSection(ReportSection):
             md.append(f"- FCF Growth Rate: {dcf.get('growth_rate_used', 0):.1f}%")
             md.append(f"- Terminal Growth: {dcf.get('terminal_growth_rate', 0):.1f}%")
             md.append(f"- WACC: {dcf.get('wacc_used', 0):.1f}%")
-            md.append(f"- Current FCF: ${format_number(dcf.get('fcf_current', 0))}")
+            md.append(f"- Current FCF: {symbol}{format_number(dcf.get('fcf_current', 0), currency)}")
 
         md.append("")
 
@@ -750,6 +765,8 @@ class ValuationAnalysisSection(ReportSection):
         ddm = raw_data.get("ddm_valuation", {})
         md.append("### DDM (Dividend Discount Model) Valuation")
         md.append("")
+        
+        symbol = get_currency_symbol(currency)
 
         if ddm.get("error"):
             md.append(f"⚠️ {ddm['error']}")
@@ -758,8 +775,8 @@ class ValuationAnalysisSection(ReportSection):
             current = ddm.get("current_price")
             discount = ddm.get("discount_premium_pct", 0)
 
-            md.append(f"**Intrinsic Value:** ${intrinsic:.2f}")
-            md.append(f"**Current Price:** ${current:.2f}")
+            md.append(f"**Intrinsic Value:** {symbol}{intrinsic:.2f}")
+            md.append(f"**Current Price:** {symbol}{current:.2f}")
 
             if discount < 0:
                 md.append(
@@ -770,8 +787,9 @@ class ValuationAnalysisSection(ReportSection):
 
             md.append("")
             md.append("**Assumptions:**")
-            md.append(f"- Current Dividend: ${ddm.get('current_dividend', 0):.2f}")
-            md.append(f"- Next Dividend Est.: ${ddm.get('next_dividend_estimate', 0):.2f}")
+            symbol = get_currency_symbol(currency)
+            md.append(f"- Current Dividend: {symbol}{ddm.get('current_dividend', 0):.2f}")
+            md.append(f"- Next Dividend Est.: {symbol}{ddm.get('next_dividend_estimate', 0):.2f}")
             md.append(f"- Dividend Growth: {ddm.get('growth_rate_used', 0):.1f}%")
             md.append(f"- Required Return: {ddm.get('required_return_used', 0):.1f}%")
 
@@ -794,8 +812,9 @@ class ValuationAnalysisSection(ReportSection):
             score = div.get("sustainability_score", 0)
             rating = div.get("sustainability_rating", "Unknown")
 
+            symbol = get_currency_symbol(currency)
             md.append(f"**Dividend Yield:** {yield_pct:.2f}%")
-            md.append(f"**Annual Dividend:** ${annual_div:.2f}")
+            md.append(f"**Annual Dividend:** {symbol}{annual_div:.2f}")
             md.append(f"**Payout Ratio:** {payout:.1f}%")
 
             if coverage:
@@ -830,10 +849,11 @@ class ValuationAnalysisSection(ReportSection):
         next_est = earn.get("next_earnings_estimate")
         trend = earn.get("trend")
 
+        symbol = get_currency_symbol(currency)
         if current_eps:
-            md.append(f"**Current EPS (TTM):** ${current_eps:.2f}")
+            md.append(f"**Current EPS (TTM):** {symbol}{current_eps:.2f}")
         if forward_eps:
-            md.append(f"**Forward EPS:** ${forward_eps:.2f}")
+            md.append(f"**Forward EPS:** {symbol}{forward_eps:.2f}")
 
         if growth_1y is not None:
             md.append(f"**EPS Growth (1Y):** {growth_1y:+.1f}%")
@@ -847,7 +867,7 @@ class ValuationAnalysisSection(ReportSection):
             md.append("")
             md.append(f"**Next Earnings:** {next_date}")
             if next_est:
-                md.append(f"**Estimate:** ${next_est:.2f}")
+                md.append(f"**Estimate:** {symbol}{next_est:.2f}")
 
         # Recent surprises
         surprises = earn.get("recent_surprises", [])
@@ -862,7 +882,7 @@ class ValuationAnalysisSection(ReportSection):
                 actual = s.get("eps_actual", 0)
                 estimate = s.get("eps_estimate", 0)
                 surprise = s.get("surprise_pct", 0)
-                md.append(f"| {quarter} | ${actual:.2f} | ${estimate:.2f} | {surprise:+.1f}% |")
+                md.append(f"| {quarter} | {symbol}{actual:.2f} | {symbol}{estimate:.2f} | {surprise:+.1f}% |")
 
         # Surprise statistics
         stats = earn.get("surprise_stats", {})

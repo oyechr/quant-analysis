@@ -1,6 +1,6 @@
 # GJF.OL - Technical Analysis Report
 
-**Generated:** 2026-01-30 15:39:07
+**Generated:** 2026-01-30 16:15:19
 
 ## Technical Analysis
 
@@ -11,71 +11,71 @@
 
 | Metric | Value |
 |--------|-------|
-| Current Price | $275.00 |
-| Period High | $302.00 (2025-12-30) |
-| Period Low | $215.40 (2025-02-21) |
-| Mean Price | $263.93 |
-| Std Deviation | $23.43 (8.9%) |
-| Period Return | +22.85% |
+| Current Price | kr273.80 |
+| Period High | kr302.00 (2025-12-30) |
+| Period Low | kr215.40 (2025-02-21) |
+| Mean Price | kr263.93 |
+| Std Deviation | kr23.43 (8.9%) |
+| Period Return | +22.32% |
 | Daily Volatility | 1.30% |
 | Annual Volatility | 20.6% |
-| Current Volume | 60,019 |
-| Average Volume | 315,728 |
-| Volume vs Avg | -81.0% |
+| Current Volume | 135,201 |
+| Average Volume | 316,028 |
+| Volume vs Avg | -57.2% |
 | Max Volume | 2,084,483 (2025-11-24) |
 
-### Current Price: $275.00
+### Current Price: kr273.80
 *As of 2026-01-30*
 
 ### Trading Signals
 
-**RSI:** Neutral (42.5)
+**RSI:** Neutral (40.7)
 **MACD:** Bearish
 **MA_Trend:** Bullish (Golden Cross)
 **Bollinger_Bands:** Price within bands - normal
 **ADX:** Strong trend (37.2)
-**MFI:** Neutral (35.3)
-**Williams_R:** Neutral (-48.9)
+**MFI:** Neutral (36.2)
+**Williams_R:** Neutral (-55.3)
 
 ### Trend Indicators
 
 | Indicator | Value |
 |-----------|-------|
-| SMA_20 | $280.54 |
-| SMA_50 | $284.34 |
-| SMA_200 | $273.46 |
-| EMA_12 | $276.25 |
-| EMA_26 | $280.47 |
-| MACD | -4.2122 |
-| MACD Signal | -3.6154 |
-| MACD Histogram | -0.5967 |
+| SMA_20 | kr280.48 |
+| SMA_50 | kr284.32 |
+| SMA_200 | kr273.45 |
+| EMA_12 | kr276.07 |
+| EMA_26 | kr280.38 |
+| MACD | -4.3079 |
+| MACD Signal | -3.6346 |
+| MACD Histogram | -0.6733 |
 
 ### Momentum Indicators
 
 | Indicator | Value | Interpretation |
 |-----------|-------|----------------|
-| RSI (14) | 42.48 | Neutral |
-| MFI (14) | 35.31 | Neutral |
-| Stochastic %K | 51.06 | Neutral |
-| Stochastic %D | 40.71 | Neutral |
-| Williams %R (14) | -48.94 | Neutral |
+| RSI (14) | 40.72 | Neutral |
+| MFI (14) | 36.19 | Neutral |
+| Stochastic %K | 44.68 | Neutral |
+| Stochastic %D | 38.58 | Neutral |
+| Williams %R (14) | -55.32 | Neutral |
 
 ### Volatility & Trend Strength
 
 | Indicator | Value | Interpretation |
 |-----------|-------|----------------|
-| Bollinger Upper | $297.80 | Lower half |
-| Bollinger Middle | $280.54 | |
-| Bollinger Lower | $263.28 | |
-| ATR (14) | $5.36 | Normal range |
+| Bollinger Upper | kr297.83 | Lower half |
+| Bollinger Middle | kr280.48 | |
+| Bollinger Lower | kr263.13 | |
+| ATR (14) | kr5.38 | Normal range |
 | ADX (14) | 37.19 | Strong trend |
 
 ### Volume Indicators
 
 | Indicator | Value |
 |-----------|-------|
-| OBV | -349,600 |
-| VWAP | $275.69 |
+| OBV | -274,418 |
+| VWAP | kr275.67 |
 
 ### Recent Price Action (Last 5 Days)
 
@@ -85,4 +85,4 @@
 | 2026-01-27 | 275.40 | 352,787 | 284.52 | 41.90 | -4.46 |
 | 2026-01-28 | 273.80 | 443,424 | 283.32 | 40.39 | -4.44 |
 | 2026-01-29 | 273.20 | 549,771 | 281.88 | 39.80 | -4.42 |
-| 2026-01-30 | 275.00 | 60,019 | 280.54 | 42.48 | -4.21 |
+| 2026-01-30 | 273.80 | 135,201 | 280.48 | 40.72 | -4.31 |

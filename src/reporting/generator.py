@@ -25,6 +25,7 @@ from .sections import (
     ReportSection,
     RiskAnalysisSection,
     TechnicalAnalysisSection,
+    ValuationAnalysisSection,
 )
 
 logger = logging.getLogger(__name__)
@@ -176,7 +177,14 @@ class ReportGenerator:
                 if div_data and div_data.get("dividends") is not None:
                     dividends_df = div_data["dividends"]
                     if not dividends_df.empty:
-                        dividends_series = dividends_df.set_index("Date")["Dividends"]
+                        # Check if Date is already the index or a column
+                        if "Date" in dividends_df.columns:
+                            dividends_series = dividends_df.set_index("Date")["Dividends"]
+                        elif dividends_df.index.name == "Date":
+                            dividends_series = dividends_df["Dividends"]
+                        else:
+                            logger.warning("Dividends DataFrame has unexpected structure")
+                            dividends_series = dividends_df.iloc[:, 0]  # Fallback to first column
 
                 # Create analyzer
                 valuation_analyzer = ValuationAnalyzer(
@@ -236,12 +244,13 @@ class ReportGenerator:
         md.append(f"\n**Period:** {data['period']}")
 
         # Generate markdown for each section using handlers
+        currency = data.get("info", {}).get("currency", "USD")
         for section_name, section in self.sections.items():
             section_data = data.get(section_name)
             if section_data is not None:
                 try:
                     # Each section handler formats its own markdown
-                    md.extend(section.format_for_markdown(section_data))
+                    md.extend(section.format_for_markdown(section_data, currency=currency))
                 except Exception as e:
                     logger.warning(f"Error formatting markdown for {section_name}: {e}")
 
@@ -249,7 +258,7 @@ class ReportGenerator:
         if fundamental_analyzer and data.get("fundamental_analysis"):
             try:
                 fund_section = FundamentalAnalysisSection()
-                md.extend(fund_section.format_for_markdown(fundamental_analyzer))
+                md.extend(fund_section.format_for_markdown(data["fundamental_analysis"], currency=currency))
             except Exception as e:
                 logger.warning(f"Error formatting fundamental analysis markdown: {e}")
 
@@ -257,7 +266,7 @@ class ReportGenerator:
         if technical_analyzer and data.get("technical_analysis"):
             try:
                 tech_section = TechnicalAnalysisSection()
-                md.extend(tech_section.format_for_markdown(technical_analyzer))
+                md.extend(tech_section.format_for_markdown(technical_analyzer, currency=currency))
             except Exception as e:
                 logger.warning(f"Error formatting technical analysis markdown: {e}")
 
@@ -265,9 +274,17 @@ class ReportGenerator:
         if risk_analyzer_tuple and data.get("risk_analysis"):
             try:
                 risk_section = RiskAnalysisSection()
-                md.extend(risk_section.format_for_markdown(risk_analyzer_tuple))
+                md.extend(risk_section.format_for_markdown(risk_analyzer_tuple, currency=currency))
             except Exception as e:
                 logger.warning(f"Error formatting risk analysis markdown: {e}")
+
+        # Add valuation analysis summary if available
+        if valuation_analyzer and data.get("valuation_analysis"):
+            try:
+                val_section = ValuationAnalysisSection()
+                md.extend(val_section.format_for_markdown(data["valuation_analysis"], currency=currency))
+            except Exception as e:
+                logger.warning(f"Error formatting valuation analysis markdown: {e}")
 
         # Write main report
         with open(output_file, "w", encoding="utf-8") as f:

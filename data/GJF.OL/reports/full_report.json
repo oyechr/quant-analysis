@@ -1,21 +1,21 @@
 {
   "ticker": "GJF.OL",
-  "generated_at": "2026-01-30T15:38:58.216639",
+  "generated_at": "2026-01-30T16:15:10.071347",
   "period": "1y",
   "info": {
     "symbol": "GJF.OL",
     "name": "Gjensidige Forsikring ASA",
     "sector": "Financial Services",
     "industry": "Insurance - Property & Casualty",
-    "market_cap": 137485910016,
+    "market_cap": 136885968896,
     "currency": "NOK",
     "exchange": "OSL",
     "website": "https://www.gjensidige.com",
-    "pe_ratio": 21.929825,
-    "forward_pe": 15.942842,
+    "pe_ratio": 21.83413,
+    "forward_pe": 15.873272,
     "peg_ratio": null,
-    "price_to_book": 5.2233706,
-    "price_to_sales": 2.9604936,
+    "price_to_book": 5.2005773,
+    "price_to_sales": 2.947575,
     "profit_margin": 0.14118,
     "operating_margin": 0.17075,
     "roe": 0.23625,
@@ -28,7 +28,7 @@
     "beta": null,
     "52w_high": 303.0,
     "52w_low": 215.8,
-    "avg_volume": 311377
+    "avg_volume": 315350
   },
   "price_data": {
     "shape": [
@@ -42,16 +42,16 @@
     "latest": {
       "date": "2026-01-30 00:00:00+01:00",
       "open": 273.79998779296875,
-      "high": 275.79998779296875,
+      "high": 276.20001220703125,
       "low": 272.6000061035156,
-      "close": 275.0,
-      "volume": 60019
+      "close": 273.79998779296875,
+      "volume": 135201
     },
     "statistics": {
       "high_52w": 303.0,
       "low_52w": 214.8271896701389,
-      "avg_volume": 315728.3107569721,
-      "volatility": 0.012969269751607315
+      "avg_volume": 316027.8406374502,
+      "volatility": 0.012964516387759322
     }
   },
   "fundamentals": {
@@ -160,7 +160,7 @@
         "Holder": "Pacer Advisors, Inc.",
         "pctHeld": 0.0,
         "Shares": 1542,
-        "Value": 424050,
+        "Value": 422199,
         "pctChange": -0.066599995
       }
     ],
@@ -170,7 +170,7 @@
         "Holder": "VANGUARD STAR FUNDS-Vanguard Total International Stock Index Fund",
         "pctHeld": 0.0053,
         "Shares": 2666120,
-        "Value": 733183000,
+        "Value": 729983623,
         "pctChange": 0.0124
       },
       {
@@ -178,7 +178,7 @@
         "Holder": "VANGUARD TAX-MANAGED FUNDS-Vanguard Developed Markets Index Fund",
         "pctHeld": 0.0034,
         "Shares": 1702706,
-        "Value": 468244150,
+        "Value": 466200882,
         "pctChange": 0.0372
       },
       {
@@ -186,7 +186,7 @@
         "Holder": "iShares Trust-iShares Core MSCI EAFE ETF",
         "pctHeld": 0.0028,
         "Shares": 1379213,
-        "Value": 379283575,
+        "Value": 377628502,
         "pctChange": 0.0
       },
       {
@@ -194,7 +194,7 @@
         "Holder": "SEI INSTITUTIONAL INVESTMENTS TRUST-SIIT World Equity EX-US Fund",
         "pctHeld": 0.002,
         "Shares": 976659,
-        "Value": 268581225,
+        "Value": 267409222,
         "pctChange": 0.0
       },
       {
@@ -202,7 +202,7 @@
         "Holder": "Fidelity Concord Street Trust-Fidelity International Index Fund",
         "pctHeld": 0.0014,
         "Shares": 704095,
-        "Value": 193626125,
+        "Value": 192781202,
         "pctChange": -0.0019
       }
     ]
@@ -555,65 +555,65 @@
   "technical_analysis": {
     "statistics": {
       "price": {
-        "current": 275.0,
+        "current": 273.79998779296875,
         "high": 302.0,
         "high_date": "2025-12-30",
         "low": 215.40261840820312,
         "low_date": "2025-02-21",
-        "mean": 263.9314749668319,
-        "std_dev": 23.428441957931046,
-        "std_dev_pct": 8.87671391253176
+        "mean": 263.92669404170425,
+        "std_dev": 23.42629656653883,
+        "std_dev_pct": 8.876061836639055
       },
       "returns": {
-        "period_return_pct": 22.85437369450527,
-        "daily_volatility_pct": 1.2969269751607317,
-        "annual_volatility_pct": 20.588077469319238
+        "period_return_pct": 22.318276428612233,
+        "daily_volatility_pct": 1.296451638775932,
+        "annual_volatility_pct": 20.580531738139555
       },
       "volume": {
-        "current": 60019.0,
-        "average": 315728.3107569721,
+        "current": 135201.0,
+        "average": 316027.8406374502,
         "max": 2084483.0,
         "max_date": "2025-11-24",
-        "min": 60019.0,
-        "volume_vs_avg_pct": -80.99030148544428
+        "min": 108727.0,
+        "volume_vs_avg_pct": -57.218642595763036
       }
     },
     "latest_values": {
       "date": "2026-01-30",
-      "close_price": 275.0,
+      "close_price": 273.79998779296875,
       "indicators": {
         "Dividends": 0.0,
         "Stock Splits": 0.0,
-        "SMA_20": 280.5399993896484,
-        "SMA_50": 284.3399987792969,
-        "SMA_200": 273.46000030517575,
-        "EMA_12": 276.25494656777937,
-        "EMA_26": 280.4671129608633,
-        "MACD": -4.212166393083919,
-        "MACD_signal": -3.615444921107194,
-        "MACD_diff": -0.5967214719767249,
-        "RSI_14": 42.48401950569877,
-        "Stoch_K": 51.063812518363285,
-        "Stoch_D": 40.707878607060515,
-        "Williams_R_14": -48.936187481636715,
-        "BB_upper": 297.8036506937028,
-        "BB_middle": 280.5399993896484,
-        "BB_lower": 263.276348085594,
-        "ATR_14": 5.356336919602168,
+        "SMA_20": 280.47999877929686,
+        "SMA_50": 284.31599853515627,
+        "SMA_200": 273.4540002441406,
+        "EMA_12": 276.0703293051592,
+        "EMA_26": 280.37822316774987,
+        "MACD": -4.307893862590674,
+        "MACD_signal": -3.6345904150085455,
+        "MACD_diff": -0.6733034475821289,
+        "RSI_14": 40.72398433489959,
+        "Stoch_K": 44.680775080798455,
+        "Stoch_D": 38.580199461205574,
+        "Williams_R_14": -55.319224919201545,
+        "BB_upper": 297.8283845449012,
+        "BB_middle": 280.47999877929686,
+        "BB_lower": 263.1316130136925,
+        "ATR_14": 5.384910092035204,
         "ADX_14": 37.18798576317228,
-        "OBV": -349600.0,
-        "VWAP": 275.6936537834821,
-        "MFI_14": 35.31134688233199
+        "OBV": -274418.0,
+        "VWAP": 275.67024134730895,
+        "MFI_14": 36.19341137534754
       }
     },
     "signals": {
-      "RSI": "Neutral (42.5)",
+      "RSI": "Neutral (40.7)",
       "MACD": "Bearish",
       "MA_Trend": "Bullish (Golden Cross)",
       "Bollinger_Bands": "Price within bands - normal",
       "ADX": "Strong trend (37.2)",
-      "MFI": "Neutral (35.3)",
-      "Williams_R": "Neutral (-48.9)"
+      "MFI": "Neutral (36.2)",
+      "Williams_R": "Neutral (-55.3)"
     },
     "data_points": 251,
     "date_range": {
@@ -646,7 +646,7 @@
       },
       "fcf_metrics": {
         "fcf": 3812000000.0,
-        "fcf_yield": 2.772647756818409,
+        "fcf_yield": 2.7847996626273592,
         "fcf_margin": 9.443988871354142
       },
       "margins": {
@@ -677,30 +677,30 @@
   },
   "risk_analysis": {
     "returns": {
-      "daily_mean": 0.0009070359067771911,
-      "daily_std": 0.012969269751607317,
+      "daily_mean": 0.0008894661827155112,
+      "daily_std": 0.01296451638775932,
       "daily_min": -0.051318580125661484,
       "daily_max": 0.07786257212398606,
-      "cumulative_return": 0.22854373694505448,
-      "annualized_return": 0.23056836788772528,
+      "cumulative_return": 0.22318276428612416,
+      "annualized_return": 0.22515569654065537,
       "total_trading_days": 250,
       "positive_days": 121,
       "negative_days": 121,
       "win_rate": 0.484
     },
     "volatility": {
-      "daily_volatility": 0.012969269751607317,
-      "annualized_volatility": 0.20588077469319238,
+      "daily_volatility": 0.01296451638775932,
+      "annualized_volatility": 0.20580531738139557,
       "downside_deviation": 0.1408461435917542
     },
-    "sharpe_ratio": 1.108277975489626,
-    "sortino_ratio": 1.6304791909706955,
+    "sharpe_ratio": 1.0871709271292616,
+    "sortino_ratio": 1.598840664710888,
     "information_ratio": 0.0,
-    "calmar_ratio": 1.902503701916174,
+    "calmar_ratio": 1.8578417763910278,
     "drawdown": {
       "max_drawdown": -0.12119207319044908,
       "max_drawdown_date": "2026-01-23",
-      "current_drawdown": -0.08940397350993377,
+      "current_drawdown": -0.0933775238643419,
       "days_since_peak": 21,
       "recovery_days": null,
       "is_recovered": false
@@ -710,75 +710,75 @@
       "confidence_level": 0.95,
       "var_historical": -0.01605327144039206,
       "cvar_historical": -0.029332815145589795,
-      "var_parametric": -0.019854739265658543,
+      "var_parametric": -0.020017484850104666,
       "worst_day": -0.051318580125661484
     },
     "var_99": {
       "confidence_level": 0.99,
       "var_historical": -0.03577061523160884,
       "cvar_historical": -0.044354330984609315,
-      "var_parametric": -0.02963861668574615,
+      "var_parametric": -0.029124391541234577,
       "worst_day": -0.051318580125661484
     },
     "rolling_ratios": {
       "sharpe_30d": {
-        "current": -2.0813438082991267,
-        "mean": 1.4653474428636852,
+        "current": -2.2563809338199015,
+        "mean": 1.4645554196712833,
         "min": -2.639230042663098,
         "max": 6.547828724708094,
-        "std": 2.0235850845261503
+        "std": 2.025013305674524
       },
       "sortino_30d": {
-        "current": -2.372536931331678,
-        "mean": 3.2597836648277583,
+        "current": -2.5597419492355065,
+        "mean": 3.258936583298782,
         "min": -3.5345189592983353,
         "max": 14.597134698383158,
-        "std": 4.4991692995097905
+        "std": 4.500252038063189
       },
       "sharpe_60d": {
-        "current": 0.2808125826107424,
-        "mean": 1.400565139561032,
+        "current": 0.18917370317353685,
+        "mean": 1.4000853548519365,
         "min": -0.8468158345583932,
         "max": 3.826732278462624,
-        "std": 1.1985696758632756
+        "std": 1.1990385191065485
       },
       "sortino_60d": {
-        "current": 0.32494009506220595,
-        "mean": 2.7958037979377286,
+        "current": 0.21847099974884115,
+        "mean": 2.7952463681193347,
         "min": -1.1984306561539202,
         "max": 8.751068368291484,
-        "std": 2.5341087174211316
+        "std": 2.534666744408778
       },
       "sharpe_90d": {
-        "current": 0.10463412618973764,
-        "mean": 1.3954457442724053,
+        "current": 0.047289288133209664,
+        "mean": 1.3950895651540418,
         "min": -0.7442855932347737,
         "max": 3.40970238022292,
-        "std": 0.9476038330465231
+        "std": 0.9481026931342036
       },
       "sortino_90d": {
-        "current": 0.12905456302776203,
-        "mean": 2.5914057700433766,
+        "current": 0.05825768274356028,
+        "mean": 2.590966037867698,
         "min": -0.9048866245438862,
         "max": 7.025886936913044,
-        "std": 1.813173112805988
+        "std": 1.8137824989408224
       }
     }
   },
   "valuation_analysis": {
     "ticker": "GJF.OL",
     "dcf_valuation": {
-      "intrinsic_value_per_share": 452.20843353547224,
-      "current_price": 275.0,
+      "intrinsic_value_per_share": 452.20842197531255,
+      "current_price": 273.79998779296875,
       "currency": "NOK",
-      "discount_premium_pct": -39.18733495304696,
+      "discount_premium_pct": -39.45270046122309,
       "fcf_current": 3812000000.0,
       "growth_rate_used": 49.86835294586571,
       "terminal_growth_rate": 2.5,
       "wacc_used": 12.0,
       "enterprise_value": 226081047278.30637,
       "equity_value": 226081047278.30637,
-      "shares_outstanding": 499948763.69454545,
+      "shares_outstanding": 499948776.47512907,
       "projection_years": 5,
       "assumptions": {
         "growth_rate_source": "historical_fcf",
@@ -795,9 +795,9 @@
     },
     "ddm_valuation": {
       "intrinsic_value_per_share": 46.747835332361895,
-      "current_price": 275.0,
+      "current_price": 273.79998779296875,
       "currency": "NOK",
-      "discount_premium_pct": 488.26253246773786,
+      "discount_premium_pct": 485.69554257719096,
       "current_dividend": 10.0,
       "next_dividend_estimate": 9.22635643555325,
       "growth_rate_used": -7.73643564446751,

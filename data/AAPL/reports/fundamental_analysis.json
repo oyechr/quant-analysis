@@ -1,0 +1,64 @@
+{
+  "ticker": "AAPL",
+  "company_name": "Apple Inc.",
+  "sector": "Technology",
+  "industry": "Consumer Electronics",
+  "analysis": {
+    "growth_rates": {
+      "revenue": {
+        "1y": 6.425511782832739,
+        "3y_cagr": 1.8125357434793932,
+        "5y_cagr": null
+      },
+      "earnings": {
+        "1y": 19.495177946573357,
+        "3y_cagr": 3.9212592033254,
+        "5y_cagr": null
+      },
+      "fcf": {
+        "1y": -9.227347505215656,
+        "3y_cagr": -3.9450634871626145,
+        "current": 98767000000.0
+      }
+    },
+    "fcf_metrics": {
+      "fcf": 98767000000.0,
+      "fcf_yield": 2.5880879220590356,
+      "fcf_margin": 23.732882225869314
+    },
+    "margins": {
+      "current": {
+        "gross_margin": 46.90516410716045,
+        "operating_margin": 31.970799762591884,
+        "ebitda_margin": 34.78173110887373,
+        "net_margin": 26.91506412181824
+      },
+      "trend": {
+        "current": 26.91506412181824,
+        "1y_ago": 23.971255769943866,
+        "2y_ago": 25.30623426432028
+      }
+    },
+    "efficiency": {
+      "asset_turnover": 1.1584451663368045,
+      "inventory_turnover": 33.98338972623808,
+      "days_inventory_outstanding": 10.740541274438813,
+      "receivables_turnover": 11.372538838864825,
+      "days_sales_outstanding": 32.09485631762708,
+      "payables_turnover": 3.1834029678720643,
+      "days_payable_outstanding": 114.65717776973209,
+      "cash_conversion_cycle": -71.8217801776662
+    },
+    "dupont": {
+      "net_margin": 26.91506412181824,
+      "asset_turnover": 1.1584451663368045,
+      "equity_multiplier": 4.8721874872852045,
+      "roe_calculated": 151.91298333175104,
+      "roe_reported": 171.42199
+    },
+    "quality_scores": {
+      "altman_z": 8.639817314037094,
+      "piotroski_f": 7
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # GJF.OL - Valuation Analysis Report
 
-**Generated:** 2026-01-30 15:39:07
+**Generated:** 2026-01-30 16:15:19
 
 ## Valuation Analysis
 
@@ -9,8 +9,8 @@
 | Metric | Value |
 |--------|-------|
 | Intrinsic Value per Share | kr452.21 |
-| Current Price | kr275.00 |
-| Discount | 39.2% |
+| Current Price | kr273.80 |
+| Discount | 39.5% |
 
 **Assumptions:**
 
@@ -24,8 +24,8 @@
 | Metric | Value |
 |--------|-------|
 | Intrinsic Value per Share | kr46.75 |
-| Current Price | kr275.00 |
-| Premium | 488.3% |
+| Current Price | kr273.80 |
+| Premium | 485.7% |
 
 **Assumptions:**
 

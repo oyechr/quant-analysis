@@ -1,17 +1,17 @@
 {
   "ticker": "GJF.OL",
   "dcf_valuation": {
-    "intrinsic_value_per_share": 452.20843353547224,
-    "current_price": 275.0,
+    "intrinsic_value_per_share": 452.20842197531255,
+    "current_price": 273.79998779296875,
     "currency": "NOK",
-    "discount_premium_pct": -39.18733495304696,
+    "discount_premium_pct": -39.45270046122309,
     "fcf_current": 3812000000.0,
     "growth_rate_used": 49.86835294586571,
     "terminal_growth_rate": 2.5,
     "wacc_used": 12.0,
     "enterprise_value": 226081047278.30637,
     "equity_value": 226081047278.30637,
-    "shares_outstanding": 499948763.69454545,
+    "shares_outstanding": 499948776.47512907,
     "projection_years": 5,
     "assumptions": {
       "growth_rate_source": "historical_fcf",
@@ -28,9 +28,9 @@
   },
   "ddm_valuation": {
     "intrinsic_value_per_share": 46.747835332361895,
-    "current_price": 275.0,
+    "current_price": 273.79998779296875,
     "currency": "NOK",
-    "discount_premium_pct": 488.26253246773786,
+    "discount_premium_pct": 485.69554257719096,
     "current_dividend": 10.0,
     "next_dividend_estimate": 9.22635643555325,
     "growth_rate_used": -7.73643564446751,

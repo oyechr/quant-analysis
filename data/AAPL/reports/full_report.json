@@ -1,0 +1,1608 @@
+{
+  "ticker": "AAPL",
+  "generated_at": "2026-01-30T16:14:46.481207",
+  "period": "1y",
+  "info": {
+    "symbol": "AAPL",
+    "name": "Apple Inc.",
+    "sector": "Technology",
+    "industry": "Consumer Electronics",
+    "market_cap": 3816067170304,
+    "currency": "USD",
+    "exchange": "NMS",
+    "website": "https://www.apple.com",
+    "pe_ratio": 32.690506,
+    "forward_pe": 28.02696,
+    "peg_ratio": null,
+    "price_to_book": 51.744137,
+    "price_to_sales": 9.169689,
+    "profit_margin": 0.26915002,
+    "operating_margin": 0.31647,
+    "roe": 1.7142199,
+    "roa": 0.22964,
+    "debt_to_equity": 152.411,
+    "current_ratio": 0.893,
+    "quick_ratio": 0.771,
+    "dividend_yield": 0.4,
+    "payout_ratio": 0.1304,
+    "beta": 1.093,
+    "52w_high": 288.62,
+    "52w_low": 169.21,
+    "avg_volume": 46478962
+  },
+  "price_data": {
+    "shape": [
+      252,
+      7
+    ],
+    "date_range": {
+      "start": "2025-01-30 00:00:00-05:00",
+      "end": "2026-01-30 00:00:00-05:00"
+    },
+    "latest": {
+      "date": "2026-01-30 00:00:00-05:00",
+      "open": 255.1649932861328,
+      "high": 258.29998779296875,
+      "low": 252.17999267578125,
+      "close": 258.2550048828125,
+      "volume": 21584652
+    },
+    "statistics": {
+      "high_52w": 288.6199951171875,
+      "low_52w": 168.63337548243626,
+      "avg_volume": 53448069.65079365,
+      "volatility": 0.020044016257779598
+    }
+  },
+  "fundamentals": {
+    "income_stmt_quarterly": {
+      "shape": [
+        33,
+        5
+      ],
+      "has_data": true
+    },
+    "income_stmt_annual": {
+      "shape": [
+        39,
+        5
+      ],
+      "has_data": true
+    },
+    "balance_sheet_quarterly": {
+      "shape": [
+        65,
+        5
+      ],
+      "has_data": true
+    },
+    "balance_sheet_annual": {
+      "shape": [
+        69,
+        5
+      ],
+      "has_data": true
+    },
+    "cash_flow_quarterly": {
+      "shape": [
+        46,
+        6
+      ],
+      "has_data": true
+    },
+    "cash_flow_annual": {
+      "shape": [
+        53,
+        5
+      ],
+      "has_data": true
+    }
+  },
+  "earnings": {
+    "history_count": 4,
+    "dates_count": 25,
+    "latest_earnings": [
+      {
+        "quarter": "2025-03-31 00:00:00",
+        "epsActual": 1.65,
+        "epsEstimate": 1.62253,
+        "epsDifference": 0.03,
+        "surprisePercent": 0.016900001
+      },
+      {
+        "quarter": "2025-06-30 00:00:00",
+        "epsActual": 1.57,
+        "epsEstimate": 1.42572,
+        "epsDifference": 0.14,
+        "surprisePercent": 0.1012
+      },
+      {
+        "quarter": "2025-09-30 00:00:00",
+        "epsActual": 1.85,
+        "epsEstimate": 1.76993,
+        "epsDifference": 0.08,
+        "surprisePercent": 0.0452
+      }
+    ],
+    "upcoming_dates": [
+      {
+        "Earnings Date": "2026-04-30 17:00:00-04:00",
+        "EPS Estimate": 1.94,
+        "Reported EPS": null,
+        "Surprise(%)": null
+      },
+      {
+        "Earnings Date": "2026-01-29 16:00:00-05:00",
+        "EPS Estimate": 2.67,
+        "Reported EPS": 2.84,
+        "Surprise(%)": 6.25
+      },
+      {
+        "Earnings Date": "2025-10-30 16:00:00-04:00",
+        "EPS Estimate": 1.77,
+        "Reported EPS": 1.85,
+        "Surprise(%)": 4.52
+      }
+    ]
+  },
+  "holders": {
+    "institutional_count": 10,
+    "mutualfund_count": 10,
+    "top_institutional": [
+      {
+        "Date Reported": "2025-12-31 00:00:00",
+        "Holder": "Vanguard Group Inc",
+        "pctHeld": 0.096999995,
+        "Shares": 1426283914,
+        "Value": 368402022718,
+        "pctChange": 0.019199999
+      },
+      {
+        "Date Reported": "2025-09-30 00:00:00",
+        "Holder": "Blackrock Inc.",
+        "pctHeld": 0.078,
+        "Shares": 1146332274,
+        "Value": 296091910105,
+        "pctChange": -0.0022
+      },
+      {
+        "Date Reported": "2025-09-30 00:00:00",
+        "Holder": "State Street Corporation",
+        "pctHeld": 0.040700004,
+        "Shares": 597501113,
+        "Value": 154331558005,
+        "pctChange": -0.0062
+      },
+      {
+        "Date Reported": "2025-09-30 00:00:00",
+        "Holder": "JPMORGAN CHASE & CO",
+        "pctHeld": 0.0322,
+        "Shares": 473311062,
+        "Value": 122253887114,
+        "pctChange": 1.2055
+      },
+      {
+        "Date Reported": "2025-09-30 00:00:00",
+        "Holder": "Geode Capital Management, LLC",
+        "pctHeld": 0.0242,
+        "Shares": 356166414,
+        "Value": 91996008686,
+        "pctChange": 0.004
+      }
+    ],
+    "top_mutualfund": [
+      {
+        "Date Reported": "2025-09-30 00:00:00",
+        "Holder": "VANGUARD INDEX FUNDS-Vanguard Total Stock Market Index Fund",
+        "pctHeld": 0.0318,
+        "Shares": 467135722,
+        "Value": 120658827586,
+        "pctChange": -0.0274
+      },
+      {
+        "Date Reported": "2025-09-30 00:00:00",
+        "Holder": "VANGUARD INDEX FUNDS-Vanguard 500 Index Fund",
+        "pctHeld": 0.0249,
+        "Shares": 366145920,
+        "Value": 94573665322,
+        "pctChange": -0.1363
+      },
+      {
+        "Date Reported": "2025-12-31 00:00:00",
+        "Holder": "iShares Trust-iShares Core S&P 500 ETF",
+        "pctHeld": 0.013099999,
+        "Shares": 192114628,
+        "Value": 49622250418,
+        "pctChange": 0.0348
+      },
+      {
+        "Date Reported": "2025-11-30 00:00:00",
+        "Holder": "Fidelity Concord Street Trust-Fidelity 500 Index Fund",
+        "pctHeld": 0.0128,
+        "Shares": 187420248,
+        "Value": 48409715473,
+        "pctChange": 0.0007
+      },
+      {
+        "Date Reported": "2025-12-31 00:00:00",
+        "Holder": "SPDR S&P 500 ETF TRUST",
+        "pctHeld": 0.012200001,
+        "Shares": 179978594,
+        "Value": 46487573353,
+        "pctChange": 0.013200001
+      }
+    ]
+  },
+  "dividends": {
+    "dividend_count": 89,
+    "split_count": 5,
+    "recent_dividends": [
+      {
+        "Date": "2023-08-11 00:00:00-04:00",
+        "Dividends": 0.24
+      },
+      {
+        "Date": "2023-11-10 00:00:00-05:00",
+        "Dividends": 0.24
+      },
+      {
+        "Date": "2024-02-09 00:00:00-05:00",
+        "Dividends": 0.24
+      },
+      {
+        "Date": "2024-05-10 00:00:00-04:00",
+        "Dividends": 0.25
+      },
+      {
+        "Date": "2024-08-12 00:00:00-04:00",
+        "Dividends": 0.25
+      },
+      {
+        "Date": "2024-11-08 00:00:00-05:00",
+        "Dividends": 0.25
+      },
+      {
+        "Date": "2025-02-10 00:00:00-05:00",
+        "Dividends": 0.25
+      },
+      {
+        "Date": "2025-05-12 00:00:00-04:00",
+        "Dividends": 0.26
+      },
+      {
+        "Date": "2025-08-11 00:00:00-04:00",
+        "Dividends": 0.26
+      },
+      {
+        "Date": "2025-11-10 00:00:00-05:00",
+        "Dividends": 0.26
+      }
+    ],
+    "recent_splits": [
+      {
+        "Date": "1987-06-16 00:00:00-04:00",
+        "Stock Splits": 2.0
+      },
+      {
+        "Date": "2000-06-21 00:00:00-04:00",
+        "Stock Splits": 2.0
+      },
+      {
+        "Date": "2005-02-28 00:00:00-05:00",
+        "Stock Splits": 2.0
+      },
+      {
+        "Date": "2014-06-09 00:00:00-04:00",
+        "Stock Splits": 7.0
+      },
+      {
+        "Date": "2020-08-31 00:00:00-04:00",
+        "Stock Splits": 4.0
+      }
+    ]
+  },
+  "analyst_ratings": {
+    "recommendation_count": 4,
+    "upgrade_downgrade_count": 974,
+    "recent_recommendations": [
+      {
+        "period": "0m",
+        "strongBuy": 5,
+        "buy": 22,
+        "hold": 17,
+        "sell": 1,
+        "strongSell": 2
+      },
+      {
+        "period": "-1m",
+        "strongBuy": 5,
+        "buy": 24,
+        "hold": 15,
+        "sell": 1,
+        "strongSell": 3
+      },
+      {
+        "period": "-2m",
+        "strongBuy": 5,
+        "buy": 24,
+        "hold": 15,
+        "sell": 1,
+        "strongSell": 3
+      },
+      {
+        "period": "-3m",
+        "strongBuy": 5,
+        "buy": 24,
+        "hold": 15,
+        "sell": 1,
+        "strongSell": 3
+      }
+    ],
+    "recent_changes": [
+      {
+        "Firm": "DA Davidson",
+        "ToGrade": "Neutral",
+        "FromGrade": "Neutral",
+        "Action": "main",
+        "priceTargetAction": "Maintains",
+        "currentPriceTarget": 270.0,
+        "priorPriceTarget": 270.0
+      },
+      {
+        "Firm": "Wedbush",
+        "ToGrade": "Outperform",
+        "FromGrade": "Outperform",
+        "Action": "reit",
+        "priceTargetAction": "Maintains",
+        "currentPriceTarget": 350.0,
+        "priorPriceTarget": 350.0
+      },
+      {
+        "Firm": "Needham",
+        "ToGrade": "Hold",
+        "FromGrade": "Hold",
+        "Action": "reit",
+        "priceTargetAction": "",
+        "currentPriceTarget": 0.0,
+        "priorPriceTarget": 0.0
+      },
+      {
+        "Firm": "Rosenblatt",
+        "ToGrade": "Neutral",
+        "FromGrade": "Neutral",
+        "Action": "main",
+        "priceTargetAction": "Raises",
+        "currentPriceTarget": 267.0,
+        "priorPriceTarget": 250.0
+      },
+      {
+        "Firm": "JP Morgan",
+        "ToGrade": "Overweight",
+        "FromGrade": "Overweight",
+        "Action": "main",
+        "priceTargetAction": "Raises",
+        "currentPriceTarget": 315.0,
+        "priorPriceTarget": 305.0
+      },
+      {
+        "Firm": "Jefferies",
+        "ToGrade": "Hold",
+        "FromGrade": "Hold",
+        "Action": "main",
+        "priceTargetAction": "Lowers",
+        "currentPriceTarget": 276.47,
+        "priorPriceTarget": 283.36
+      },
+      {
+        "Firm": "Citigroup",
+        "ToGrade": "Buy",
+        "FromGrade": "Buy",
+        "Action": "main",
+        "priceTargetAction": "Lowers",
+        "currentPriceTarget": 315.0,
+        "priorPriceTarget": 330.0
+      },
+      {
+        "Firm": "Evercore ISI Group",
+        "ToGrade": "Outperform",
+        "FromGrade": "Outperform",
+        "Action": "reit",
+        "priceTargetAction": "Maintains",
+        "currentPriceTarget": 330.0,
+        "priorPriceTarget": 330.0
+      },
+      {
+        "Firm": "Wedbush",
+        "ToGrade": "Outperform",
+        "FromGrade": "Outperform",
+        "Action": "reit",
+        "priceTargetAction": "Maintains",
+        "currentPriceTarget": 350.0,
+        "priorPriceTarget": 350.0
+      },
+      {
+        "Firm": "Wedbush",
+        "ToGrade": "Outperform",
+        "FromGrade": "Outperform",
+        "Action": "reit",
+        "priceTargetAction": "Maintains",
+        "currentPriceTarget": 350.0,
+        "priorPriceTarget": 350.0
+      }
+    ]
+  },
+  "news": {
+    "article_count": 10,
+    "recent_articles": [
+      {
+        "id": "28fe7fd5-dcec-4fd7-a2c4-fadabc5800f4",
+        "content": {
+          "id": "28fe7fd5-dcec-4fd7-a2c4-fadabc5800f4",
+          "contentType": "VIDEO",
+          "title": "Apple's Q1 earnings beat: Key takeaways",
+          "description": "<p>Apple (<a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/quote/AAPL/\" data-i13n=\"cpos:1;pos:1\">AAPL</a>) reported fiscal first quarter results that handily <a target=\"_blank\" class=\"link\" href=\"https://finance.yahoo.com/news/apple-tops-q1-earnings-estimates-on-record-breaking-iphone-sales-stock-falls-after-cooks-memory-warning-213019588.html\" data-i13n=\"cpos:2;pos:1\">topped Wall Street estimates</a> on both the top and bottom lines. Yahoo Finance Tech Editor <a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://www.yahoo.com/author/daniel-howley/\" data-i13n=\"slk:Dan Howley;cpos:3;pos:1\">Dan Howley</a> and Freedom Capital Markets managing director Paul Meeks share their key takeaways from the report and conference call.</p><p>To watch more expert insights and analysis on the latest market action, check out more\u00a0<a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/videos/series/morning-brief/\" data-i13n=\"slk:Morning Brief;cpos:4;pos:1\">Morning Brief</a>.</p>",
+          "summary": "Apple (AAPL) reported fiscal first quarter results that handily topped Wall Street estimates on both the top and bottom lines. Yahoo Finance Tech Editor Dan Howley and Freedom Capital Markets managing director Paul Meeks share their key takeaways from the report and conference call.To watch more expert insights and analysis on the latest market action, check out more&nbsp;Morning Brief.",
+          "pubDate": "2026-01-30T15:05:31Z",
+          "displayTime": "",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2025-09/39e73380-8f59-11f0-a371-e8e268c53564",
+            "originalWidth": 3696,
+            "originalHeight": 1908,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/TKo.tSNfubpM5O6Eu5be_w--~B/aD0xOTA4O3c9MzY5NjthcHBpZD15dGFjaHlvbg--/https://media-mbst-pub-ue1.s3.amazonaws.com/creatr-uploaded-images/2025-09/39e73380-8f59-11f0-a371-e8e268c53564",
+                "width": 3696,
+                "height": 1908,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/J6Clk6T1WD7a6Xf_a95nhA--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://media-mbst-pub-ue1.s3.amazonaws.com/creatr-uploaded-images/2025-09/39e73380-8f59-11f0-a371-e8e268c53564",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Yahoo Finance Video",
+            "url": "https://finance.yahoo.com/"
+          },
+          "canonicalUrl": {
+            "url": "https://finance.yahoo.com/video/apples-q1-earnings-beat-key-takeaways-150531209.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/video/apples-q1-earnings-beat-key-takeaways-150531209.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": true
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": {
+            "storylineItems": [
+              {
+                "content": {
+                  "id": "9b3fc530-6fa3-44b8-9ecb-fcf2f7210d2f",
+                  "contentType": "VIDEO",
+                  "isHosted": true,
+                  "title": "Apple had 'phenomenal' Q1, but what are its plans for AI?",
+                  "thumbnail": {
+                    "originalUrl": "https://s.yimg.com/uu/api/res/1.2/egyABjPYHIMFC.PH6lM_pA--~B/aD0xODkwO3c9MzMzMzthcHBpZD15dGFjaHlvbg--/https://d29szjachogqwa.cloudfront.net/images/2026-01/a0f49cd9-9c3f-47fc-857e-498994481c6d",
+                    "originalWidth": 3333,
+                    "originalHeight": 1890,
+                    "caption": "",
+                    "resolutions": null
+                  },
+                  "provider": {
+                    "displayName": "Yahoo Finance Video",
+                    "sourceId": "video.yahoofinance.com"
+                  },
+                  "previewUrl": null,
+                  "providerContentUrl": "",
+                  "canonicalUrl": {
+                    "url": "https://finance.yahoo.com/video/apple-had-phenomenal-q1-but-what-are-its-plans-for-ai-150256414.html"
+                  },
+                  "clickThroughUrl": {
+                    "url": "https://finance.yahoo.com/video/apple-had-phenomenal-q1-but-what-are-its-plans-for-ai-150256414.html"
+                  }
+                }
+              },
+              {
+                "content": {
+                  "id": "3be62e3f-ec9e-45df-932d-e400e0240278",
+                  "contentType": "STORY",
+                  "isHosted": true,
+                  "title": "Apple tops Q1 earnings estimates on record-breaking iPhone sales; stock falls after Cook's memory warning",
+                  "thumbnail": {
+                    "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2025-10/65f84570-a88d-11f0-bf77-bc6212c6079c",
+                    "originalWidth": 3203,
+                    "originalHeight": 2135,
+                    "caption": "",
+                    "resolutions": null
+                  },
+                  "provider": {
+                    "displayName": "Yahoo Finance",
+                    "sourceId": "yahoofinance.com"
+                  },
+                  "previewUrl": null,
+                  "providerContentUrl": "",
+                  "canonicalUrl": {
+                    "url": "https://finance.yahoo.com/news/apple-tops-q1-earnings-estimates-on-record-breaking-iphone-sales-stock-falls-after-cooks-memory-warning-213019588.html"
+                  },
+                  "clickThroughUrl": {
+                    "url": "https://finance.yahoo.com/news/apple-tops-q1-earnings-estimates-on-record-breaking-iphone-sales-stock-falls-after-cooks-memory-warning-213019588.html"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "6c43ccc6-279d-4b8d-ba30-3a14ba9fa532",
+        "content": {
+          "id": "6c43ccc6-279d-4b8d-ba30-3a14ba9fa532",
+          "contentType": "STORY",
+          "title": "Stock market today: Dow, S&P 500, Nasdaq fall as Wall Street digests Warsh as Trump's Fed pick",
+          "description": "",
+          "summary": "Major gauges are set to end the week higher with earnings and the Fed holding investor attention.",
+          "pubDate": "2026-01-30T14:37:45Z",
+          "displayTime": "2026-01-30T14:38:08Z",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2026-01/afb29610-fd6b-11f0-b77b-4c39dc5f50ec",
+            "originalWidth": 6813,
+            "originalHeight": 4542,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/TqDG8WdPizk6OXCzxomvhQ--~B/aD00NTQyO3c9NjgxMzthcHBpZD15dGFjaHlvbg--/https://s.yimg.com/os/creatr-uploaded-images/2026-01/afb29610-fd6b-11f0-b77b-4c39dc5f50ec",
+                "width": 6813,
+                "height": 4542,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/n6BnHLdrdCt8WP4egifn8w--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://s.yimg.com/os/creatr-uploaded-images/2026-01/afb29610-fd6b-11f0-b77b-4c39dc5f50ec",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Yahoo Finance",
+            "url": "http://finance.yahoo.com/"
+          },
+          "canonicalUrl": {
+            "url": "https://finance.yahoo.com/news/live/stock-market-today-dow-sp-500-nasdaq-fall-as-wall-street-digests-warsh-as-trumps-fed-pick-234128307.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/news/live/stock-market-today-dow-sp-500-nasdaq-fall-as-wall-street-digests-warsh-as-trumps-fed-pick-234128307.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": true
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": {
+            "storylineItems": [
+              {
+                "content": {
+                  "id": "b526f500-6514-4b64-a959-2e5a8d4cc23f",
+                  "contentType": "VIDEO",
+                  "isHosted": true,
+                  "title": "Trump's Fed nominee, Apple earnings, gold prices sink: 3 Things",
+                  "thumbnail": {
+                    "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2022-12/13a353f0-8c1b-11ed-9fae-a7eb55090ed0",
+                    "originalWidth": 5000,
+                    "originalHeight": 3750,
+                    "caption": "",
+                    "resolutions": null
+                  },
+                  "provider": {
+                    "displayName": "Yahoo Finance Video",
+                    "sourceId": "video.yahoofinance.com"
+                  },
+                  "previewUrl": null,
+                  "providerContentUrl": "",
+                  "canonicalUrl": {
+                    "url": "https://finance.yahoo.com/video/trumps-fed-nominee-apple-earnings-gold-prices-sink-3-things-140627109.html"
+                  },
+                  "clickThroughUrl": {
+                    "url": "https://finance.yahoo.com/video/trumps-fed-nominee-apple-earnings-gold-prices-sink-3-things-140627109.html"
+                  }
+                }
+              },
+              {
+                "content": {
+                  "id": "19cd1080-a43d-4393-8ed1-77d2b30d3322",
+                  "contentType": "STORY",
+                  "isHosted": true,
+                  "title": "Earnings live: Sandisk stock soars on profit beat, Verizon stock climbs, Exxon and Chevron beat estimates",
+                  "thumbnail": {
+                    "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2026-01/46e1c900-fddc-11f0-bbff-eec6f62f6ec6",
+                    "originalWidth": 5029,
+                    "originalHeight": 3353,
+                    "caption": "",
+                    "resolutions": null
+                  },
+                  "provider": {
+                    "displayName": "Yahoo Finance",
+                    "sourceId": "yahoofinance.com"
+                  },
+                  "previewUrl": null,
+                  "providerContentUrl": "",
+                  "canonicalUrl": {
+                    "url": "https://finance.yahoo.com/news/live/earnings-live-sandisk-stock-soars-on-profit-beat-verizon-stock-climbs-exxon-and-chevron-beat-estimates-130559723.html"
+                  },
+                  "clickThroughUrl": {
+                    "url": "https://finance.yahoo.com/news/live/earnings-live-sandisk-stock-soars-on-profit-beat-verizon-stock-climbs-exxon-and-chevron-beat-estimates-130559723.html"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "3570d1b0-269b-4ed9-8bb4-398776d74231",
+        "content": {
+          "id": "3570d1b0-269b-4ed9-8bb4-398776d74231",
+          "contentType": "STORY",
+          "title": "Big Tech thinks smart glasses will be the first major piece of AI hardware",
+          "description": "",
+          "summary": "Just because AI-glasses are an early contender to succeed the smartphone doesn't mean they are the right one.",
+          "pubDate": "2026-01-30T10:52:18Z",
+          "displayTime": "2026-01-30T10:52:18Z",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2026-01/0e00e2a0-fc8e-11f0-9eef-82eafa928345",
+            "originalWidth": 4445,
+            "originalHeight": 2965,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/RaukElySgCfWrEP5Zg.KwQ--~B/aD0yOTY1O3c9NDQ0NTthcHBpZD15dGFjaHlvbg--/https://s.yimg.com/os/creatr-uploaded-images/2026-01/0e00e2a0-fc8e-11f0-9eef-82eafa928345",
+                "width": 4445,
+                "height": 2965,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/mj_0oTocdg7nHKxV.BCIXg--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://s.yimg.com/os/creatr-uploaded-images/2026-01/0e00e2a0-fc8e-11f0-9eef-82eafa928345",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Yahoo Finance",
+            "url": "http://finance.yahoo.com/"
+          },
+          "canonicalUrl": {
+            "url": "https://finance.yahoo.com/news/big-tech-thinks-smart-glasses-will-be-the-first-major-piece-of-ai-hardware-105218224.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/news/big-tech-thinks-smart-glasses-will-be-the-first-major-piece-of-ai-hardware-105218224.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": true
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": {
+            "storylineItems": [
+              {
+                "content": {
+                  "id": "1854beee-6b61-3dd8-ac27-fa1b6c21fb9e",
+                  "contentType": "STORY",
+                  "isHosted": true,
+                  "title": "Apple just reported its best-ever quarter for iPhone sales",
+                  "thumbnail": {
+                    "originalUrl": "https://media.zenfs.com/en/engadget_703/a9327b3845d2f32ecbf04673c522e4e5",
+                    "originalWidth": 3333,
+                    "originalHeight": 2000,
+                    "caption": "",
+                    "resolutions": null
+                  },
+                  "provider": {
+                    "displayName": "Engadget",
+                    "sourceId": "engadget_703"
+                  },
+                  "previewUrl": null,
+                  "providerContentUrl": "https://www.engadget.com/mobile/smartphones/apple-just-reported-its-best-ever-quarter-for-iphone-sales-234135513.html",
+                  "canonicalUrl": {
+                    "url": "https://www.engadget.com/mobile/smartphones/apple-just-reported-its-best-ever-quarter-for-iphone-sales-234135513.html"
+                  },
+                  "clickThroughUrl": {
+                    "url": "https://tech.yahoo.com/business/article/apple-just-reported-best-ever-234135348.html"
+                  }
+                }
+              },
+              {
+                "content": {
+                  "id": "9d328cf2-e668-4652-af3e-086ea16e3e06",
+                  "contentType": "VIDEO",
+                  "isHosted": true,
+                  "title": "Apple CEO Tim Cook talks memory shortages, other supply constraints",
+                  "thumbnail": {
+                    "originalUrl": "https://s.yimg.com/uu/api/res/1.2/MzjONN1zTdqm2o1S3Lwb0g--~B/aD01NDY0O3c9ODE5MjthcHBpZD15dGFjaHlvbg--/https://d29szjachogqwa.cloudfront.net/images/2026-01/21f0c38b-d318-4d55-819b-846e92854134",
+                    "originalWidth": 8192,
+                    "originalHeight": 5464,
+                    "caption": "",
+                    "resolutions": null
+                  },
+                  "provider": {
+                    "displayName": "Yahoo Finance Video",
+                    "sourceId": "video.yahoofinance.com"
+                  },
+                  "previewUrl": null,
+                  "providerContentUrl": "",
+                  "canonicalUrl": {
+                    "url": "https://finance.yahoo.com/video/apple-ceo-tim-cook-talks-memory-shortages-other-supply-constraints-230214568.html"
+                  },
+                  "clickThroughUrl": {
+                    "url": "https://finance.yahoo.com/video/apple-ceo-tim-cook-talks-memory-shortages-other-supply-constraints-230214568.html"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "261cd354-ff26-49be-9565-742909cdc711",
+        "content": {
+          "id": "261cd354-ff26-49be-9565-742909cdc711",
+          "contentType": "VIDEO",
+          "title": "AI is an 'existential threat' for Apple, analyst says",
+          "description": "<p>Apple (<a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/quote/AAPL/\" data-i13n=\"cpos:1;pos:1\">AAPL</a>) reported <a target=\"_blank\" class=\"link\" href=\"https://finance.yahoo.com/news/apple-tops-q1-earnings-estimates-on-record-breaking-iphone-sales-213019517.html\" data-i13n=\"cpos:2;pos:1\">fiscal first quarter</a> adjusted earnings of $2.84 per share compared to the $2.68 estimate. Revenue was $143.76 billion versus a $138.40 billion expectation.</p><p>Seaport Research Partners senior analyst Jay Goldberg joins Asking for a Trend host <a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/author/josh-lipton/\" data-i13n=\"cpos:3;pos:1\">Josh Lipton</a> to discuss the earnings print and the company's ongoing artificial intelligence (AI) trajectory.</p><p>To watch more expert insights and analysis on the latest market action, check out more <a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/videos/series/asking-for-a-trend/\" data-i13n=\"cpos:4;pos:1\">Asking for a Trend</a>.</p>",
+          "summary": "Apple (AAPL) reported fiscal first quarter adjusted earnings of $2.84 per share compared to the $2.68 estimate. Revenue was $143.76 billion versus a $138.40 billion expectation.Seaport Research Partners senior analyst Jay Goldberg joins Asking for a Trend host Josh Lipton to discuss the earnings print and the company's ongoing artificial intelligence (AI) trajectory.To watch more expert insights and analysis on the latest market action, check out more Asking for a Trend.",
+          "pubDate": "2026-01-29T22:11:01Z",
+          "displayTime": "",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2024-10/b95cab50-92ec-11ef-b1ae-0b996ae418ba",
+            "originalWidth": 3043,
+            "originalHeight": 2039,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/mmFkdQCg5AtJVTDnrK59rg--~B/aD0yMDM5O3c9MzA0MzthcHBpZD15dGFjaHlvbg--/https://media-mbst-pub-ue1.s3.amazonaws.com/creatr-uploaded-images/2024-10/b95cab50-92ec-11ef-b1ae-0b996ae418ba",
+                "width": 3043,
+                "height": 2039,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/Ogf1fH0SgWT54S10xRPlfA--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://media-mbst-pub-ue1.s3.amazonaws.com/creatr-uploaded-images/2024-10/b95cab50-92ec-11ef-b1ae-0b996ae418ba",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Yahoo Finance Video",
+            "url": "https://finance.yahoo.com/"
+          },
+          "canonicalUrl": {
+            "url": "https://finance.yahoo.com/video/ai-is-an-existential-threat-for-apple-analyst-says-221101632.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/video/ai-is-an-existential-threat-for-apple-analyst-says-221101632.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": true
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": {
+            "storylineItems": [
+              {
+                "content": {
+                  "id": "da93193c-878f-4432-ad39-7518ac1ddb31",
+                  "contentType": "VIDEO",
+                  "isHosted": true,
+                  "title": "Apple earnings top estimates on top & bottom lines",
+                  "thumbnail": {
+                    "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2025-05/4e124420-26c8-11f0-bffb-b2bb88d72f9e",
+                    "originalWidth": 3535,
+                    "originalHeight": 2356,
+                    "caption": "",
+                    "resolutions": null
+                  },
+                  "provider": {
+                    "displayName": "Yahoo Finance Video",
+                    "sourceId": "video.yahoofinance.com"
+                  },
+                  "previewUrl": null,
+                  "providerContentUrl": "",
+                  "canonicalUrl": {
+                    "url": "https://finance.yahoo.com/video/apple-earnings-top-estimates-on-top--bottom-lines-214909057.html"
+                  },
+                  "clickThroughUrl": {
+                    "url": "https://finance.yahoo.com/video/apple-earnings-top-estimates-on-top--bottom-lines-214909057.html"
+                  }
+                }
+              },
+              {
+                "content": {
+                  "id": "744c8220-b94f-4074-bf50-484288ae923d",
+                  "contentType": "STORY",
+                  "isHosted": true,
+                  "title": "Stock market today: S&P 500, Nasdaq fall as Microsoft leads tech lower with Apple earnings on deck",
+                  "thumbnail": {
+                    "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2026-01/8df70f60-fc99-11f0-bebf-3653dc1a2c89",
+                    "originalWidth": 5231,
+                    "originalHeight": 3487,
+                    "caption": "",
+                    "resolutions": null
+                  },
+                  "provider": {
+                    "displayName": "Yahoo Finance",
+                    "sourceId": "yahoofinance.com"
+                  },
+                  "previewUrl": null,
+                  "providerContentUrl": "",
+                  "canonicalUrl": {
+                    "url": "https://finance.yahoo.com/news/live/stock-market-today-sp-500-nasdaq-fall-as-microsoft-leads-tech-lower-with-apple-earnings-on-deck-210050303.html"
+                  },
+                  "clickThroughUrl": {
+                    "url": "https://finance.yahoo.com/news/live/stock-market-today-sp-500-nasdaq-fall-as-microsoft-leads-tech-lower-with-apple-earnings-on-deck-210050303.html"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "89d743c3-8406-4197-966a-bf4e8eef5f32",
+        "content": {
+          "id": "89d743c3-8406-4197-966a-bf4e8eef5f32",
+          "contentType": "VIDEO",
+          "title": "Small caps are getting a leg up from lower rates, Big Beautiful Bill",
+          "description": "<p>Earnings season kicks off for the Magnificent Seven this week, with Meta Platforms (<a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/quote/META?p=META&.tsrc=fin-srch\" data-i13n=\"cpos:1;pos:1\">META</a>), Microsoft (<a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/quote/MSFT?p=MSFT&.tsrc=fin-srch\" data-i13n=\"cpos:2;pos:1\">MSFT</a>), and Tesla (<a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/quote/TSLA?p=TSLA&.tsrc=fin-srch\" data-i13n=\"slk:TSLA;cpos:3;pos:1\">TSLA</a>) reporting quarterly results yesterday and Apple (<a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/quote/AAPL/\" data-i13n=\"cpos:4;pos:1\">AAPL</a>) releasing after Thursday's market close.</p><p>Madison Investments chief investment strategist Patrick Ryan is taking a look at the rest of the S&P 500 (<a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/quote/^GSPC/\" data-i13n=\"cpos:5;pos:1\">^GSPC</a>) \u2014 or the S&P 493 \u2014 and the opportunities for small-cap stocks \u00a0(<a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/quote/%5ERUT/?p=%5ERUT&.tsrc=fin-srch\" data-i13n=\"cpos:6;pos:1\">^RUT</a>) amid lower interest rates and President Trump's Big, Beautiful Bill legislation.</p><p>To watch more expert insights and analysis on the latest market action, check out more\u00a0<a target=\"_blank\" rel=\"\" class=\"link\" href=\"https://finance.yahoo.com/videos/series/market-domination/\" data-i13n=\"cpos:7;pos:1\">Market Domination</a>.</p>",
+          "summary": "Earnings season kicks off for the Magnificent Seven this week, with Meta Platforms (META), Microsoft (MSFT), and Tesla (TSLA) reporting quarterly results yesterday and Apple (AAPL) releasing after Thursday's market close.Madison Investments chief investment strategist Patrick Ryan is taking a look at the rest of the S&P 500 (^GSPC) \u2014 or the S&P 493 \u2014 and the opportunities for small-cap stocks &nbsp;(^RUT) amid lower interest rates and President Trump's Big, Beautiful Bill legislation.To watch more expert insights and analysis on the latest market action, check out more&nbsp;Market Domination.",
+          "pubDate": "2026-01-29T20:44:38Z",
+          "displayTime": "",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2025-07/c5a1bc20-6d8e-11f0-bfb7-e07100b1a2df",
+            "originalWidth": 4268,
+            "originalHeight": 2845,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/1FmzIylZw6WzK3_ENHoWMw--~B/aD0yODQ1O3c9NDI2ODthcHBpZD15dGFjaHlvbg--/https://media-mbst-pub-ue1.s3.amazonaws.com/creatr-uploaded-images/2025-07/c5a1bc20-6d8e-11f0-bfb7-e07100b1a2df",
+                "width": 4268,
+                "height": 2845,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/0WyuHSJB_xwfMVtNESP4gw--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://media-mbst-pub-ue1.s3.amazonaws.com/creatr-uploaded-images/2025-07/c5a1bc20-6d8e-11f0-bfb7-e07100b1a2df",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Yahoo Finance Video",
+            "url": "https://finance.yahoo.com/"
+          },
+          "canonicalUrl": {
+            "url": "https://finance.yahoo.com/video/small-caps-are-getting-a-leg-up-from-lower-rates-big-beautiful-bill-204438883.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/video/small-caps-are-getting-a-leg-up-from-lower-rates-big-beautiful-bill-204438883.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": true
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": null
+        }
+      },
+      {
+        "id": "c00cc660-f4f4-39da-b4ee-4a875273f72c",
+        "content": {
+          "id": "c00cc660-f4f4-39da-b4ee-4a875273f72c",
+          "contentType": "STORY",
+          "title": "Apple acquires Q.ai for a reported $2 billion",
+          "description": "",
+          "summary": "Apple has acquired Israel-based startup Q.ai, a move that could provide a much-needed boost to the tech giant's capabilities in artificial intelligence.",
+          "pubDate": "2026-01-29T19:00:17Z",
+          "displayTime": "2026-01-29T19:00:17Z",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://media.zenfs.com/en/engadget_703/e666e5e5022c9c7fee640ac066cb7780",
+            "originalWidth": 4683,
+            "originalHeight": 3112,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/01cmRVmsRWamwtau0KgALQ--~B/aD0zMTEyO3c9NDY4MzthcHBpZD15dGFjaHlvbg--/https://media.zenfs.com/en/engadget_703/e666e5e5022c9c7fee640ac066cb7780",
+                "width": 4683,
+                "height": 3112,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/Ps6FF16FAbbneTL.ZZSUgA--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/engadget_703/e666e5e5022c9c7fee640ac066cb7780",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Engadget",
+            "url": "https://www.engadget.com/"
+          },
+          "canonicalUrl": {
+            "url": "https://www.engadget.com/big-tech/apple-acquires-qai-for-a-reported-2-billion-190017949.html",
+            "site": "tech",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://tech.yahoo.com/ai/apple-intelligence/article/apple-acquires-q-ai-reported-190017951.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": true
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": null
+        }
+      },
+      {
+        "id": "9d343b28-023d-4bff-bf62-243d278f5c88",
+        "content": {
+          "id": "9d343b28-023d-4bff-bf62-243d278f5c88",
+          "contentType": "STORY",
+          "title": "Will gold prices hit $6,000 this year? How readers voted",
+          "description": "",
+          "summary": "Further geopolitical uncertainty has buoyed demand for gold as a so-called safe-haven asset, pushing prices past the $5,000 mark.",
+          "pubDate": "2026-01-30T15:06:22Z",
+          "displayTime": "2026-01-30T15:06:22Z",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://s.yimg.com/os/creatr-uploaded-images/2026-01/83789450-fdde-11f0-9b5d-dcad46a89882",
+            "originalWidth": 8000,
+            "originalHeight": 5336,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/v7RSheeysd_ZcE5I26YnLw--~B/aD01MzM2O3c9ODAwMDthcHBpZD15dGFjaHlvbg--/https://s.yimg.com/os/creatr-uploaded-images/2026-01/83789450-fdde-11f0-9b5d-dcad46a89882",
+                "width": 8000,
+                "height": 5336,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/cntAtWqpREMaGDb68n1dEg--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://s.yimg.com/os/creatr-uploaded-images/2026-01/83789450-fdde-11f0-9b5d-dcad46a89882",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Yahoo Finance UK",
+            "url": "http://uk.finance.yahoo.com/"
+          },
+          "canonicalUrl": {
+            "url": "https://uk.finance.yahoo.com/news/gold-prices-6000-investing-poll-results-150622662.html",
+            "site": "finance",
+            "region": "GB",
+            "lang": "en-GB"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/news/gold-prices-6000-investing-poll-results-150622662.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": false
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": null
+        }
+      },
+      {
+        "id": "309ac7ff-3375-319d-8c4a-6f27b01aa483",
+        "content": {
+          "id": "309ac7ff-3375-319d-8c4a-6f27b01aa483",
+          "contentType": "STORY",
+          "title": "Stock Market Today: Dow Falls On Surprise Inflation Data, Warsh Nomination; Tesla Rallies (Live Coverage)",
+          "description": "",
+          "summary": "Stock Market Today: The Dow Jones index dropped Friday on surprise inflation data and the Warsh nomination. Tesla rallied on SpaceX news.",
+          "pubDate": "2026-01-30T14:40:52Z",
+          "displayTime": "2026-01-30T14:40:52Z",
+          "isHosted": false,
+          "bypassModal": false,
+          "previewUrl": "https://finance.yahoo.com/m/309ac7ff-3375-319d-8c4a-6f27b01aa483/stock-market-today-dow-falls.html",
+          "thumbnail": {
+            "originalUrl": "https://media.zenfs.com/en/ibd.com/55ca4252bd7c66820fc61ce444908e68",
+            "originalWidth": 1000,
+            "originalHeight": 563,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/4WfxCi9gw5G1l9k1XkSg7g--~B/aD01NjM7dz0xMDAwO2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/ibd.com/55ca4252bd7c66820fc61ce444908e68",
+                "width": 1000,
+                "height": 563,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/Dmy1XFtk0dU5yCuXRO8HVg--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/ibd.com/55ca4252bd7c66820fc61ce444908e68",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Investor's Business Daily",
+            "url": "http://www.investors.com/"
+          },
+          "canonicalUrl": {
+            "url": "https://www.investors.com/market-trend/stock-market-today/dow-jones-sp500-nasdaq-inflation-data-tesla-tsla-stock-spacex/?src=A00220&yptr=yahoo",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": null,
+          "metadata": {
+            "editorsPick": false
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": null
+        }
+      },
+      {
+        "id": "52f1a240-5ee7-30f6-b6a6-938c3aefcb7e",
+        "content": {
+          "id": "52f1a240-5ee7-30f6-b6a6-938c3aefcb7e",
+          "contentType": "VIDEO",
+          "title": "AI Monetization Is the Story for Apple in 2026: Dan Ives",
+          "description": "Dan Ives, Wedbush Securities global head of tech research, reacts to Apple's earnings report and says AI will be the top story for the company in 2026. Speaking on \"Bloomberg Surveillance,\" Ives also says Apple will probably have to raise iPhone prices.",
+          "summary": "Dan Ives, Wedbush Securities global head of tech research, reacts to Apple's earnings report and says AI will be the top story for the company in 2026. Speaking on \"Bloomberg Surveillance,\" Ives also says Apple will probably have to raise iPhone prices.",
+          "pubDate": "2026-01-30T14:39:20Z",
+          "displayTime": "",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://media.zenfs.com/en/bloomberg_markets_video_2/56f531cc8b9aef5d30568869dc4d61a9",
+            "originalWidth": 1280,
+            "originalHeight": 720,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/7qu4CGzX6ARIlSX1TF0wUw--~B/aD03MjA7dz0xMjgwO2FwcGlkPXl0YWNoeW9u/https://media.zenfs.com/en/bloomberg_markets_video_2/56f531cc8b9aef5d30568869dc4d61a9",
+                "width": 1280,
+                "height": 720,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/W5mU_YgZLLt1PmoQQ8awtg--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://media.zenfs.com/en/bloomberg_markets_video_2/56f531cc8b9aef5d30568869dc4d61a9",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Bloomberg",
+            "url": "https://www.bloomberg.com/"
+          },
+          "canonicalUrl": {
+            "url": "https://finance.yahoo.com/video/ai-monetization-story-apple-2026-143920455.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/video/ai-monetization-story-apple-2026-143920455.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": false
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": null
+        }
+      },
+      {
+        "id": "2eee780f-1b82-4442-a48c-0f6a1246a0d6",
+        "content": {
+          "id": "2eee780f-1b82-4442-a48c-0f6a1246a0d6",
+          "contentType": "STORY",
+          "title": "Stocks to watch next week: Alphabet, Amazon, Palantir, Novo Nordisk and Shell",
+          "description": "",
+          "summary": "Earnings preview of key companies reporting next week and what to look out for",
+          "pubDate": "2026-01-30T14:27:35Z",
+          "displayTime": "2026-01-30T14:27:37Z",
+          "isHosted": true,
+          "bypassModal": false,
+          "previewUrl": null,
+          "thumbnail": {
+            "originalUrl": "https://s.yimg.com/os/creatr-images/2020-03/3eb8aac0-66cd-11ea-affd-8698022e16d8",
+            "originalWidth": 5000,
+            "originalHeight": 3335,
+            "caption": "",
+            "resolutions": [
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/COZAias7SQ9.jW.iJAI8xg--~B/aD0zMzM1O3c9NTAwMDthcHBpZD15dGFjaHlvbg--/https://s.yimg.com/os/creatr-images/2020-03/3eb8aac0-66cd-11ea-affd-8698022e16d8",
+                "width": 5000,
+                "height": 3335,
+                "tag": "original"
+              },
+              {
+                "url": "https://s.yimg.com/uu/api/res/1.2/2pMzW5EDaIQOV36y8ZMtkg--~B/Zmk9c3RyaW07aD0xMjg7dz0xNzA7YXBwaWQ9eXRhY2h5b24-/https://s.yimg.com/os/creatr-images/2020-03/3eb8aac0-66cd-11ea-affd-8698022e16d8",
+                "width": 170,
+                "height": 128,
+                "tag": "170x128"
+              }
+            ]
+          },
+          "provider": {
+            "displayName": "Yahoo Finance UK",
+            "url": "http://uk.finance.yahoo.com/"
+          },
+          "canonicalUrl": {
+            "url": "https://uk.finance.yahoo.com/news/alphabet-amazon-palantir-novo-nordisk-shell-stocks-to-watch-142735903.html",
+            "site": "finance",
+            "region": "GB",
+            "lang": "en-GB"
+          },
+          "clickThroughUrl": {
+            "url": "https://finance.yahoo.com/news/alphabet-amazon-palantir-novo-nordisk-shell-stocks-to-watch-142735903.html",
+            "site": "finance",
+            "region": "US",
+            "lang": "en-US"
+          },
+          "metadata": {
+            "editorsPick": false
+          },
+          "finance": {
+            "premiumFinance": {
+              "isPremiumNews": false,
+              "isPremiumFreeNews": false
+            }
+          },
+          "storyline": null
+        }
+      }
+    ]
+  },
+  "technical_analysis": {
+    "statistics": {
+      "price": {
+        "current": 258.2550048828125,
+        "high": 286.19000244140625,
+        "high_date": "2025-12-02",
+        "low": 171.83242797851562,
+        "low_date": "2025-04-08",
+        "mean": 233.72037984454442,
+        "std_dev": 27.407030112517173,
+        "std_dev_pct": 11.726418607888
+      },
+      "returns": {
+        "period_return_pct": 9.189378057302585,
+        "daily_volatility_pct": 2.0044016257779598,
+        "annual_volatility_pct": 31.818889375812205
+      },
+      "volume": {
+        "current": 21584652.0,
+        "average": 53448069.65079365,
+        "max": 184395900.0,
+        "max_date": "2025-04-09",
+        "min": 17910600.0,
+        "volume_vs_avg_pct": -59.61565657838591
+      }
+    },
+    "latest_values": {
+      "date": "2026-01-30",
+      "close_price": 258.2550048828125,
+      "indicators": {
+        "Dividends": 0.0,
+        "Stock Splits": 0.0,
+        "SMA_20": 257.58824768066404,
+        "SMA_50": 268.2706982421875,
+        "SMA_200": 236.37244270324706,
+        "EMA_12": 256.4395390182244,
+        "EMA_26": 260.046575442301,
+        "MACD": -3.6070364240765684,
+        "MACD_signal": -4.50811802233121,
+        "MACD_diff": 0.9010815982546418,
+        "RSI_14": 46.284794264403466,
+        "Stoch_K": 80.05933877532871,
+        "Stoch_D": 76.83932224567262,
+        "Williams_R_14": -19.940661224671295,
+        "BB_upper": 269.7526255901492,
+        "BB_middle": 257.58824768066404,
+        "BB_lower": 245.42386977117886,
+        "ATR_14": 5.242127147079707,
+        "ADX_14": 28.14189914230614,
+        "OBV": 638538648.0,
+        "VWAP": 254.7665762993847,
+        "MFI_14": 44.000722314454215
+      }
+    },
+    "signals": {
+      "RSI": "Neutral (46.3)",
+      "MACD": "Bullish",
+      "MA_Trend": "Bullish (Golden Cross)",
+      "Bollinger_Bands": "Price within bands - normal",
+      "ADX": "Strong trend (28.1)",
+      "MFI": "Neutral (44.0)",
+      "Williams_R": "Overbought (>-20) - potential reversal"
+    },
+    "data_points": 252,
+    "date_range": {
+      "start": "2025-01-30",
+      "end": "2026-01-30"
+    }
+  },
+  "fundamental_analysis": {
+    "ticker": "AAPL",
+    "company_name": "Apple Inc.",
+    "sector": "Technology",
+    "industry": "Consumer Electronics",
+    "analysis": {
+      "growth_rates": {
+        "revenue": {
+          "1y": 6.425511782832739,
+          "3y_cagr": 1.8125357434793932,
+          "5y_cagr": null
+        },
+        "earnings": {
+          "1y": 19.495177946573357,
+          "3y_cagr": 3.9212592033254,
+          "5y_cagr": null
+        },
+        "fcf": {
+          "1y": -9.227347505215656,
+          "3y_cagr": -3.9450634871626145,
+          "current": 98767000000.0
+        }
+      },
+      "fcf_metrics": {
+        "fcf": 98767000000.0,
+        "fcf_yield": 2.5880879220590356,
+        "fcf_margin": 23.732882225869314
+      },
+      "margins": {
+        "current": {
+          "gross_margin": 46.90516410716045,
+          "operating_margin": 31.970799762591884,
+          "ebitda_margin": 34.78173110887373,
+          "net_margin": 26.91506412181824
+        },
+        "trend": {
+          "current": 26.91506412181824,
+          "1y_ago": 23.971255769943866,
+          "2y_ago": 25.30623426432028
+        }
+      },
+      "efficiency": {
+        "asset_turnover": 1.1584451663368045,
+        "inventory_turnover": 33.98338972623808,
+        "days_inventory_outstanding": 10.740541274438813,
+        "receivables_turnover": 11.372538838864825,
+        "days_sales_outstanding": 32.09485631762708,
+        "payables_turnover": 3.1834029678720643,
+        "days_payable_outstanding": 114.65717776973209,
+        "cash_conversion_cycle": -71.8217801776662
+      },
+      "dupont": {
+        "net_margin": 26.91506412181824,
+        "asset_turnover": 1.1584451663368045,
+        "equity_multiplier": 4.8721874872852045,
+        "roe_calculated": 151.91298333175104,
+        "roe_reported": 171.42199
+      },
+      "quality_scores": {
+        "altman_z": 8.639817314037094,
+        "piotroski_f": 7
+      }
+    }
+  },
+  "risk_analysis": {
+    "returns": {
+      "daily_mean": 0.000547717749705991,
+      "daily_std": 0.020044016257779598,
+      "daily_min": -0.09245610910922164,
+      "daily_max": 0.15328841216885225,
+      "cumulative_return": 0.09189378057302533,
+      "annualized_return": 0.09227628705944224,
+      "total_trading_days": 251,
+      "positive_days": 131,
+      "negative_days": 120,
+      "win_rate": 0.5219123505976095
+    },
+    "volatility": {
+      "daily_volatility": 0.020044016257779598,
+      "annualized_volatility": 0.31818889375812204,
+      "downside_deviation": 0.23277519882084674
+    },
+    "sharpe_ratio": 0.4325259469674737,
+    "sortino_ratio": 0.5912354635907169,
+    "information_ratio": -0.08275473137733469,
+    "calmar_ratio": 0.3053223572468789,
+    "drawdown": {
+      "max_drawdown": -0.30222577832657394,
+      "max_drawdown_date": "2025-04-08",
+      "current_drawdown": -0.09760997002092373,
+      "days_since_peak": 40,
+      "recovery_days": 167,
+      "is_recovered": false
+    },
+    "market_risk": {
+      "beta": 1.3303074518494244,
+      "alpha": -0.06886459246870716,
+      "correlation": 0.7748822136096908,
+      "r_squared": 0.6004424449686545,
+      "benchmark": "^GSPC"
+    },
+    "var_95": {
+      "confidence_level": 0.95,
+      "var_historical": -0.03185899115164608,
+      "cvar_historical": -0.045223172354298784,
+      "var_parametric": -0.032259555957104,
+      "worst_day": -0.09245610910922164
+    },
+    "var_99": {
+      "confidence_level": 0.99,
+      "var_historical": -0.04914885149813225,
+      "cvar_historical": -0.07172053825818281,
+      "var_parametric": -0.04477762566906122,
+      "worst_day": -0.09245610910922164
+    },
+    "rolling_ratios": {
+      "sharpe_30d": {
+        "current": -2.9444058720456474,
+        "mean": 0.9060825250158023,
+        "min": -8.528622112216398,
+        "max": 5.407072713571906,
+        "std": 2.934441184714397
+      },
+      "sortino_30d": {
+        "current": -3.8078749035294126,
+        "mean": 2.1623735843705774,
+        "min": -11.415523836531651,
+        "max": 10.812294484625394,
+        "std": 4.787524763363136
+      },
+      "sharpe_60d": {
+        "current": -0.9714141130281008,
+        "mean": 1.5173241733992198,
+        "min": -2.234108691775387,
+        "max": 4.607964755002162,
+        "std": 1.7798569064358862
+      },
+      "sortino_60d": {
+        "current": -1.3942535250646262,
+        "mean": 2.8670964262872833,
+        "min": -2.930679723772703,
+        "max": 8.755793293270843,
+        "std": 3.2112797195436196
+      },
+      "sharpe_90d": {
+        "current": 0.23376027835673413,
+        "mean": 1.6898133793969283,
+        "min": -1.0160341410790543,
+        "max": 3.899725233768596,
+        "std": 1.4941071374115031
+      },
+      "sortino_90d": {
+        "current": 0.3454701310530266,
+        "mean": 3.098794611495,
+        "min": -1.431839039245798,
+        "max": 7.504922136634149,
+        "std": 2.692899079947296
+      }
+    }
+  },
+  "valuation_analysis": {
+    "ticker": "AAPL",
+    "dcf_valuation": {
+      "intrinsic_value_per_share": 59.35563474262456,
+      "current_price": 258.2550048828125,
+      "currency": "USD",
+      "discount_premium_pct": 335.09770555507856,
+      "fcf_current": 98767000000.0,
+      "growth_rate_used": -0.4110512746207329,
+      "terminal_growth_rate": 2.5,
+      "wacc_used": 12.744,
+      "enterprise_value": 877059823938.9999,
+      "equity_value": 877059823938.9999,
+      "shares_outstanding": 14776353209.63326,
+      "projection_years": 5,
+      "assumptions": {
+        "growth_rate_source": "historical_fcf",
+        "wacc_source": "estimated_from_beta",
+        "pv_projected_fcf": 345619256567.36194,
+        "terminal_value": 968103739533.3927,
+        "pv_terminal_value": 531440567371.63794,
+        "cash": 0.0,
+        "debt": 0.0,
+        "net_debt": 0.0,
+        "shares_calculated_from_market_cap": true
+      },
+      "error": null
+    },
+    "ddm_valuation": {
+      "intrinsic_value_per_share": 12.990286198634532,
+      "current_price": 258.2550048828125,
+      "currency": "USD",
+      "discount_premium_pct": 1888.0624717102758,
+      "current_dividend": 1.03,
+      "next_dividend_estimate": 1.0759510259791523,
+      "growth_rate_used": 4.4612646581701165,
+      "required_return_used": 12.744,
+      "model": "Gordon Growth Model",
+      "assumptions": {
+        "growth_rate_source": "historical_dividends",
+        "required_return_source": "estimated_from_beta"
+      },
+      "error": null
+    },
+    "dividend_analysis": {
+      "pays_dividends": true,
+      "dividend_yield": 40.0,
+      "annual_dividend": 1.03,
+      "payout_ratio": 13.04,
+      "dividend_growth_rate": 4.4612646581701165,
+      "dividend_coverage_ratio": 7.668711656441719,
+      "consecutive_years": 14,
+      "latest_ex_dividend_date": "2025-11-10 00:00:00",
+      "sustainability_score": 80,
+      "sustainability_rating": "Excellent",
+      "warnings": []
+    },
+    "earnings_analysis": {
+      "current_eps": 7.91,
+      "forward_eps": null,
+      "eps_growth_1y": 22.69736842105263,
+      "eps_growth_3y_cagr": 6.880679389561806,
+      "next_earnings_date": null,
+      "next_earnings_estimate": null,
+      "recent_surprises": [
+        {
+          "quarter": "",
+          "eps_actual": 1.65,
+          "eps_estimate": 1.62253,
+          "surprise_pct": 1.6900001000000002
+        },
+        {
+          "quarter": "",
+          "eps_actual": 1.57,
+          "eps_estimate": 1.42572,
+          "surprise_pct": 10.12
+        },
+        {
+          "quarter": "",
+          "eps_actual": 1.85,
+          "eps_estimate": 1.76993,
+          "surprise_pct": 4.52
+        },
+        {
+          "quarter": "",
+          "eps_actual": 2.84,
+          "eps_estimate": 2.6708,
+          "surprise_pct": 6.34
+        }
+      ],
+      "surprise_stats": {
+        "avg_surprise_pct": 5.667500025,
+        "positive_surprises": 4,
+        "negative_surprises": 0,
+        "beat_rate": 100.0
+      },
+      "earnings_quality": {
+        "assessment": "Fair Quality (moderate cash backing)",
+        "score": 50,
+        "metrics": {
+          "cash_flow_to_earnings_ratio": 0.995286135166503,
+          "accruals_pct": 0.4713864833497009
+        }
+      },
+      "trend": "Strong Growth"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # GJF.OL - Comprehensive Stock Report
 
-**Generated:** 2026-01-30T15:38:58.216639
+**Generated:** 2026-01-30T16:15:10.071347
 
 **Period:** 1y
 
@@ -15,12 +15,12 @@
 
 ## Valuation Metrics
 
-- **Market Cap:** $137.49B
-- **P/E Ratio:** 21.93
-- **Forward P/E:** 15.94
+- **Market Cap:** $136.89B
+- **P/E Ratio:** 21.83
+- **Forward P/E:** 15.87
 - **PEG Ratio:** N/A
-- **Price/Book:** 5.22
-- **Price/Sales:** 2.96
+- **Price/Book:** 5.20
+- **Price/Sales:** 2.95
 
 ## Financial Health
 
@@ -38,16 +38,16 @@
 - **Data Points:** 251 days
 
 ### Latest Price (2026-01-30 00:00:00+01:00)
-- **Close:** $275.00
-- **Open:** $273.80
-- **High:** $275.80
-- **Low:** $272.60
-- **Volume:** 60,019
+- **Close:** kr273.80
+- **Open:** kr273.80
+- **High:** kr276.20
+- **Low:** kr272.60
+- **Volume:** 135,201
 
 ### Statistics
-- **52W High:** $303.00
-- **52W Low:** $214.83
-- **Avg Volume:** 315,728
+- **52W High:** kr303.00
+- **52W Low:** kr214.83
+- **Avg Volume:** 316,028
 - **Volatility (std):** 0.0130
 
 ## Fundamental Data Availability
@@ -80,7 +80,7 @@
 
 | Holder | % Held | Shares | Value |
 |--------|--------|--------|-------|
-| Pacer Advisors, Inc. | 0.00% | 1,542 | $424,050 |
+| Pacer Advisors, Inc. | 0.00% | 1,542 | kr422,199 |
 
 ## Dividends & Stock Splits
 
@@ -91,16 +91,16 @@
 
 | Date | Amount |
 |------|--------|
-| 2018-04-06 00:00:00+02:00 | $7.1000 |
-| 2019-03-29 00:00:00+01:00 | $7.1000 |
-| 2020-09-22 00:00:00+02:00 | $12.2500 |
-| 2021-01-27 00:00:00+01:00 | $2.4000 |
-| 2021-03-25 00:00:00+01:00 | $7.4000 |
-| 2021-11-08 00:00:00+01:00 | $4.0000 |
-| 2022-03-25 00:00:00+01:00 | $7.7000 |
-| 2023-03-24 00:00:00+01:00 | $8.2500 |
-| 2024-03-21 00:00:00+01:00 | $8.7500 |
-| 2025-03-21 00:00:00+01:00 | $10.0000 |
+| 2018-04-06 00:00:00+02:00 | kr7.1000 |
+| 2019-03-29 00:00:00+01:00 | kr7.1000 |
+| 2020-09-22 00:00:00+02:00 | kr12.2500 |
+| 2021-01-27 00:00:00+01:00 | kr2.4000 |
+| 2021-03-25 00:00:00+01:00 | kr7.4000 |
+| 2021-11-08 00:00:00+01:00 | kr4.0000 |
+| 2022-03-25 00:00:00+01:00 | kr7.7000 |
+| 2023-03-24 00:00:00+01:00 | kr8.2500 |
+| 2024-03-21 00:00:00+01:00 | kr8.7500 |
+| 2025-03-21 00:00:00+01:00 | kr10.0000 |
 
 ## Analyst Ratings
 
@@ -138,83 +138,31 @@
    - Publisher: Simply Wall St.
    - [Read more](https://finance.yahoo.com/news/3-european-stocks-estimated-undervalued-050758590.html)
 
-## Fundamental Analysis
-
-### Growth Rates
-
-| Metric | 1 Year | 3 Year CAGR | 5 Year CAGR |
-|--------|--------|--------------|--------------|
-| Revenue | +9.05% | +8.42% | N/A |
-| Earnings | +24.43% | -10.38% | N/A |
-| Free Cash Flow | -7.99% | -16.27% | N/A |
-
-### Free Cash Flow Analysis
-
-| Metric | Value |
-|--------|-------|
-| Free Cash Flow | $3,812,000,000 |
-| FCF Yield | 2.77% |
-| FCF Margin | 9.44% |
-
-### Profitability Margins
-
-| Margin Type | Current |
-|-------------|---------|
-| Net Margin | 12.74% |
-
-**Trend:** Net margin ↑ Improving
-
-### Efficiency Ratios
-
-| Ratio | Value |
-|-------|-------|
-| Asset Turnover | 0.24x |
-
-### DuPont ROE Analysis
-
-| Component | Value |
-|-----------|-------|
-| Net Margin | 12.74% |
-| Asset Turnover | 0.24x |
-| Equity Multiplier | 6.59x |
-| **ROE (Calculated)** | **19.77%** |
-| ROE (Reported) | 23.62% |
-
-*ROE = Net Margin × Asset Turnover × Equity Multiplier*
-
-### Quality Scores
-
-| Score | Value | Interpretation |
-|-------|-------|----------------|
-| Altman Z-Score | N/A | Insufficient data |
-| Piotroski F-Score | 2/9 | Weak |
-
-
 ## Technical Analysis Summary
 
-**Current Price:** $275.00
+**Current Price:** kr273.80
 **As of:** 2026-01-30
 
 ### Key Signals
 
-- **RSI:** Neutral (42.5)
+- **RSI:** Neutral (40.7)
 - **MACD:** Bearish
 - **MA_Trend:** Bullish (Golden Cross)
 - **Bollinger_Bands:** Price within bands - normal
 - **ADX:** Strong trend (37.2)
-- **MFI:** Neutral (35.3)
-- **Williams_R:** Neutral (-48.9)
+- **MFI:** Neutral (36.2)
+- **Williams_R:** Neutral (-55.3)
 
 ### Key Indicators
 
 | Indicator | Value |
 |-----------|-------|
-| SMA (20) | $280.54 |
-| SMA (50) | $284.34 |
-| RSI (14) | 42.48 |
-| MACD | -4.21 |
-| Bollinger Upper | $297.80 |
-| Bollinger Lower | $263.28 |
+| SMA (20) | kr280.48 |
+| SMA (50) | kr284.32 |
+| RSI (14) | 40.72 |
+| MACD | -4.31 |
+| Bollinger Upper | kr297.83 |
+| Bollinger Lower | kr263.13 |
 
 *See technical_analysis.md for detailed analysis*
 
@@ -223,21 +171,84 @@
 
 ### Performance
 
-**Cumulative Return:** 22.85%
-**Annualized Return:** 23.06%
+**Cumulative Return:** 22.32%
+**Annualized Return:** 22.52%
 **Win Rate:** 48.40%
 
 ### Risk Metrics
 
-**Annualized Volatility:** 20.59%
-**Sharpe Ratio:** 1.11
-**Sortino Ratio:** 1.63
+**Annualized Volatility:** 20.58%
+**Sharpe Ratio:** 1.09
+**Sortino Ratio:** 1.60
 **Information Ratio:** 0.00
-**Calmar Ratio:** 1.90
+**Calmar Ratio:** 1.86
 
 ### Drawdown
 
 **Maximum Drawdown:** -12.12%
-**Current Drawdown:** -8.94%
+**Current Drawdown:** -9.34%
 
 *See risk_analysis.md for detailed risk metrics*
+
+## Valuation Analysis
+
+### DCF (Discounted Cash Flow) Valuation
+
+**Intrinsic Value:** kr452.21
+**Current Price:** kr273.80
+**Valuation:** 🔻 Undervalued by 39.5% (trading below fair value)
+
+**Assumptions:**
+- FCF Growth Rate: 49.9%
+- Terminal Growth: 2.5%
+- WACC: 12.0%
+- Current FCF: krkr3.81B
+
+### DDM (Dividend Discount Model) Valuation
+
+**Intrinsic Value:** kr46.75
+**Current Price:** kr273.80
+**Valuation:** 🔺 Overvalued by 485.7%
+
+**Assumptions:**
+- Current Dividend: kr10.00
+- Next Dividend Est.: kr9.23
+- Dividend Growth: -7.7%
+- Required Return: 12.0%
+
+### Dividend Analysis
+
+**Dividend Yield:** 3.66%
+**Annual Dividend:** kr10.00
+**Payout Ratio:** 71.7%
+**Dividend Coverage:** 1.39x
+**Dividend Growth Rate:** -7.7%
+**Consecutive Years:** 15
+
+**Sustainability Score:** 45/100 (Fair)
+
+**⚠️ Warnings:**
+- Low dividend coverage (<1.5x) - risk of dividend cut
+
+### Earnings Analysis
+
+**Current EPS (TTM):** kr12.55
+**EPS Growth (1Y):** +23.4%
+**EPS Growth (3Y CAGR):** -11.0%
+**Trend:** Strong Growth
+
+**Recent Earnings Surprises:**
+
+| Quarter | Actual | Estimate | Surprise % |
+|---------|--------|----------|------------|
+| 2025-03-31 | kr2.53 | kr2.48 | +2.1% |
+| 2025-06-30 | kr4.42 | kr3.23 | +36.9% |
+| 2025-09-30 | kr3.04 | kr3.72 | -18.2% |
+| 2025-12-31 | kr2.56 | kr3.11 | -17.6% |
+
+**Beat Rate:** 50% (2/4 quarters)
+**Avg Surprise:** +0.8%
+
+**Earnings Quality:**
+- Fair Quality (moderate cash backing)
+- CF/NI Ratio: 0.82x

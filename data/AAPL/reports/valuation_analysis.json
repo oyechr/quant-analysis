@@ -1,0 +1,107 @@
+{
+  "ticker": "AAPL",
+  "dcf_valuation": {
+    "intrinsic_value_per_share": 59.35563474262456,
+    "current_price": 258.2550048828125,
+    "currency": "USD",
+    "discount_premium_pct": 335.09770555507856,
+    "fcf_current": 98767000000.0,
+    "growth_rate_used": -0.4110512746207329,
+    "terminal_growth_rate": 2.5,
+    "wacc_used": 12.744,
+    "enterprise_value": 877059823938.9999,
+    "equity_value": 877059823938.9999,
+    "shares_outstanding": 14776353209.63326,
+    "projection_years": 5,
+    "assumptions": {
+      "growth_rate_source": "historical_fcf",
+      "wacc_source": "estimated_from_beta",
+      "pv_projected_fcf": 345619256567.36194,
+      "terminal_value": 968103739533.3927,
+      "pv_terminal_value": 531440567371.63794,
+      "cash": 0.0,
+      "debt": 0.0,
+      "net_debt": 0.0,
+      "shares_calculated_from_market_cap": true
+    },
+    "error": null
+  },
+  "ddm_valuation": {
+    "intrinsic_value_per_share": 12.990286198634532,
+    "current_price": 258.2550048828125,
+    "currency": "USD",
+    "discount_premium_pct": 1888.0624717102758,
+    "current_dividend": 1.03,
+    "next_dividend_estimate": 1.0759510259791523,
+    "growth_rate_used": 4.4612646581701165,
+    "required_return_used": 12.744,
+    "model": "Gordon Growth Model",
+    "assumptions": {
+      "growth_rate_source": "historical_dividends",
+      "required_return_source": "estimated_from_beta"
+    },
+    "error": null
+  },
+  "dividend_analysis": {
+    "pays_dividends": true,
+    "dividend_yield": 40.0,
+    "annual_dividend": 1.03,
+    "payout_ratio": 13.04,
+    "dividend_growth_rate": 4.4612646581701165,
+    "dividend_coverage_ratio": 7.668711656441719,
+    "consecutive_years": 14,
+    "latest_ex_dividend_date": "2025-11-10 00:00:00",
+    "sustainability_score": 80,
+    "sustainability_rating": "Excellent",
+    "warnings": []
+  },
+  "earnings_analysis": {
+    "current_eps": 7.91,
+    "forward_eps": null,
+    "eps_growth_1y": 22.69736842105263,
+    "eps_growth_3y_cagr": 6.880679389561806,
+    "next_earnings_date": null,
+    "next_earnings_estimate": null,
+    "recent_surprises": [
+      {
+        "quarter": "",
+        "eps_actual": 1.65,
+        "eps_estimate": 1.62253,
+        "surprise_pct": 1.6900001000000002
+      },
+      {
+        "quarter": "",
+        "eps_actual": 1.57,
+        "eps_estimate": 1.42572,
+        "surprise_pct": 10.12
+      },
+      {
+        "quarter": "",
+        "eps_actual": 1.85,
+        "eps_estimate": 1.76993,
+        "surprise_pct": 4.52
+      },
+      {
+        "quarter": "",
+        "eps_actual": 2.84,
+        "eps_estimate": 2.6708,
+        "surprise_pct": 6.34
+      }
+    ],
+    "surprise_stats": {
+      "avg_surprise_pct": 5.667500025,
+      "positive_surprises": 4,
+      "negative_surprises": 0,
+      "beat_rate": 100.0
+    },
+    "earnings_quality": {
+      "assessment": "Fair Quality (moderate cash backing)",
+      "score": 50,
+      "metrics": {
+        "cash_flow_to_earnings_ratio": 0.995286135166503,
+        "accruals_pct": 0.4713864833497009
+      }
+    },
+    "trend": "Strong Growth"
+  }
+}

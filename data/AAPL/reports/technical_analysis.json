@@ -1,0 +1,69 @@
+{
+  "statistics": {
+    "price": {
+      "current": 258.2550048828125,
+      "high": 286.19000244140625,
+      "high_date": "2025-12-02",
+      "low": 171.83242797851562,
+      "low_date": "2025-04-08",
+      "mean": 233.72037984454442,
+      "std_dev": 27.407030112517173,
+      "std_dev_pct": 11.726418607888
+    },
+    "returns": {
+      "period_return_pct": 9.189378057302585,
+      "daily_volatility_pct": 2.0044016257779598,
+      "annual_volatility_pct": 31.818889375812205
+    },
+    "volume": {
+      "current": 21584652.0,
+      "average": 53448069.65079365,
+      "max": 184395900.0,
+      "max_date": "2025-04-09",
+      "min": 17910600.0,
+      "volume_vs_avg_pct": -59.61565657838591
+    }
+  },
+  "latest_values": {
+    "date": "2026-01-30",
+    "close_price": 258.2550048828125,
+    "indicators": {
+      "Dividends": 0.0,
+      "Stock Splits": 0.0,
+      "SMA_20": 257.58824768066404,
+      "SMA_50": 268.2706982421875,
+      "SMA_200": 236.37244270324706,
+      "EMA_12": 256.4395390182244,
+      "EMA_26": 260.046575442301,
+      "MACD": -3.6070364240765684,
+      "MACD_signal": -4.50811802233121,
+      "MACD_diff": 0.9010815982546418,
+      "RSI_14": 46.284794264403466,
+      "Stoch_K": 80.05933877532871,
+      "Stoch_D": 76.83932224567262,
+      "Williams_R_14": -19.940661224671295,
+      "BB_upper": 269.7526255901492,
+      "BB_middle": 257.58824768066404,
+      "BB_lower": 245.42386977117886,
+      "ATR_14": 5.242127147079707,
+      "ADX_14": 28.14189914230614,
+      "OBV": 638538648.0,
+      "VWAP": 254.7665762993847,
+      "MFI_14": 44.000722314454215
+    }
+  },
+  "signals": {
+    "RSI": "Neutral (46.3)",
+    "MACD": "Bullish",
+    "MA_Trend": "Bullish (Golden Cross)",
+    "Bollinger_Bands": "Price within bands - normal",
+    "ADX": "Strong trend (28.1)",
+    "MFI": "Neutral (44.0)",
+    "Williams_R": "Overbought (>-20) - potential reversal"
+  },
+  "data_points": 252,
+  "date_range": {
+    "start": "2025-01-30",
+    "end": "2026-01-30"
+  }
+}

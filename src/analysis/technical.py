@@ -12,6 +12,7 @@ import pandas as pd
 # Import ta submodules
 from ta import momentum, trend, volatility, volume
 
+from ..utils.report import get_currency_symbol
 from ..utils.serialization import format_date
 
 logger = logging.getLogger(__name__)
@@ -25,13 +26,14 @@ class TechnicalAnalyzer:
     Separates concerns: price data storage vs. indicator calculation.
     """
 
-    def __init__(self, price_data: pd.DataFrame):
+    def __init__(self, price_data: pd.DataFrame, currency: str = "USD"):
         """
         Initialize analyzer with price data
 
         Args:
             price_data: DataFrame with OHLCV columns (Open, High, Low, Close, Volume)
                        Must have datetime index
+            currency: ISO 4217 currency code (e.g., 'USD', 'NOK', 'CAD')
         """
 
         # Validate required columns
@@ -41,6 +43,7 @@ class TechnicalAnalyzer:
             raise ValueError(f"Missing required columns: {missing}")
 
         self.df = price_data.copy()
+        self.currency = currency
 
     # ==================== Trend Indicators ====================
 
@@ -509,6 +512,9 @@ class TechnicalAnalyzer:
             md.append("*No data available for technical analysis*")
             return md
 
+        # Get currency symbol
+        symbol = get_currency_symbol(self.currency)
+
         # Data range - format dates from index
         start_date = str(self.df.index[0])[:10]  # Get YYYY-MM-DD portion
         end_date = str(self.df.index[-1])[:10]
@@ -527,16 +533,16 @@ class TechnicalAnalyzer:
             # Price statistics
             price = stats.get("price", {})
             if price:
-                md.append(f"| Current Price | ${price.get('current', 0):.2f} |")
+                md.append(f"| Current Price | {symbol}{price.get('current', 0):.2f} |")
                 md.append(
-                    f"| Period High | ${price.get('high', 0):.2f} ({price.get('high_date', 'N/A')}) |"
+                    f"| Period High | {symbol}{price.get('high', 0):.2f} ({price.get('high_date', 'N/A')}) |"
                 )
                 md.append(
-                    f"| Period Low | ${price.get('low', 0):.2f} ({price.get('low_date', 'N/A')}) |"
+                    f"| Period Low | {symbol}{price.get('low', 0):.2f} ({price.get('low_date', 'N/A')}) |"
                 )
-                md.append(f"| Mean Price | ${price.get('mean', 0):.2f} |")
+                md.append(f"| Mean Price | {symbol}{price.get('mean', 0):.2f} |")
                 md.append(
-                    f"| Std Deviation | ${price.get('std_dev', 0):.2f} ({price.get('std_dev_pct', 0):.1f}%) |"
+                    f"| Std Deviation | {symbol}{price.get('std_dev', 0):.2f} ({price.get('std_dev_pct', 0):.1f}%) |"
                 )
 
             # Returns
@@ -560,7 +566,7 @@ class TechnicalAnalyzer:
 
         # Latest values
         latest_data = self.get_latest_values()
-        md.append(f"### Current Price: ${latest_data['close_price']:.2f}")
+        md.append(f"### Current Price: {symbol}{latest_data['close_price']:.2f}")
         md.append(f"*As of {latest_data['date']}*")
         md.append("")
 
@@ -583,7 +589,7 @@ class TechnicalAnalyzer:
         md.append("|-----------|-------|")
         for key in ["SMA_20", "SMA_50", "SMA_200", "EMA_12", "EMA_26"]:
             if key in indicators and indicators[key] is not None:
-                md.append(f"| {key} | ${indicators[key]:.2f} |")
+                md.append(f"| {key} | {symbol}{indicators[key]:.2f} |")
 
         if "MACD" in indicators and indicators["MACD"] is not None:
             md.append(f"| MACD | {indicators['MACD']:.4f} |")
@@ -648,15 +654,15 @@ class TechnicalAnalyzer:
             else:
                 bb_pos = "Lower half"
 
-            md.append(f"| Bollinger Upper | ${bb_upper:.2f} | {bb_pos} |")
-            md.append(f"| Bollinger Middle | ${bb_middle:.2f} | |")
-            md.append(f"| Bollinger Lower | ${bb_lower:.2f} | |")
+            md.append(f"| Bollinger Upper | {symbol}{bb_upper:.2f} | {bb_pos} |")
+            md.append(f"| Bollinger Middle | {symbol}{bb_middle:.2f} | |")
+            md.append(f"| Bollinger Lower | {symbol}{bb_lower:.2f} | |")
         else:
             # Fallback if not all BB values available
             for key in bb_keys:
                 if key in indicators and indicators[key] is not None:
                     label = key.replace("BB_", "Bollinger ").replace("_", " ").title()
-                    md.append(f"| {label} | ${indicators[key]:.2f} | |")
+                    md.append(f"| {label} | {symbol}{indicators[key]:.2f} | |")
 
         if "ATR_14" in indicators and indicators["ATR_14"] is not None:
             current_atr = indicators["ATR_14"]
@@ -674,7 +680,7 @@ class TechnicalAnalyzer:
                     atr_interp = "Volatility measure"
             else:
                 atr_interp = "Volatility measure"
-            md.append(f"| ATR (14) | ${current_atr:.2f} | {atr_interp} |")
+            md.append(f"| ATR (14) | {symbol}{current_atr:.2f} | {atr_interp} |")
 
         if "ADX_14" in indicators and indicators["ADX_14"] is not None:
             adx = indicators["ADX_14"]
@@ -691,7 +697,7 @@ class TechnicalAnalyzer:
         if "OBV" in indicators and indicators["OBV"] is not None:
             md.append(f"| OBV | {indicators['OBV']:,.0f} |")
         if "VWAP" in indicators and indicators["VWAP"] is not None:
-            md.append(f"| VWAP | ${indicators['VWAP']:.2f} |")
+            md.append(f"| VWAP | {symbol}{indicators['VWAP']:.2f} |")
         md.append("")
 
         # Recent Price Action (last 5 days)
