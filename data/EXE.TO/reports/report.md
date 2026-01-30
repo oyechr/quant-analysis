@@ -1,6 +1,6 @@
 # EXE.TO - Comprehensive Stock Report
 
-**Generated:** 2026-01-30T11:04:59.923592
+**Generated:** 2026-01-30T12:07:28.409373
 
 **Period:** 1y
 
@@ -269,6 +269,8 @@
 **Annualized Volatility:** 30.54%
 **Sharpe Ratio:** 2.94
 **Sortino Ratio:** 6.43
+**Information Ratio:** 2.36
+**Calmar Ratio:** 8.46
 
 ### Drawdown
 

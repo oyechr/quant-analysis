@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from .fundamental_analysis import FundamentalAnalyzer
+from .report_utils import format_number, format_percent, safe_get
 
 logger = logging.getLogger(__name__)
 
@@ -73,65 +74,34 @@ class InfoSection(ReportSection):
     def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
         md = []
         md.append("\n## Company Information")
-        md.append(f"\n- **Name:** {raw_data.get('name', 'N/A')}")
-        md.append(f"- **Sector:** {raw_data.get('sector', 'N/A')}")
-        md.append(f"- **Industry:** {raw_data.get('industry', 'N/A')}")
-        md.append(f"- **Exchange:** {raw_data.get('exchange', 'N/A')}")
-        md.append(f"- **Currency:** {raw_data.get('currency', 'N/A')}")
+        md.append(f"\n- **Name:** {safe_get(raw_data, 'name')}")
+        md.append(f"- **Sector:** {safe_get(raw_data, 'sector')}")
+        md.append(f"- **Industry:** {safe_get(raw_data, 'industry')}")
+        md.append(f"- **Exchange:** {safe_get(raw_data, 'exchange')}")
+        md.append(f"- **Currency:** {safe_get(raw_data, 'currency')}")
         if raw_data.get("website") != "N/A":
             md.append(f"- **Website:** {raw_data.get('website')}")
 
         md.append("\n## Valuation Metrics")
-        md.append(f"\n- **Market Cap:** {self._format_number(raw_data.get('market_cap'))}")
-        md.append(f"- **P/E Ratio:** {self._format_number(raw_data.get('pe_ratio'))}")
-        md.append(f"- **Forward P/E:** {self._format_number(raw_data.get('forward_pe'))}")
-        md.append(f"- **PEG Ratio:** {self._format_number(raw_data.get('peg_ratio'))}")
-        md.append(f"- **Price/Book:** {self._format_number(raw_data.get('price_to_book'))}")
-        md.append(f"- **Price/Sales:** {self._format_number(raw_data.get('price_to_sales'))}")
+        md.append(f"\n- **Market Cap:** {format_number(raw_data.get('market_cap'))}")
+        md.append(f"- **P/E Ratio:** {safe_get(raw_data, 'pe_ratio', formatter=lambda x: f'{x:.2f}')}")
+        md.append(f"- **Forward P/E:** {safe_get(raw_data, 'forward_pe', formatter=lambda x: f'{x:.2f}')}")
+        md.append(f"- **PEG Ratio:** {safe_get(raw_data, 'peg_ratio', formatter=lambda x: f'{x:.2f}')}")
+        md.append(f"- **Price/Book:** {safe_get(raw_data, 'price_to_book', formatter=lambda x: f'{x:.2f}')}")
+        md.append(f"- **Price/Sales:** {safe_get(raw_data, 'price_to_sales', formatter=lambda x: f'{x:.2f}')}")
 
         md.append("\n## Financial Health")
-        md.append(f"\n- **Profit Margin:** {self._format_percent(raw_data.get('profit_margin'))}")
+        md.append(f"\n- **Profit Margin:** {format_percent(raw_data.get('profit_margin'))}")
         md.append(
-            f"- **Operating Margin:** {self._format_percent(raw_data.get('operating_margin'))}"
+            f"- **Operating Margin:** {format_percent(raw_data.get('operating_margin'))}"
         )
-        md.append(f"- **ROE:** {self._format_percent(raw_data.get('roe'))}")
-        md.append(f"- **ROA:** {self._format_percent(raw_data.get('roa'))}")
-        md.append(f"- **Debt/Equity:** {self._format_number(raw_data.get('debt_to_equity'))}")
-        md.append(f"- **Current Ratio:** {self._format_number(raw_data.get('current_ratio'))}")
-        md.append(f"- **Quick Ratio:** {self._format_number(raw_data.get('quick_ratio'))}")
+        md.append(f"- **ROE:** {format_percent(raw_data.get('roe'))}")
+        md.append(f"- **ROA:** {format_percent(raw_data.get('roa'))}")
+        md.append(f"- **Debt/Equity:** {safe_get(raw_data, 'debt_to_equity', formatter=lambda x: f'{x:.2f}')}")
+        md.append(f"- **Current Ratio:** {safe_get(raw_data, 'current_ratio', formatter=lambda x: f'{x:.2f}')}")
+        md.append(f"- **Quick Ratio:** {safe_get(raw_data, 'quick_ratio', formatter=lambda x: f'{x:.2f}')}")
 
         return md
-
-    def _format_number(self, value: Any) -> str:
-        if value is None:
-            return "N/A"
-        try:
-            if isinstance(value, (int, float)):
-                if value > 1e9:
-                    return f"${value/1e9:.2f}B"
-                elif value > 1e6:
-                    return f"${value/1e6:.2f}M"
-                elif value > 1000:
-                    return f"{value:,.2f}"
-                else:
-                    return f"{value:.2f}"
-            return str(value)
-        except:
-            return "N/A"
-
-    def _format_percent(self, value: Any) -> str:
-        if value is None:
-            return "N/A"
-        try:
-            if isinstance(value, (int, float)):
-                if value < 1:
-                    return f"{value*100:.2f}%"
-                else:
-                    return f"{value:.2f}%"
-            return str(value)
-        except:
-            return "N/A"
-
 
 class PriceDataSection(ReportSection):
     """Price data section"""
@@ -256,23 +226,10 @@ class EarningsSection(ReportSection):
             md.append("|---------|-----------|--------------|------------|-----------|")
             for e in raw_data["latest_earnings"]:
                 md.append(
-                    f"| {e.get('quarter', 'N/A')} | {e.get('epsActual', 'N/A')} | {e.get('epsEstimate', 'N/A')} | {e.get('epsDifference', 'N/A')} | {self._format_percent(e.get('surprisePercent'))} |"
+                    f"| {e.get('quarter', 'N/A')} | {e.get('epsActual', 'N/A')} | {e.get('epsEstimate', 'N/A')} | {e.get('epsDifference', 'N/A')} | {format_percent(e.get('surprisePercent'))} |"
                 )
 
         return md
-
-    def _format_percent(self, value: Any) -> str:
-        if value is None:
-            return "N/A"
-        try:
-            if isinstance(value, (int, float)):
-                if value < 1:
-                    return f"{value*100:.2f}%"
-                else:
-                    return f"{value:.2f}%"
-            return str(value)
-        except:
-            return "N/A"
 
 
 class HoldersSection(ReportSection):
@@ -316,26 +273,13 @@ class HoldersSection(ReportSection):
             md.append("\n| Holder | % Held | Shares | Value |")
             md.append("|--------|--------|--------|-------|")
             for h in raw_data["top_institutional"]:
-                pct = self._format_percent(h.get("pctHeld"))
+                pct = format_percent(h.get("pctHeld"))
                 shares = f"{h.get('Shares', 0):,}" if h.get("Shares") else "N/A"
                 value = f"${h.get('Value', 0):,}" if h.get("Value") else "N/A"
                 holder_name = str(h.get("Holder", "N/A"))[:50]
                 md.append(f"| {holder_name} | {pct} | {shares} | {value} |")
 
         return md
-
-    def _format_percent(self, value: Any) -> str:
-        if value is None:
-            return "N/A"
-        try:
-            if isinstance(value, (int, float)):
-                if value < 1:
-                    return f"{value*100:.2f}%"
-                else:
-                    return f"{value:.2f}%"
-            return str(value)
-        except:
-            return "N/A"
 
 
 class DividendsSection(ReportSection):
@@ -680,12 +624,16 @@ class RiskAnalysisSection(ReportSection):
             vol = metrics["volatility"]
             sharpe = metrics.get("sharpe_ratio", 0)
             sortino = metrics.get("sortino_ratio", 0)
+            information = metrics.get("information_ratio", 0)
+            calmar = metrics.get("calmar_ratio", 0)
 
             md.append("### Risk Metrics")
             md.append("")
             md.append(f"**Annualized Volatility:** {vol.get('annualized_volatility', 0):.2%}")
             md.append(f"**Sharpe Ratio:** {sharpe:.2f}")
             md.append(f"**Sortino Ratio:** {sortino:.2f}")
+            md.append(f"**Information Ratio:** {information:.2f}")
+            md.append(f"**Calmar Ratio:** {calmar:.2f}")
             md.append("")
 
         # Drawdown

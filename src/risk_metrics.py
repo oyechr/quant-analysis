@@ -11,7 +11,7 @@ Calculates risk and performance metrics for stock analysis:
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import numpy as np
 import pandas as pd
@@ -26,6 +26,7 @@ from src.financial_utils import (
     validate_price_data,
     convert_annual_to_daily_rate,
 )
+from src.report_utils import validate_dataframe, log_calculation_error
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ class RiskMetrics:
         Returns:
             Dictionary with volatility metrics
         """
-        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+        if not validate_dataframe(price_data, required_columns=["Close"]):
             logger.warning("Invalid price data for volatility calculation")
             return {}
 
@@ -151,7 +152,7 @@ class RiskMetrics:
         Returns:
             Sharpe ratio (annualized)
         """
-        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+        if not validate_dataframe(price_data, required_columns=["Close"]):
             logger.warning("Invalid price data for Sharpe ratio")
             return 0.0
 
@@ -192,7 +193,7 @@ class RiskMetrics:
         Returns:
             Sortino ratio (annualized)
         """
-        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+        if not validate_dataframe(price_data, required_columns=["Close"]):
             logger.warning("Invalid price data for Sortino ratio")
             return 0.0
 
@@ -237,7 +238,7 @@ class RiskMetrics:
         Returns:
             Dictionary with maximum drawdown, current drawdown, recovery time
         """
-        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+        if not validate_dataframe(price_data, required_columns=["Close"]):
             logger.warning("Invalid price data for drawdown calculation")
             return {}
 
@@ -301,7 +302,7 @@ class RiskMetrics:
         Returns:
             Dictionary with beta, alpha, correlation
         """
-        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+        if not validate_dataframe(price_data, required_columns=["Close"]):
             logger.warning("Invalid price data for beta/alpha calculation")
             return {}
 
@@ -420,6 +421,187 @@ class RiskMetrics:
             logger.error(f"Error calculating VaR: {e}")
             return {}
 
+    def calculate_information_ratio(
+        self, price_data: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None
+    ) -> float:
+        """
+        Calculate Information Ratio (active return / tracking error)
+
+        Measures risk-adjusted excess return vs benchmark. Higher is better.
+        IR > 0.5 is good, IR > 1.0 is excellent.
+
+        Args:
+            price_data: DataFrame with 'Close' prices
+            benchmark_data: DataFrame with benchmark 'Close' prices (fetches if None)
+
+        Returns:
+            Information ratio
+        """
+        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+            logger.warning("Invalid price data for Information Ratio")
+            return 0.0
+
+        try:
+            # Fetch benchmark if not provided
+            if benchmark_data is None or benchmark_data.empty:
+                from .data_fetcher import DataFetcher
+                fetcher = DataFetcher()
+                start_date = price_data.index.min()
+                end_date = price_data.index.max()
+                benchmark_data = fetcher.fetch_ticker(
+                    self.config.benchmark_ticker,
+                    start=start_date.strftime("%Y-%m-%d"),
+                    end=end_date.strftime("%Y-%m-%d"),
+                )
+
+            if benchmark_data is None or benchmark_data.empty:
+                logger.warning("Benchmark data not available for Information Ratio")
+                return 0.0
+
+            # Calculate daily returns
+            stock_returns = price_data["Close"].pct_change().dropna()
+            benchmark_returns = benchmark_data["Close"].pct_change().dropna()
+
+            # Align data
+            aligned = pd.DataFrame({"stock": stock_returns, "benchmark": benchmark_returns}).dropna()
+
+            if aligned.empty or len(aligned) < 2:
+                return 0.0
+
+            # Active returns (excess return over benchmark)
+            active_returns = aligned["stock"] - aligned["benchmark"]
+
+            # Tracking error (volatility of active returns)
+            tracking_error = active_returns.std()
+
+            if tracking_error == 0:
+                return 0.0
+
+            # Information Ratio (annualized)
+            mean_active_return = active_returns.mean()
+            information_ratio = (mean_active_return / tracking_error) * np.sqrt(TRADING_DAYS_PER_YEAR)
+
+            return to_float(information_ratio)
+
+        except Exception as e:
+            logger.error(f"Error calculating Information Ratio: {e}")
+            return 0.0
+
+    def calculate_calmar_ratio(self, price_data: pd.DataFrame) -> float:
+        """
+        Calculate Calmar Ratio (annualized return / max drawdown)
+
+        Measures return per unit of downside risk. Higher is better.
+        Calmar > 1.0 is good, > 3.0 is excellent.
+
+        Args:
+            price_data: DataFrame with 'Close' prices
+
+        Returns:
+            Calmar ratio
+        """
+        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+            logger.warning("Invalid price data for Calmar Ratio")
+            return 0.0
+
+        try:
+            # Get annualized return
+            returns_metrics = self.calculate_returns(price_data)
+            annualized_return = returns_metrics.get("annualized_return", 0.0)
+
+            # Get max drawdown
+            drawdown_metrics = self.calculate_drawdown(price_data)
+            max_drawdown = abs(drawdown_metrics.get("max_drawdown", 0.0))
+
+            if max_drawdown == 0:
+                return 0.0
+
+            calmar = annualized_return / max_drawdown
+
+            return float(calmar)
+
+        except Exception as e:
+            logger.error(f"Error calculating Calmar Ratio: {e}")
+            return 0.0
+
+    def calculate_rolling_ratios(
+        self, price_data: pd.DataFrame, windows: List[int] = [30, 60, 90]
+    ) -> Dict[str, Any]:
+        """
+        Calculate rolling Sharpe and Sortino ratios over different windows
+
+        Args:
+            price_data: DataFrame with 'Close' prices
+            windows: List of rolling window sizes in days
+
+        Returns:
+            Dictionary with rolling ratio statistics for each window
+        """
+        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+            logger.warning("Invalid price data for rolling ratios")
+            return {}
+
+        try:
+            daily_returns = price_data["Close"].pct_change().dropna()
+
+            if len(daily_returns) < max(windows):
+                logger.warning(f"Insufficient data for rolling ratios (need {max(windows)} days)")
+                return {}
+
+            # Daily risk-free rate
+            rf_rate = self.config.risk_free_rate
+            daily_rf = convert_annual_to_daily_rate(rf_rate)
+
+            results = {}
+
+            for window in windows:
+                if len(daily_returns) < window:
+                    continue
+
+                # Rolling Sharpe
+                excess_returns = daily_returns - daily_rf
+                rolling_mean = excess_returns.rolling(window=window).mean()
+                rolling_std = excess_returns.rolling(window=window).std()
+                rolling_sharpe = (rolling_mean / rolling_std) * np.sqrt(TRADING_DAYS_PER_YEAR)
+
+                # Rolling Sortino
+                def calculate_downside_std(window_returns):
+                    downside = window_returns[window_returns < 0]
+                    return downside.std() if len(downside) > 0 else np.nan
+
+                rolling_downside_std = excess_returns.rolling(window=window).apply(
+                    calculate_downside_std, raw=False
+                )
+                rolling_sortino = (rolling_mean / rolling_downside_std) * np.sqrt(TRADING_DAYS_PER_YEAR)
+
+                # Drop NaN values
+                rolling_sharpe = rolling_sharpe.dropna()
+                rolling_sortino = rolling_sortino.dropna()
+
+                if not rolling_sharpe.empty:
+                    results[f"sharpe_{window}d"] = {
+                        "current": to_float(rolling_sharpe.iloc[-1]),
+                        "mean": to_float(rolling_sharpe.mean()),
+                        "min": to_float(rolling_sharpe.min()),
+                        "max": to_float(rolling_sharpe.max()),
+                        "std": to_float(rolling_sharpe.std()),
+                    }
+
+                if not rolling_sortino.empty:
+                    results[f"sortino_{window}d"] = {
+                        "current": to_float(rolling_sortino.iloc[-1]),
+                        "mean": to_float(rolling_sortino.mean()),
+                        "min": to_float(rolling_sortino.min()),
+                        "max": to_float(rolling_sortino.max()),
+                        "std": to_float(rolling_sortino.std()),
+                    }
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Error calculating rolling ratios: {e}")
+            return {}
+
     def calculate_all_metrics(self, price_data: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
         """
         Calculate all risk metrics
@@ -443,10 +625,13 @@ class RiskMetrics:
                 "volatility": self.calculate_volatility(price_data),
                 "sharpe_ratio": self.calculate_sharpe_ratio(price_data),
                 "sortino_ratio": self.calculate_sortino_ratio(price_data),
+                "information_ratio": self.calculate_information_ratio(price_data, benchmark_data),
+                "calmar_ratio": self.calculate_calmar_ratio(price_data),
                 "drawdown": self.calculate_drawdown(price_data),
                 "market_risk": self.calculate_beta_alpha(price_data, benchmark_data),
                 "var_95": self.calculate_var(price_data, confidence_level=0.95),
                 "var_99": self.calculate_var(price_data, confidence_level=0.99),
+                "rolling_ratios": self.calculate_rolling_ratios(price_data),
             }
 
             logger.info("Risk metrics calculation complete")

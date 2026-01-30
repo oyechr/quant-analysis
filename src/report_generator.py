@@ -389,6 +389,9 @@ class ReportGenerator:
         md.append("")
         sharpe = metrics.get("sharpe_ratio", 0)
         sortino = metrics.get("sortino_ratio", 0)
+        information = metrics.get("information_ratio", 0)
+        calmar = metrics.get("calmar_ratio", 0)
+
         md.append(f"- **Sharpe Ratio:** {sharpe:.2f}")
         if sharpe > 1:
             md.append("  - Good risk-adjusted performance")
@@ -397,10 +400,33 @@ class ReportGenerator:
         else:
             md.append("  - Underperforming risk-free rate")
         md.append("")
+
         md.append(f"- **Sortino Ratio:** {sortino:.2f}")
         if sortino > sharpe:
             md.append("  - Better downside risk profile than overall volatility suggests")
         md.append("  - (Higher is better - focuses on downside risk)")
+        md.append("")
+
+        md.append(f"- **Information Ratio:** {information:.2f}")
+        if information > 1.0:
+            md.append("  - Excellent active management (outperforming benchmark)")
+        elif information > 0.5:
+            md.append("  - Good active management")
+        elif information > 0:
+            md.append("  - Positive excess return vs benchmark")
+        else:
+            md.append("  - Underperforming benchmark")
+        md.append("  - (Measures skill vs benchmark - accounts for tracking error)")
+        md.append("")
+
+        md.append(f"- **Calmar Ratio:** {calmar:.2f}")
+        if calmar > 3.0:
+            md.append("  - Excellent return relative to maximum drawdown")
+        elif calmar > 1.0:
+            md.append("  - Good return-to-drawdown ratio")
+        else:
+            md.append("  - High drawdown risk relative to return")
+        md.append("  - (Return per unit of maximum loss)")
         md.append("")
 
         # Drawdown Analysis
@@ -461,6 +487,38 @@ class ReportGenerator:
             md.append("")
             md.append(f"**Worst Historical Day:** {var99.get('worst_day', 0):.2%}")
             md.append("")
+
+        # Rolling Risk-Adjusted Ratios
+        md.append("## Rolling Risk-Adjusted Ratios")
+        md.append("")
+        if "rolling_ratios" in metrics and metrics["rolling_ratios"]:
+            rolling = metrics["rolling_ratios"]
+            md.append("*Performance consistency over different time windows*")
+            md.append("")
+
+            for window_key in ["sharpe_30d", "sharpe_60d", "sharpe_90d"]:
+                if window_key in rolling:
+                    window_days = window_key.split("_")[1]
+                    data = rolling[window_key]
+                    md.append(f"### {window_days.upper()} Rolling Sharpe Ratio")
+                    md.append("")
+                    md.append(f"- **Current:** {data.get('current', 0):.2f}")
+                    md.append(f"- **Mean:** {data.get('mean', 0):.2f}")
+                    md.append(f"- **Range:** {data.get('min', 0):.2f} to {data.get('max', 0):.2f}")
+                    md.append(f"- **Std Dev:** {data.get('std', 0):.2f}")
+                    md.append("")
+
+            for window_key in ["sortino_30d", "sortino_60d", "sortino_90d"]:
+                if window_key in rolling:
+                    window_days = window_key.split("_")[1]
+                    data = rolling[window_key]
+                    md.append(f"### {window_days.upper()} Rolling Sortino Ratio")
+                    md.append("")
+                    md.append(f"- **Current:** {data.get('current', 0):.2f}")
+                    md.append(f"- **Mean:** {data.get('mean', 0):.2f}")
+                    md.append(f"- **Range:** {data.get('min', 0):.2f} to {data.get('max', 0):.2f}")
+                    md.append(f"- **Std Dev:** {data.get('std', 0):.2f}")
+                    md.append("")
 
         # Write file
         with open(output_file, "w", encoding="utf-8") as f:
