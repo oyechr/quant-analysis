@@ -95,15 +95,15 @@ python examples/08_test_valuation.py
 **Command-Line Interface:**
 
 ```bash
-# Basic usage (includes technical + fundamental analysis)
+# Basic usage (includes all analyses: technical, fundamental, risk, valuation)
 python examples/04_generate_report.py AAPL
 
 # Custom period (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)
 python examples/04_generate_report.py TSLA --period 2y
 
-# Skip technical or fundamental analysis
-python examples/04_generate_report.py MSFT --no-technical
-python examples/04_generate_report.py NVDA --no-fundamental
+# Exclude specific analyses (all included by default)
+python examples/04_generate_report.py MSFT --exclude-technical
+python examples/04_generate_report.py NVDA --exclude-fundamental --exclude-risk
 
 # Output format options
 python examples/04_generate_report.py GOOGL --format json
@@ -118,30 +118,37 @@ python examples/04_generate_report.py --help
 
 **Features:**
 
-- Generating full stock reports (JSON + Markdown)
+- Generating comprehensive stock reports (JSON + Markdown)
 - Integrating multiple data sources
-- Optional technical analysis (timing signals)
-- Optional fundamental analysis (intrinsic value)
-- Report section modularity
-- Command-line arguments for flexibility
+- Technical analysis with 16+ indicators (timing signals) - included by default
+- Fundamental analysis with growth, margins, efficiency, quality scores - included by default
+- Risk metrics (Sharpe, Sortino, VaR, drawdowns) - included by default
+- Valuation analysis (DCF, DDM, dividends, earnings) - included by default
+- All analyses optional via --exclude-X flags
 
 **Output:**
 
 ```
 data/TICKER/reports/
 ├── full_report.json              # Complete data aggregation
-├── report.md                     # Human-readable report
-├── technical_analysis.json       # Technical indicators (if enabled)
-├── technical_analysis.md         # Entry/exit signals (if enabled)
-├── fundamental_analysis.json     # Fundamental metrics (if enabled)
-└── fundamental_analysis.md       # Valuation analysis (if enabled)
+├── report.md                     # Human-readable summary report
+├── technical_analysis.json       # Technical indicators & signals
+├── technical_analysis.md         # Entry/exit timing signals
+├── fundamental_analysis.json     # Growth, margins, efficiency metrics
+├── fundamental_analysis.md       # Detailed fundamental analysis
+├── risk_analysis.json            # Risk-adjusted returns & metrics
+├── risk_analysis.md              # Detailed risk report
+├── valuation_analysis.json       # DCF, DDM, intrinsic value
+└── valuation_analysis.md         # Detailed valuation report
 ```
 
-**Features:**
+**Comprehensive Coverage:**
 
 - Aggregates price data, fundamentals, earnings, holders, dividends, ratings, news
-- Optional technical analysis with 16+ indicators (timing signals)
-- Optional fundamental analysis with growth, margins, efficiency, quality scores (intrinsic value)
+- Technical analysis: 16+ indicators (SMA, EMA, MACD, RSI, Bollinger Bands, etc.)
+- Fundamental analysis: Growth rates, FCF metrics, margins, DuPont, quality scores
+- Risk analysis: Sharpe/Sortino ratios, VaR, drawdowns, volatility, beta
+- Valuation analysis: DCF/DDM models, dividend sustainability, earnings quality
 - Markdown formatting for readability
 - Automatic cache/report separation
 
@@ -272,12 +279,16 @@ data/
       analyst_ratings.json
       news.json
     reports/                    # Analysis outputs (tracked)
-      full_report.json          # Comprehensive report
-      report.md                 # Markdown report
-      technical_analysis.json   # Technical indicators (timing)
-      technical_analysis.md     # Detailed technical report
-      fundamental_analysis.json # Fundamental metrics (value)
-      fundamental_analysis.md   # Detailed fundamental report
+      full_report.json          # Complete data aggregation
+      report.md                 # Human-readable summary report
+      technical_analysis.json   # Technical indicators & signals
+      technical_analysis.md     # Detailed technical analysis
+      fundamental_analysis.json # Growth, margins, efficiency metrics
+      fundamental_analysis.md   # Detailed fundamental analysis
+      risk_analysis.json        # Risk-adjusted returns & metrics
+      risk_analysis.md          # Detailed risk analysis
+      valuation_analysis.json   # DCF, DDM, intrinsic value
+      valuation_analysis.md     # Detailed valuation analysis
 ```
 
 **Why separate cache and reports?**
@@ -331,13 +342,14 @@ for ticker in tickers:
 
 **Completed Features:**
 
-- ✅ Data fetching with caching
-- ✅ Technical analysis (16+ indicators)
-- ✅ Fundamental analysis (growth, margins, efficiency, quality scores)
-- ✅ Comprehensive reporting (JSON + Markdown)
-- ✅ Risk metrics (Sharpe, Sortino, Calmar, VaR, Beta, drawdowns)
-- ✅ Valuation analysis (DCF, DDM, dividend/earnings)
-- ✅ Multi-currency support
+- ✅ Data fetching with intelligent caching
+- ✅ Technical analysis (16+ indicators: SMA, EMA, MACD, RSI, Bollinger Bands, etc.)
+- ✅ Fundamental analysis (growth rates, FCF metrics, margins, DuPont, Altman Z, Piotroski F)
+- ✅ Risk analysis (Sharpe, Sortino, Calmar ratios, VaR 95/99, beta, drawdowns)
+- ✅ Valuation analysis (DCF, DDM models, dividend sustainability, earnings quality)
+- ✅ Comprehensive reporting (JSON + Markdown, 10 files per ticker)
+- ✅ Multi-currency support (USD, CAD, NOK, EUR, GBP, JPY, SEK, DKK)
+- ✅ All analyses included by default (opt-out via --exclude-X flags)
 
 **Planned Enhancements:**
 

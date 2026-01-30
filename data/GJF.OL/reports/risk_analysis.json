@@ -33,14 +33,14 @@
     "confidence_level": 0.95,
     "var_historical": -0.01605327144039206,
     "cvar_historical": -0.029332815145589795,
-    "var_parametric": -0.020926341010337492,
+    "var_parametric": -0.019854739265658543,
     "worst_day": -0.051318580125661484
   },
   "var_99": {
     "confidence_level": 0.99,
     "var_historical": -0.03577061523160884,
     "cvar_historical": -0.044354330984609315,
-    "var_parametric": -0.02972925998863036,
+    "var_parametric": -0.02963861668574615,
     "worst_day": -0.051318580125661484
   },
   "rolling_ratios": {

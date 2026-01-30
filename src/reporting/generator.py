@@ -63,21 +63,26 @@ class ReportGenerator:
         period: str = "1y",
         output_format: str = "both",
         use_cache: bool = True,
-        include_technical: bool = False,
-        include_fundamental: bool = False,
-        include_risk: bool = False,
+        include_technical: bool = True,
+        include_fundamental: bool = True,
+        include_risk: bool = True,
+        include_valuation: bool = True,
     ) -> Dict[str, Any]:
         """
         Generate comprehensive report with all available data
+
+        By default, includes all analysis types (technical, fundamental, risk, valuation).
+        Set individual flags to False to exclude specific analyses.
 
         Args:
             ticker: Stock ticker symbol
             period: Period for price data (1mo, 3mo, 6mo, 1y, 2y, 5y, etc.)
             output_format: "json", "markdown", or "both"
             use_cache: Whether to use cached data
-            include_technical: Whether to include technical analysis (requires 1y period)
-            include_fundamental: Whether to include fundamental analysis
-            include_risk: Whether to include risk metrics and performance analysis
+            include_technical: Whether to include technical analysis (default: True)
+            include_fundamental: Whether to include fundamental analysis (default: True)
+            include_risk: Whether to include risk metrics and performance analysis (default: True)
+            include_valuation: Whether to include valuation analysis - DCF, DDM, dividends, earnings (default: True)
 
         Returns:
             Dictionary with all fetched data and metadata
@@ -154,13 +159,49 @@ class ReportGenerator:
                 logger.error(f"Error processing risk analysis: {e}")
                 report_data["risk_analysis"] = None
 
+        # Add valuation analysis if requested
+        valuation_analyzer = None
+        if include_valuation:
+            try:
+                from ..analysis import ValuationAnalyzer
+
+                # Fetch required data
+                price_data = self.fetcher.fetch_ticker(ticker, period="1y", use_cache=use_cache)
+                fundamentals = self.fetcher.fetch_fundamentals(ticker, use_cache=use_cache)
+                earnings_data = self.fetcher.fetch_earnings(ticker, use_cache=use_cache)
+                
+                # Fetch dividends and convert to Series
+                div_data = self.fetcher.fetch_dividends(ticker, use_cache=use_cache)
+                dividends_series = None
+                if div_data and div_data.get("dividends") is not None:
+                    dividends_df = div_data["dividends"]
+                    if not dividends_df.empty:
+                        dividends_series = dividends_df.set_index("Date")["Dividends"]
+
+                # Create analyzer
+                valuation_analyzer = ValuationAnalyzer(
+                    ticker=ticker,
+                    ticker_info=report_data.get("info", {}),
+                    price_data=price_data,
+                    fundamentals=fundamentals,
+                    earnings_data=earnings_data,
+                    dividends_data=dividends_series,
+                )
+
+                # Run analysis
+                valuation_results = valuation_analyzer.analyze()
+                report_data["valuation_analysis"] = valuation_results
+            except Exception as e:
+                logger.error(f"Error processing valuation analysis: {e}")
+                report_data["valuation_analysis"] = None
+
         # Save outputs
         if output_format in ["json", "both"]:
             self._save_json_report(ticker, report_data)
 
         if output_format in ["markdown", "both"]:
             self._save_markdown_report(
-                ticker, report_data, technical_analyzer, fundamental_analyzer, risk_analyzer_tuple
+                ticker, report_data, technical_analyzer, fundamental_analyzer, risk_analyzer_tuple, valuation_analyzer
             )
 
         logger.info(f"Report generation complete for {ticker}")
@@ -182,6 +223,7 @@ class ReportGenerator:
         technical_analyzer=None,
         fundamental_analyzer=None,
         risk_analyzer_tuple=None,
+        valuation_analyzer=None,
     ):
         """Save report as Markdown using section handlers"""
         reports_dir = self.output_dir / ticker / "reports"
@@ -247,6 +289,12 @@ class ReportGenerator:
         if risk_analyzer_tuple:
             self._save_risk_markdown(ticker, risk_analyzer_tuple)
             self._save_risk_json(ticker, risk_analyzer_tuple)
+
+        # Save detailed valuation analysis markdown if available
+        if valuation_analyzer:
+            self._save_valuation_markdown(ticker, valuation_analyzer)
+            valuation_results = valuation_analyzer.analyze()
+            self._save_valuation_json(ticker, valuation_results)
 
     def _save_technical_json(self, ticker: str, technical_analyzer):
         """Save detailed technical analysis as separate JSON file"""
@@ -530,6 +578,38 @@ class ReportGenerator:
             f.write("\n".join(md))
 
         logger.info(f"Risk analysis markdown saved: {output_file}")
+
+    def _save_valuation_json(self, ticker: str, valuation_data: Dict[str, Any]):
+        """Save detailed valuation analysis as separate JSON file"""
+        reports_dir = self.output_dir / ticker / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "valuation_analysis.json"
+
+        # Write file
+        with open(output_file, "w") as f:
+            json.dump(valuation_data, f, indent=2, default=str)
+
+        logger.info(f"Valuation analysis JSON saved: {output_file}")
+
+    def _save_valuation_markdown(self, ticker: str, valuation_analyzer):
+        """Save detailed valuation analysis as separate markdown file"""
+        reports_dir = self.output_dir / ticker / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "valuation_analysis.md"
+
+        md = []
+        md.append(f"# {ticker} - Valuation Analysis Report")
+        md.append("")
+        md.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # Get detailed markdown from analyzer
+        md.extend(valuation_analyzer.format_markdown())
+
+        # Write file
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(md))
+
+        logger.info(f"Valuation analysis markdown saved: {output_file}")
 
 
 # Convenience function

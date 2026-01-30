@@ -865,3 +865,184 @@ class ValuationAnalyzer:
             "dividend_analysis": self.analyze_dividends(),
             "earnings_analysis": self.analyze_earnings(),
         }
+
+    def format_markdown(self) -> List[str]:
+        """
+        Format valuation analysis as markdown report
+
+        Returns:
+            List of markdown lines
+        """
+        md = []
+        md.append("\n## Valuation Analysis")
+        md.append("")
+
+        results = self.analyze()
+        currency_symbols = {"USD": "$", "CAD": "CA$", "NOK": "kr", "EUR": "€", "GBP": "£"}
+        symbol = currency_symbols.get(self.currency, self.currency)
+
+        # DCF Valuation
+        md.append("### DCF (Discounted Cash Flow) Valuation")
+        md.append("")
+        dcf = results["dcf_valuation"]
+
+        if dcf.get("error"):
+            md.append(f"*{dcf['error']}*")
+            md.append("")
+        elif dcf.get("intrinsic_value_per_share"):
+            intrinsic = dcf["intrinsic_value_per_share"]
+            current = dcf.get("current_price", 0)
+            discount = dcf.get("discount_premium_pct", 0)
+
+            md.append("| Metric | Value |")
+            md.append("|--------|-------|")
+            md.append(f"| Intrinsic Value per Share | {symbol}{intrinsic:,.2f} |")
+            md.append(f"| Current Price | {symbol}{current:,.2f} |")
+            if discount:
+                direction = "Premium" if discount > 0 else "Discount"
+                md.append(f"| {direction} | {abs(discount):.1f}% |")
+            md.append("")
+
+            md.append("**Assumptions:**")
+            md.append("")
+            if dcf.get("fcf_current"):
+                md.append(f"- Current FCF: {symbol}{dcf['fcf_current']:,.0f}")
+            if dcf.get("growth_rate_used"):
+                md.append(f"- Growth Rate: {dcf['growth_rate_used']:.2f}%")
+            if dcf.get("terminal_growth_rate"):
+                md.append(f"- Terminal Growth: {dcf['terminal_growth_rate']:.2f}%")
+            if dcf.get("wacc_used"):
+                md.append(f"- WACC: {dcf['wacc_used']:.2f}%")
+            md.append("")
+        else:
+            md.append("*Insufficient data for DCF valuation*")
+            md.append("")
+
+        # DDM Valuation
+        md.append("### DDM (Dividend Discount Model) Valuation")
+        md.append("")
+        ddm = results["ddm_valuation"]
+
+        if ddm.get("error"):
+            md.append(f"*{ddm['error']}*")
+            md.append("")
+        elif ddm.get("intrinsic_value_per_share"):
+            intrinsic = ddm["intrinsic_value_per_share"]
+            current = ddm.get("current_price", 0)
+            discount = ddm.get("discount_premium_pct", 0)
+
+            md.append("| Metric | Value |")
+            md.append("|--------|-------|")
+            md.append(f"| Intrinsic Value per Share | {symbol}{intrinsic:,.2f} |")
+            md.append(f"| Current Price | {symbol}{current:,.2f} |")
+            if discount:
+                direction = "Premium" if discount > 0 else "Discount"
+                md.append(f"| {direction} | {abs(discount):.1f}% |")
+            md.append("")
+
+            md.append("**Assumptions:**")
+            md.append("")
+            if ddm.get("current_dividend"):
+                md.append(f"- Current Annual Dividend: {symbol}{ddm['current_dividend']:.2f}")
+            if ddm.get("growth_rate_used"):
+                md.append(f"- Dividend Growth Rate: {ddm['growth_rate_used']:.2f}%")
+            if ddm.get("required_return_used"):
+                md.append(f"- Required Return: {ddm['required_return_used']:.2f}%")
+            md.append("")
+        else:
+            md.append("*Insufficient data for DDM valuation*")
+            md.append("")
+
+        # Dividend Analysis
+        md.append("### Dividend Analysis")
+        md.append("")
+        div = results["dividend_analysis"]
+
+        if div.get("pays_dividends"):
+            md.append("| Metric | Value |")
+            md.append("|--------|-------|")
+
+            if div.get("dividend_yield"):
+                md.append(f"| Dividend Yield | {div['dividend_yield']:.2f}% |")
+            if div.get("annual_dividend"):
+                md.append(f"| Annual Dividend | {symbol}{div['annual_dividend']:.2f} |")
+            if div.get("payout_ratio"):
+                md.append(f"| Payout Ratio | {div['payout_ratio']:.1f}% |")
+            if div.get("dividend_coverage_ratio"):
+                md.append(f"| Coverage Ratio | {div['dividend_coverage_ratio']:.2f}x |")
+            if div.get("dividend_growth_rate"):
+                md.append(f"| Growth Rate (Historical) | {div['dividend_growth_rate']:.2f}% |")
+            if div.get("consecutive_years"):
+                md.append(f"| Consecutive Years Paid | {div['consecutive_years']} |")
+            md.append("")
+
+            # Sustainability
+            if div.get("sustainability_score") is not None:
+                score = div["sustainability_score"]
+                rating = div.get("sustainability_rating", "N/A")
+                md.append(f"**Sustainability:** {score}/100 ({rating})")
+                md.append("")
+
+                if div.get("warnings"):
+                    md.append("**Warnings:**")
+                    md.append("")
+                    for warning in div["warnings"]:
+                        md.append(f"- {warning}")
+                    md.append("")
+        else:
+            md.append("*Company does not pay dividends*")
+            md.append("")
+
+        # Earnings Analysis
+        md.append("### Earnings Analysis")
+        md.append("")
+        earnings = results["earnings_analysis"]
+
+        if earnings.get("current_eps"):
+            md.append("| Metric | Value |")
+            md.append("|--------|-------|")
+            md.append(f"| Current EPS (TTM) | {symbol}{earnings['current_eps']:.2f} |")
+            if earnings.get("forward_eps"):
+                md.append(f"| Forward EPS | {symbol}{earnings['forward_eps']:.2f} |")
+            if earnings.get("eps_growth_1y"):
+                md.append(f"| EPS Growth (1Y) | {earnings['eps_growth_1y']:+.1f}% |")
+            if earnings.get("eps_growth_3y_cagr"):
+                md.append(f"| EPS Growth (3Y CAGR) | {earnings['eps_growth_3y_cagr']:+.1f}% |")
+            md.append("")
+
+            # Trend
+            if earnings.get("trend"):
+                md.append(f"**Trend:** {earnings['trend']}")
+                md.append("")
+
+            # Earnings quality
+            quality = earnings.get("earnings_quality", {})
+            if quality.get("assessment"):
+                md.append(f"**Earnings Quality:** {quality['assessment']}")
+                if quality.get("score"):
+                    md.append(f"*(OCF/NI Ratio: {quality['score']:.2f})*")
+                md.append("")
+
+            # Recent surprises
+            surprises = earnings.get("recent_surprises", [])
+            if surprises:
+                md.append("**Recent Earnings Surprises:**")
+                md.append("")
+                md.append("| Quarter | Actual | Estimate | Surprise % |")
+                md.append("|---------|--------|----------|------------|")
+                for surprise in surprises[:4]:  # Last 4 quarters
+                    quarter = surprise.get("quarter", "N/A")
+                    actual = surprise.get("actual", 0)
+                    estimate = surprise.get("estimate", 0)
+                    surprise_pct = surprise.get("surprise_pct", 0)
+                    surprise_dir = "+" if surprise_pct >= 0 else ""
+                    md.append(
+                        f"| {quarter} | {symbol}{actual:.2f} | {symbol}{estimate:.2f} | "
+                        f"{surprise_dir}{surprise_pct * 100:.1f}% |"
+                    )
+                md.append("")
+        else:
+            md.append("*Earnings data unavailable*")
+            md.append("")
+
+        return md

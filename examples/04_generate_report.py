@@ -23,19 +23,24 @@ def main():
         help="Data period (default: 1y). Options: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max",
     )
     parser.add_argument(
-        "--no-technical",
+        "--exclude-technical",
         action="store_true",
-        help="Exclude technical analysis from report",
+        help="Exclude technical analysis from report (included by default)",
     )
     parser.add_argument(
-        "--no-fundamental",
+        "--exclude-fundamental",
         action="store_true",
-        help="Exclude fundamental analysis from report",
+        help="Exclude fundamental analysis from report (included by default)",
     )
     parser.add_argument(
-        "--no-risk",
+        "--exclude-risk",
         action="store_true",
-        help="Exclude risk analysis from report",
+        help="Exclude risk analysis from report (included by default)",
+    )
+    parser.add_argument(
+        "--exclude-valuation",
+        action="store_true",
+        help="Exclude valuation analysis from report (included by default)",
     )
     parser.add_argument("--no-cache", action="store_true", help="Fetch fresh data (ignore cache)")
     parser.add_argument(
@@ -63,9 +68,10 @@ def main():
         period=args.period,
         output_format=args.format,
         use_cache=not args.no_cache,
-        include_technical=not args.no_technical,
-        include_fundamental=not args.no_fundamental,
-        include_risk=not args.no_risk,
+        include_technical=not args.exclude_technical,
+        include_fundamental=not args.exclude_fundamental,
+        include_risk=not args.exclude_risk,
+        include_valuation=not args.exclude_valuation,
     )
 
     print(f"\n✓ Report generated for {ticker}")
@@ -73,12 +79,14 @@ def main():
         print(f"  - JSON: data/{ticker}/reports/full_report.json")
     if args.format in ["both", "markdown"]:
         print(f"  - Markdown: data/{ticker}/reports/report.md")
-    if not args.no_technical:
+    if not args.exclude_technical:
         print(f"  - Technical Analysis: data/{ticker}/reports/technical_analysis.md + .json")
-    if not args.no_fundamental:
+    if not args.exclude_fundamental:
         print(f"  - Fundamental Analysis: data/{ticker}/reports/fundamental_analysis.md + .json")
-    if not args.no_risk:
+    if not args.exclude_risk:
         print(f"  - Risk Analysis: data/{ticker}/reports/risk_analysis.md + .json")
+    if not args.exclude_valuation:
+        print(f"  - Valuation Analysis: data/{ticker}/reports/valuation_analysis.md + .json")
 
     # Summary
     print("\n" + "=" * 70)
@@ -95,6 +103,7 @@ def main():
     print("  python examples\\04_generate_report.py AAPL")
     print("  python examples\\04_generate_report.py TSLA --period 2y")
     print("  python examples\\04_generate_report.py MSFT --no-cache --format markdown")
+    print("  python examples\\04_generate_report.py NVDA --exclude-technical --exclude-risk")
 
 
 if __name__ == "__main__":

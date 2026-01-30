@@ -1,6 +1,6 @@
 # GJF.OL - Comprehensive Stock Report
 
-**Generated:** 2026-01-30T12:16:30.975854
+**Generated:** 2026-01-30T15:38:58.216639
 
 **Period:** 1y
 
@@ -67,9 +67,9 @@
 
 | Quarter | EPS Actual | EPS Estimate | Difference | Surprise % |
 |---------|-----------|--------------|------------|-----------|
-| 2025-03-31 00:00:00 | 2.53 | 2.47816 | 0.05 | 2.09% |
-| 2025-06-30 00:00:00 | 4.42 | 3.22915 | 1.19 | 36.88% |
-| 2025-09-30 00:00:00 | 3.04 | 3.71693 | -0.68 | -18.21% |
+| 2025-03-31 | 2.53 | 2.47816 | 0.05 | 2.09% |
+| 2025-06-30 | 4.42 | 3.22915 | 1.19 | 36.88% |
+| 2025-09-30 | 3.04 | 3.71693 | -0.68 | -18.21% |
 
 ## Institutional Ownership
 
@@ -146,11 +146,15 @@
 |--------|--------|--------------|--------------|
 | Revenue | +9.05% | +8.42% | N/A |
 | Earnings | +24.43% | -10.38% | N/A |
-| Free Cash Flow | N/A | N/A | N/A |
+| Free Cash Flow | -7.99% | -16.27% | N/A |
 
 ### Free Cash Flow Analysis
 
-*FCF data unavailable*
+| Metric | Value |
+|--------|-------|
+| Free Cash Flow | $3,812,000,000 |
+| FCF Yield | 2.77% |
+| FCF Margin | 9.44% |
 
 ### Profitability Margins
 

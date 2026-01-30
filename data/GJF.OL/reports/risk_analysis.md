@@ -1,6 +1,6 @@
 # GJF.OL - Risk Analysis Report
 
-**Generated:** 2026-01-30 12:16:58
+**Generated:** 2026-01-30 15:39:07
 
 ## Returns Analysis
 
@@ -62,7 +62,7 @@
 
 - **VaR (Historical):** -1.61%
 - **CVaR (Expected):** -2.93%
-- **VaR (Parametric):** -2.09%
+- **VaR (Parametric):** -1.99%
 - *5% chance of losing more than VaR in a day*
 
 ### 99% Confidence Level

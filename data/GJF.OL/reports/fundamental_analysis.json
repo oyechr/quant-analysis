@@ -16,12 +16,16 @@
         "5y_cagr": null
       },
       "fcf": {
-        "1y": null,
-        "3y_cagr": null,
-        "current": null
+        "1y": -7.987158753530135,
+        "3y_cagr": -16.271030870676118,
+        "current": 3812000000.0
       }
     },
-    "fcf_metrics": {},
+    "fcf_metrics": {
+      "fcf": 3812000000.0,
+      "fcf_yield": 2.772647756818409,
+      "fcf_margin": 9.443988871354142
+    },
     "margins": {
       "current": {
         "net_margin": 12.735263586882468

@@ -1,6 +1,6 @@
 {
   "ticker": "GJF.OL",
-  "generated_at": "2026-01-30T12:16:30.975854",
+  "generated_at": "2026-01-30T15:38:58.216639",
   "period": "1y",
   "info": {
     "symbol": "GJF.OL",
@@ -51,7 +51,7 @@
       "high_52w": 303.0,
       "low_52w": 214.8271896701389,
       "avg_volume": 315728.3107569721,
-      "volatility": 0.012969269751607317
+      "volatility": 0.012969269751607315
     }
   },
   "fundamentals": {
@@ -103,21 +103,24 @@
     "dates_count": 25,
     "latest_earnings": [
       {
-        "quarter": "2025-03-31 00:00:00",
+        "index": 0,
+        "quarter": "2025-03-31",
         "epsActual": 2.53,
         "epsEstimate": 2.47816,
         "epsDifference": 0.05,
         "surprisePercent": 0.0209
       },
       {
-        "quarter": "2025-06-30 00:00:00",
+        "index": 1,
+        "quarter": "2025-06-30",
         "epsActual": 4.42,
         "epsEstimate": 3.22915,
         "epsDifference": 1.19,
         "surprisePercent": 0.3688
       },
       {
-        "quarter": "2025-09-30 00:00:00",
+        "index": 2,
+        "quarter": "2025-09-30",
         "epsActual": 3.04,
         "epsEstimate": 3.71693,
         "epsDifference": -0.68,
@@ -126,18 +129,21 @@
     ],
     "upcoming_dates": [
       {
+        "index": 0,
         "Earnings Date": "2026-04-28 11:00:00-04:00",
         "EPS Estimate": 3.72,
         "Reported EPS": null,
         "Surprise(%)": null
       },
       {
+        "index": 1,
         "Earnings Date": "2026-01-29 01:00:00-05:00",
         "EPS Estimate": 3.11,
         "Reported EPS": 2.56,
         "Surprise(%)": -17.62
       },
       {
+        "index": 2,
         "Earnings Date": "2025-10-22 20:00:00-04:00",
         "EPS Estimate": 3.72,
         "Reported EPS": 3.04,
@@ -150,7 +156,7 @@
     "mutualfund_count": 10,
     "top_institutional": [
       {
-        "Date Reported": "2025-09-30 00:00:00",
+        "Date Reported": "2025-09-30",
         "Holder": "Pacer Advisors, Inc.",
         "pctHeld": 0.0,
         "Shares": 1542,
@@ -160,7 +166,7 @@
     ],
     "top_mutualfund": [
       {
-        "Date Reported": "2025-10-31 00:00:00",
+        "Date Reported": "2025-10-31",
         "Holder": "VANGUARD STAR FUNDS-Vanguard Total International Stock Index Fund",
         "pctHeld": 0.0053,
         "Shares": 2666120,
@@ -168,7 +174,7 @@
         "pctChange": 0.0124
       },
       {
-        "Date Reported": "2025-09-30 00:00:00",
+        "Date Reported": "2025-09-30",
         "Holder": "VANGUARD TAX-MANAGED FUNDS-Vanguard Developed Markets Index Fund",
         "pctHeld": 0.0034,
         "Shares": 1702706,
@@ -176,7 +182,7 @@
         "pctChange": 0.0372
       },
       {
-        "Date Reported": "2025-12-31 00:00:00",
+        "Date Reported": "2025-12-31",
         "Holder": "iShares Trust-iShares Core MSCI EAFE ETF",
         "pctHeld": 0.0028,
         "Shares": 1379213,
@@ -184,7 +190,7 @@
         "pctChange": 0.0
       },
       {
-        "Date Reported": "2025-12-31 00:00:00",
+        "Date Reported": "2025-12-31",
         "Holder": "SEI INSTITUTIONAL INVESTMENTS TRUST-SIIT World Equity EX-US Fund",
         "pctHeld": 0.002,
         "Shares": 976659,
@@ -192,7 +198,7 @@
         "pctChange": 0.0
       },
       {
-        "Date Reported": "2025-11-30 00:00:00",
+        "Date Reported": "2025-11-30",
         "Holder": "Fidelity Concord Street Trust-Fidelity International Index Fund",
         "pctHeld": 0.0014,
         "Shares": 704095,
@@ -206,42 +212,52 @@
     "split_count": 0,
     "recent_dividends": [
       {
+        "index": 9,
         "Date": "2018-04-06 00:00:00+02:00",
         "Dividends": 7.1
       },
       {
+        "index": 10,
         "Date": "2019-03-29 00:00:00+01:00",
         "Dividends": 7.1
       },
       {
+        "index": 11,
         "Date": "2020-09-22 00:00:00+02:00",
         "Dividends": 12.25
       },
       {
+        "index": 12,
         "Date": "2021-01-27 00:00:00+01:00",
         "Dividends": 2.4
       },
       {
+        "index": 13,
         "Date": "2021-03-25 00:00:00+01:00",
         "Dividends": 7.4
       },
       {
+        "index": 14,
         "Date": "2021-11-08 00:00:00+01:00",
         "Dividends": 4.0
       },
       {
+        "index": 15,
         "Date": "2022-03-25 00:00:00+01:00",
         "Dividends": 7.7
       },
       {
+        "index": 16,
         "Date": "2023-03-24 00:00:00+01:00",
         "Dividends": 8.25
       },
       {
+        "index": 17,
         "Date": "2024-03-21 00:00:00+01:00",
         "Dividends": 8.75
       },
       {
+        "index": 18,
         "Date": "2025-03-21 00:00:00+01:00",
         "Dividends": 10.0
       }
@@ -623,12 +639,16 @@
           "5y_cagr": null
         },
         "fcf": {
-          "1y": null,
-          "3y_cagr": null,
-          "current": null
+          "1y": -7.987158753530135,
+          "3y_cagr": -16.271030870676118,
+          "current": 3812000000.0
         }
       },
-      "fcf_metrics": {},
+      "fcf_metrics": {
+        "fcf": 3812000000.0,
+        "fcf_yield": 2.772647756818409,
+        "fcf_margin": 9.443988871354142
+      },
       "margins": {
         "current": {
           "net_margin": 12.735263586882468
@@ -690,14 +710,14 @@
       "confidence_level": 0.95,
       "var_historical": -0.01605327144039206,
       "cvar_historical": -0.029332815145589795,
-      "var_parametric": -0.020926341010337492,
+      "var_parametric": -0.019854739265658543,
       "worst_day": -0.051318580125661484
     },
     "var_99": {
       "confidence_level": 0.99,
       "var_historical": -0.03577061523160884,
       "cvar_historical": -0.044354330984609315,
-      "var_parametric": -0.02972925998863036,
+      "var_parametric": -0.02963861668574615,
       "worst_day": -0.051318580125661484
     },
     "rolling_ratios": {
@@ -743,6 +763,115 @@
         "max": 7.025886936913044,
         "std": 1.813173112805988
       }
+    }
+  },
+  "valuation_analysis": {
+    "ticker": "GJF.OL",
+    "dcf_valuation": {
+      "intrinsic_value_per_share": 452.20843353547224,
+      "current_price": 275.0,
+      "currency": "NOK",
+      "discount_premium_pct": -39.18733495304696,
+      "fcf_current": 3812000000.0,
+      "growth_rate_used": 49.86835294586571,
+      "terminal_growth_rate": 2.5,
+      "wacc_used": 12.0,
+      "enterprise_value": 226081047278.30637,
+      "equity_value": 226081047278.30637,
+      "shares_outstanding": 499948763.69454545,
+      "projection_years": 5,
+      "assumptions": {
+        "growth_rate_source": "historical_fcf",
+        "wacc_source": "estimated_from_beta",
+        "pv_projected_fcf": 49634684277.1991,
+        "terminal_value": 310958780365.8897,
+        "pv_terminal_value": 176446363001.10727,
+        "cash": 0.0,
+        "debt": 0.0,
+        "net_debt": 0.0,
+        "shares_calculated_from_market_cap": true
+      },
+      "error": null
+    },
+    "ddm_valuation": {
+      "intrinsic_value_per_share": 46.747835332361895,
+      "current_price": 275.0,
+      "currency": "NOK",
+      "discount_premium_pct": 488.26253246773786,
+      "current_dividend": 10.0,
+      "next_dividend_estimate": 9.22635643555325,
+      "growth_rate_used": -7.73643564446751,
+      "required_return_used": 12.0,
+      "model": "Gordon Growth Model",
+      "assumptions": {
+        "growth_rate_source": "historical_dividends",
+        "required_return_source": "estimated_from_beta"
+      },
+      "error": null
+    },
+    "dividend_analysis": {
+      "pays_dividends": true,
+      "dividend_yield": 3.66,
+      "annual_dividend": 10.0,
+      "payout_ratio": 71.709996,
+      "dividend_growth_rate": -7.73643564446751,
+      "dividend_coverage_ratio": 1.3945057255337179,
+      "consecutive_years": 15,
+      "latest_ex_dividend_date": "2025-03-20 23:00:00",
+      "sustainability_score": 45,
+      "sustainability_rating": "Fair",
+      "warnings": [
+        "Low dividend coverage (<1.5x) - risk of dividend cut"
+      ]
+    },
+    "earnings_analysis": {
+      "current_eps": 12.549999999999999,
+      "forward_eps": null,
+      "eps_growth_1y": 23.427866831072755,
+      "eps_growth_3y_cagr": -10.959836484254627,
+      "next_earnings_date": null,
+      "next_earnings_estimate": null,
+      "recent_surprises": [
+        {
+          "quarter": "2025-03-31",
+          "eps_actual": 2.53,
+          "eps_estimate": 2.47816,
+          "surprise_pct": 2.09
+        },
+        {
+          "quarter": "2025-06-30",
+          "eps_actual": 4.42,
+          "eps_estimate": 3.22915,
+          "surprise_pct": 36.88
+        },
+        {
+          "quarter": "2025-09-30",
+          "eps_actual": 3.04,
+          "eps_estimate": 3.71693,
+          "surprise_pct": -18.21
+        },
+        {
+          "quarter": "2025-12-31",
+          "eps_actual": 2.56,
+          "eps_estimate": 3.10751,
+          "surprise_pct": -17.62
+        }
+      ],
+      "surprise_stats": {
+        "avg_surprise_pct": 0.7849999999999993,
+        "positive_surprises": 2,
+        "negative_surprises": 2,
+        "beat_rate": 50.0
+      },
+      "earnings_quality": {
+        "assessment": "Fair Quality (moderate cash backing)",
+        "score": 50,
+        "metrics": {
+          "cash_flow_to_earnings_ratio": 0.8232078591576695,
+          "accruals_pct": 17.679214084233053
+        }
+      },
+      "trend": "Strong Growth"
     }
   }
 }
