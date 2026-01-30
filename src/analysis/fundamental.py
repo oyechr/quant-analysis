@@ -120,20 +120,49 @@ class FundamentalAnalyzer:
             growth["earnings"]["5y_cagr"] = self._calculate_cagr(earnings_current, earnings_5y, 5)
 
         if self.cash_flow_a is not None and not self.cash_flow_a.empty:
-            # FCF growth (Operating Cash Flow - CapEx)
-            ocf_current = self._get_value(self.cash_flow_a, "Operating Cash Flow", 0)
-            capex_current = self._get_value(self.cash_flow_a, "Capital Expenditure", 0)
-            fcf_current = (
-                ocf_current + capex_current if ocf_current and capex_current else None
-            )  # CapEx is negative
-
-            ocf_1y = self._get_value(self.cash_flow_a, "Operating Cash Flow", 1)
-            capex_1y = self._get_value(self.cash_flow_a, "Capital Expenditure", 1)
-            fcf_1y = ocf_1y + capex_1y if ocf_1y and capex_1y else None
-
-            ocf_3y = self._get_value(self.cash_flow_a, "Operating Cash Flow", 3)
-            capex_3y = self._get_value(self.cash_flow_a, "Capital Expenditure", 3)
-            fcf_3y = ocf_3y + capex_3y if ocf_3y and capex_3y else None
+            # FCF growth - try direct field first, then calculate
+            # Define OCF field name variants upfront for all fallback calculations
+            ocf_field_names = [
+                "Operating Cash Flow",
+                "Cash Flowsfromusedin Operating Activities Direct",
+                "Total Cash From Operating Activities",
+                "Net Cash Provided By Operating Activities",
+            ]
+            
+            fcf_current = self._get_value(self.cash_flow_a, "Free Cash Flow", 0)
+            fcf_1y = self._get_value(self.cash_flow_a, "Free Cash Flow", 1)
+            fcf_3y = self._get_value(self.cash_flow_a, "Free Cash Flow", 3)
+            
+            # If FCF not available directly, calculate from OCF - CapEx
+            if fcf_current is None:
+                ocf_current = None
+                for field_name in ocf_field_names:
+                    ocf_current = self._get_value(self.cash_flow_a, field_name, 0)
+                    if ocf_current is not None:
+                        break
+                        
+                capex_current = self._get_value(self.cash_flow_a, "Capital Expenditure", 0)
+                fcf_current = (
+                    ocf_current + capex_current if ocf_current and capex_current else None
+                )  # CapEx is negative
+            
+            if fcf_1y is None:
+                ocf_1y = None
+                for field_name in ocf_field_names:
+                    ocf_1y = self._get_value(self.cash_flow_a, field_name, 1)
+                    if ocf_1y is not None:
+                        break
+                capex_1y = self._get_value(self.cash_flow_a, "Capital Expenditure", 1)
+                fcf_1y = ocf_1y + capex_1y if ocf_1y and capex_1y else None
+            
+            if fcf_3y is None:
+                ocf_3y = None
+                for field_name in ocf_field_names:
+                    ocf_3y = self._get_value(self.cash_flow_a, field_name, 3)
+                    if ocf_3y is not None:
+                        break
+                capex_3y = self._get_value(self.cash_flow_a, "Capital Expenditure", 3)
+                fcf_3y = ocf_3y + capex_3y if ocf_3y and capex_3y else None
 
             growth["fcf"]["1y"] = self._calculate_growth_rate(fcf_current, fcf_1y)
             growth["fcf"]["3y_cagr"] = self._calculate_cagr(fcf_current, fcf_3y, 3)
@@ -165,11 +194,30 @@ class FundamentalAnalyzer:
 
         # Get FCF from cash flow statement
         if self.cash_flow_a is not None and not self.cash_flow_a.empty:
-            ocf = self._get_value(self.cash_flow_a, "Operating Cash Flow", 0)
-            capex = self._get_value(self.cash_flow_a, "Capital Expenditure", 0)
+            # Try to get FCF directly first (some providers include it)
+            fcf = self._get_value(self.cash_flow_a, "Free Cash Flow", 0)
+            
+            # If not available, calculate from OCF - CapEx
+            if fcf is None:
+                # Try multiple field name variants for Operating Cash Flow
+                ocf_field_names = [
+                    "Operating Cash Flow",
+                    "Cash Flowsfromusedin Operating Activities Direct",
+                    "Total Cash From Operating Activities",
+                    "Net Cash Provided By Operating Activities",
+                ]
+                ocf = None
+                for field_name in ocf_field_names:
+                    ocf = self._get_value(self.cash_flow_a, field_name, 0)
+                    if ocf is not None:
+                        break
+                
+                capex = self._get_value(self.cash_flow_a, "Capital Expenditure", 0)
 
-            if ocf and capex:
-                fcf = ocf + capex  # CapEx is negative
+                if ocf and capex:
+                    fcf = ocf + capex  # CapEx is negative
+            
+            if fcf:
                 fcf_metrics["fcf"] = fcf
 
                 # FCF Yield = FCF / Market Cap
