@@ -16,12 +16,67 @@ logger = logging.getLogger(__name__)
 # ==================== Formatting Utilities ====================
 
 
-def format_number(value: Any) -> str:
+def get_currency_symbol(currency_code: str) -> str:
+    """
+    Get currency symbol from currency code
+
+    Args:
+        currency_code: ISO 4217 currency code (e.g., 'USD', 'NOK', 'CAD')
+
+    Returns:
+        Currency symbol or code if symbol not recognized
+    """
+    symbols = {
+        "USD": "$",
+        "CAD": "CA$",
+        "EUR": "€",
+        "GBP": "£",
+        "JPY": "¥",
+        "CNY": "¥",
+        "CHF": "CHF",
+        "AUD": "A$",
+        "NZD": "NZ$",
+        "NOK": "kr",
+        "SEK": "kr",
+        "DKK": "kr",
+        "INR": "₹",
+        "BRL": "R$",
+        "ZAR": "R",
+        "HKD": "HK$",
+        "SGD": "S$",
+        "KRW": "₩",
+    }
+    return symbols.get(currency_code, currency_code)
+
+
+def format_currency(value: Any, currency: str = "USD") -> str:
+    """
+    Format currency values with appropriate symbol
+
+    Args:
+        value: Numeric value to format
+        currency: ISO 4217 currency code (default: USD)
+
+    Returns:
+        Formatted currency string
+    """
+    if value is None:
+        return "N/A"
+    try:
+        num = float(value)
+        symbol = get_currency_symbol(currency)
+        return f"{symbol}{num:.2f}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def format_number(value: Any, currency: str = "USD") -> str:
     """
     Format numeric values for markdown display
 
     Args:
         value: Numeric value to format
+        currency: ISO 4217 currency code for large numbers (default: USD)
 
     Returns:
         Formatted string with appropriate scale (K, M, B, T)
@@ -30,14 +85,15 @@ def format_number(value: Any) -> str:
         return "N/A"
     try:
         num = float(value)
+        symbol = get_currency_symbol(currency)
         if abs(num) >= 1_000_000_000_000:  # Trillion
-            return f"${num / 1_000_000_000_000:.2f}T"
+            return f"{symbol}{num / 1_000_000_000_000:.2f}T"
         elif abs(num) >= 1_000_000_000:  # Billion
-            return f"${num / 1_000_000_000:.2f}B"
+            return f"{symbol}{num / 1_000_000_000:.2f}B"
         elif abs(num) >= 1_000_000:  # Million
-            return f"${num / 1_000_000:.2f}M"
+            return f"{symbol}{num / 1_000_000:.2f}M"
         elif abs(num) >= 1_000:  # Thousand
-            return f"${num / 1_000:.2f}K"
+            return f"{symbol}{num / 1_000:.2f}K"
         else:
             return f"{num:.2f}"
     except (TypeError, ValueError):
@@ -62,7 +118,9 @@ def format_percent(value: Any) -> str:
         return "N/A"
 
 
-def safe_get(data: Dict[str, Any], key: str, default: Any = "N/A", formatter: Optional[Callable] = None) -> Any:
+def safe_get(
+    data: Dict[str, Any], key: str, default: Any = "N/A", formatter: Optional[Callable] = None
+) -> Any:
     """
     Safely extract value from dictionary with optional formatting
 
@@ -112,7 +170,7 @@ def save_analysis_report(
     output_dir: Path,
     report_type: str,
     content_generator: Callable[[], List[str]],
-    file_extension: str = "md"
+    file_extension: str = "md",
 ) -> None:
     """
     Template method for saving analysis reports (markdown or JSON)
@@ -130,15 +188,18 @@ def save_analysis_report(
 
     try:
         content = content_generator()
-        
+
         with open(output_file, "w", encoding="utf-8") as f:
             if file_extension == "md":
                 f.write("\n".join(content))
             else:
                 import json
+
                 json.dump(content, f, indent=2, default=str)
-        
-        logger.info(f"{report_type.replace('_', ' ').title()} {file_extension.upper()} saved: {output_file}")
+
+        logger.info(
+            f"{report_type.replace('_', ' ').title()} {file_extension.upper()} saved: {output_file}"
+        )
     except Exception as e:
         logger.error(f"Error saving {report_type} report: {e}")
 
@@ -147,9 +208,7 @@ def save_analysis_report(
 
 
 def validate_dataframe(
-    df: Any,
-    required_columns: Optional[List[str]] = None,
-    min_rows: int = 1
+    df: Any, required_columns: Optional[List[str]] = None, min_rows: int = 1
 ) -> bool:
     """
     Validate DataFrame has required structure and data
@@ -163,18 +222,18 @@ def validate_dataframe(
         True if valid, False otherwise
     """
     import pandas as pd
-    
+
     if df is None or not isinstance(df, pd.DataFrame):
         return False
-    
+
     if df.empty or len(df) < min_rows:
         return False
-    
+
     if required_columns:
         missing = [col for col in required_columns if col not in df.columns]
         if missing:
             return False
-    
+
     return True
 
 

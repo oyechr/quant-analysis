@@ -35,6 +35,23 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 - Graceful handling of missing financial data
 - Dual output format (JSON + Markdown)
 
+### Valuation Analysis
+
+- **DCF Valuation:** Discounted Cash Flow intrinsic value calculation
+- **DDM Valuation:** Dividend Discount Model (Gordon Growth Model)
+- **Dividend Analysis:** Yield, growth rate, payout ratio, coverage, sustainability scoring
+- **Earnings Analysis:** EPS trends, surprises, quality assessment (cash flow backing)
+- **Multi-Currency Support:** Automatic currency detection and formatting (USD, CAD, NOK, EUR, GBP)
+- **Fair Value Assessment:** Discount/premium to intrinsic value
+
+### Risk Analysis
+
+- **Volatility Metrics:** Historical volatility, downside deviation
+- **Risk-Adjusted Returns:** Sharpe ratio, Sortino ratio, Calmar ratio
+- **Drawdown Analysis:** Maximum drawdown, current drawdown
+- **Value at Risk (VaR):** 95% and 99% confidence levels (parametric and historical)
+- **Market Risk:** Beta calculation, correlation with market indices
+
 ### Report Generation
 
 - JSON reports with complete data aggregation
@@ -163,12 +180,22 @@ report = generator.generate_full_report(
 quant-analysis/
 ├── src/
 │   ├── data_fetcher.py           # Yahoo Finance data fetching with caching
-│   ├── technical_analysis.py     # Technical indicators and signal generation (654 lines)
-│   ├── fundamental_analysis.py   # Fundamental metrics and quality scores (767 lines)
-│   ├── report_generator.py       # Report aggregation and formatting
-│   ├── report_sections.py        # Modular report section handlers (10 sections)
-│   ├── serialization.py          # DataFrame/JSON conversion utilities
-│   └── types.py                  # Type definitions for documentation
+│   ├── analysis/                 # Analysis modules
+│   │   ├── technical.py          # Technical indicators (moved)
+│   │   ├── fundamental.py        # Fundamental metrics (moved)
+│   │   ├── valuation.py          # DCF/DDM valuation & earnings analysis
+│   │   └── risk.py               # Risk metrics & VaR calculations
+│   ├── reporting/                # Report generation
+│   │   ├── generator.py          # Report aggregation
+│   │   └── sections.py           # Modular section handlers
+│   ├── utils/                    # Utility modules
+│   │   ├── financial.py          # Financial calculations (CAGR, ratios)
+│   │   ├── dataframe_utils.py    # DataFrame/Series helpers
+│   │   ├── report.py             # Report formatting
+│   │   ├── serialization.py      # JSON conversion
+│   │   └── types.py              # Type definitions
+│   ├── config.py                 # Configuration settings
+│   └── (legacy files in transition)
 ├── data/                         # Data directory (organized by ticker)
 │   └── TICKER/
 │       ├── cache/                # Ephemeral API responses (gitignored)
@@ -215,6 +242,9 @@ See the `examples/` directory for detailed usage:
 3. **03_test_fundamentals.py** - Fetching company fundamentals
 4. **04_generate_report.py** - Comprehensive report generation
 5. **05_technical_analysis.py** - Technical indicator calculation
+6. **06_test_error_handling.py** - Error handling validation
+7. **07_test_risk_metrics.py** - Risk analysis (Sharpe, Sortino, VaR, drawdowns)
+8. **08_test_valuation.py** - Valuation analysis (DCF, DDM, dividend/earnings)
 
 Run from project root:
 
@@ -232,9 +262,13 @@ python examples/04_generate_report.py
 - ✅ Comprehensive report generation
 - ✅ Type safety and error handling
 
-### Phase 2: Risk & Portfolio Analysis (Next)
+### Phase 2: Risk & Valuation Analysis ✅ (Completed)
 
-- Risk metrics (Beta, Sharpe Ratio, Sortino Ratio, Max Drawdown, VaR)
+- ✅ Risk metrics (Beta, Sharpe, Sortino, Calmar, Max Drawdown, VaR)
+- ✅ Valuation models (DCF, DDM)
+- ✅ Dividend sustainability analysis
+- ✅ Earnings quality assessment
+- ✅ Multi-currency support
 - Multi-ticker correlation analysis
 - Portfolio optimization (efficient frontier)
 - Relative strength and sector comparisons

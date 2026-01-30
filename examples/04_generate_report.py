@@ -15,9 +15,7 @@ from src.reporting import ReportGenerator
 
 def main():
     # Parse command line arguments
-    parser = argparse.ArgumentParser(
-        description="Generate comprehensive stock analysis reports"
-    )
+    parser = argparse.ArgumentParser(description="Generate comprehensive stock analysis reports")
     parser.add_argument("ticker", help="Stock ticker symbol (e.g., AAPL, MSFT, TSLA)")
     parser.add_argument(
         "--period",
@@ -39,9 +37,7 @@ def main():
         action="store_true",
         help="Exclude risk analysis from report",
     )
-    parser.add_argument(
-        "--no-cache", action="store_true", help="Fetch fresh data (ignore cache)"
-    )
+    parser.add_argument("--no-cache", action="store_true", help="Fetch fresh data (ignore cache)")
     parser.add_argument(
         "--format",
         choices=["json", "markdown", "both"],
@@ -78,17 +74,11 @@ def main():
     if args.format in ["both", "markdown"]:
         print(f"  - Markdown: data/{ticker}/reports/report.md")
     if not args.no_technical:
-        print(
-            f"  - Technical Analysis: data/{ticker}/reports/technical_analysis.md + .json"
-        )
+        print(f"  - Technical Analysis: data/{ticker}/reports/technical_analysis.md + .json")
     if not args.no_fundamental:
-        print(
-            f"  - Fundamental Analysis: data/{ticker}/reports/fundamental_analysis.md + .json"
-        )
+        print(f"  - Fundamental Analysis: data/{ticker}/reports/fundamental_analysis.md + .json")
     if not args.no_risk:
-        print(
-            f"  - Risk Analysis: data/{ticker}/reports/risk_analysis.md + .json"
-        )
+        print(f"  - Risk Analysis: data/{ticker}/reports/risk_analysis.md + .json")
 
     # Summary
     print("\n" + "=" * 70)
@@ -99,9 +89,7 @@ def main():
     print(f"Cache: {'Used' if not args.no_cache else 'Bypassed'}")
     print("\nView reports:")
     print("  - JSON files: Machine-readable, complete data")
-    print(
-        "  - Markdown files: Human-readable, formatted (right-click → 'Open Preview')"
-    )
+    print("  - Markdown files: Human-readable, formatted (right-click → 'Open Preview')")
     print(f"\nFiles saved in: data/{ticker}/reports/")
     print("\nUsage examples:")
     print("  python examples\\04_generate_report.py AAPL")

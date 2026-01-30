@@ -84,24 +84,39 @@ class InfoSection(ReportSection):
 
         md.append("\n## Valuation Metrics")
         md.append(f"\n- **Market Cap:** {format_number(raw_data.get('market_cap'))}")
-        md.append(f"- **P/E Ratio:** {safe_get(raw_data, 'pe_ratio', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **Forward P/E:** {safe_get(raw_data, 'forward_pe', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **PEG Ratio:** {safe_get(raw_data, 'peg_ratio', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **Price/Book:** {safe_get(raw_data, 'price_to_book', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **Price/Sales:** {safe_get(raw_data, 'price_to_sales', formatter=lambda x: f'{x:.2f}')}")
+        md.append(
+            f"- **P/E Ratio:** {safe_get(raw_data, 'pe_ratio', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **Forward P/E:** {safe_get(raw_data, 'forward_pe', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **PEG Ratio:** {safe_get(raw_data, 'peg_ratio', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **Price/Book:** {safe_get(raw_data, 'price_to_book', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **Price/Sales:** {safe_get(raw_data, 'price_to_sales', formatter=lambda x: f'{x:.2f}')}"
+        )
 
         md.append("\n## Financial Health")
         md.append(f"\n- **Profit Margin:** {format_percent(raw_data.get('profit_margin'))}")
-        md.append(
-            f"- **Operating Margin:** {format_percent(raw_data.get('operating_margin'))}"
-        )
+        md.append(f"- **Operating Margin:** {format_percent(raw_data.get('operating_margin'))}")
         md.append(f"- **ROE:** {format_percent(raw_data.get('roe'))}")
         md.append(f"- **ROA:** {format_percent(raw_data.get('roa'))}")
-        md.append(f"- **Debt/Equity:** {safe_get(raw_data, 'debt_to_equity', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **Current Ratio:** {safe_get(raw_data, 'current_ratio', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **Quick Ratio:** {safe_get(raw_data, 'quick_ratio', formatter=lambda x: f'{x:.2f}')}")
+        md.append(
+            f"- **Debt/Equity:** {safe_get(raw_data, 'debt_to_equity', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **Current Ratio:** {safe_get(raw_data, 'current_ratio', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **Quick Ratio:** {safe_get(raw_data, 'quick_ratio', formatter=lambda x: f'{x:.2f}')}"
+        )
 
         return md
+
 
 class PriceDataSection(ReportSection):
     """Price data section"""
@@ -560,8 +575,8 @@ class RiskAnalysisSection(ReportSection):
         Returns:
             Tuple of (RiskMetrics instance, metrics dict, benchmark_data)
         """
-        from .risk_metrics import RiskMetrics
         from .config import get_config
+        from .risk_metrics import RiskMetrics
 
         price_data = kwargs.get("price_data")
         if price_data is None or price_data.empty:

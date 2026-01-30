@@ -1,0 +1,109 @@
+{
+  "ticker": "GJF.OL",
+  "dcf_valuation": {
+    "intrinsic_value_per_share": 452.20843353547224,
+    "current_price": 275.0,
+    "currency": "NOK",
+    "discount_premium_pct": -39.18733495304696,
+    "fcf_current": 3812000000.0,
+    "growth_rate_used": 49.86835294586571,
+    "terminal_growth_rate": 2.5,
+    "wacc_used": 12.0,
+    "enterprise_value": 226081047278.30637,
+    "equity_value": 226081047278.30637,
+    "shares_outstanding": 499948763.69454545,
+    "projection_years": 5,
+    "assumptions": {
+      "growth_rate_source": "historical_fcf",
+      "wacc_source": "estimated_from_beta",
+      "pv_projected_fcf": 49634684277.1991,
+      "terminal_value": 310958780365.8897,
+      "pv_terminal_value": 176446363001.10727,
+      "cash": 0.0,
+      "debt": 0.0,
+      "net_debt": 0.0,
+      "shares_calculated_from_market_cap": true
+    },
+    "error": null
+  },
+  "ddm_valuation": {
+    "intrinsic_value_per_share": 46.747835332361895,
+    "current_price": 275.0,
+    "currency": "NOK",
+    "discount_premium_pct": 488.26253246773786,
+    "current_dividend": 10.0,
+    "next_dividend_estimate": 9.22635643555325,
+    "growth_rate_used": -7.73643564446751,
+    "required_return_used": 12.0,
+    "model": "Gordon Growth Model",
+    "assumptions": {
+      "growth_rate_source": "historical_dividends",
+      "required_return_source": "estimated_from_beta"
+    },
+    "error": null
+  },
+  "dividend_analysis": {
+    "pays_dividends": true,
+    "dividend_yield": 3.66,
+    "annual_dividend": 10.0,
+    "payout_ratio": 71.709996,
+    "dividend_growth_rate": -7.73643564446751,
+    "dividend_coverage_ratio": 1.3945057255337179,
+    "consecutive_years": 15,
+    "latest_ex_dividend_date": "2025-03-20 23:00:00",
+    "sustainability_score": 45,
+    "sustainability_rating": "Fair",
+    "warnings": [
+      "Low dividend coverage (<1.5x) - risk of dividend cut"
+    ]
+  },
+  "earnings_analysis": {
+    "current_eps": 12.549999999999999,
+    "forward_eps": null,
+    "eps_growth_1y": 23.427866831072755,
+    "eps_growth_3y_cagr": -10.959836484254627,
+    "next_earnings_date": null,
+    "next_earnings_estimate": null,
+    "recent_surprises": [
+      {
+        "quarter": "2025-03-31",
+        "eps_actual": 2.53,
+        "eps_estimate": 2.47816,
+        "surprise_pct": 2.09
+      },
+      {
+        "quarter": "2025-06-30",
+        "eps_actual": 4.42,
+        "eps_estimate": 3.22915,
+        "surprise_pct": 36.88
+      },
+      {
+        "quarter": "2025-09-30",
+        "eps_actual": 3.04,
+        "eps_estimate": 3.71693,
+        "surprise_pct": -18.21
+      },
+      {
+        "quarter": "2025-12-31",
+        "eps_actual": 2.56,
+        "eps_estimate": 3.10751,
+        "surprise_pct": -17.62
+      }
+    ],
+    "surprise_stats": {
+      "avg_surprise_pct": 0.7849999999999993,
+      "positive_surprises": 2,
+      "negative_surprises": 2,
+      "beat_rate": 50.0
+    },
+    "earnings_quality": {
+      "assessment": "Fair Quality (moderate cash backing)",
+      "score": 50,
+      "metrics": {
+        "cash_flow_to_earnings_ratio": 0.8232078591576695,
+        "accruals_pct": 17.679214084233053
+      }
+    },
+    "trend": "Strong Growth"
+  }
+}

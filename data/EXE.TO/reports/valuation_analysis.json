@@ -1,0 +1,89 @@
+{
+  "ticker": "EXE.TO",
+  "dcf_valuation": {
+    "intrinsic_value_per_share": 11.255485405700028,
+    "current_price": 23.399999618530277,
+    "currency": "CAD",
+    "discount_premium_pct": 107.89862698129392,
+    "fcf_current": 101689000.0,
+    "growth_rate_used": 5.0,
+    "terminal_growth_rate": 2.5,
+    "wacc_used": 13.336,
+    "enterprise_value": 1063169603.4235365,
+    "equity_value": 1063169603.4235365,
+    "shares_outstanding": 94457907.86465093,
+    "projection_years": 5,
+    "assumptions": {
+      "growth_rate_source": "historical_fcf",
+      "wacc_source": "estimated_from_beta",
+      "pv_projected_fcf": 406667780.345983,
+      "terminal_value": 1227652184.424964,
+      "pv_terminal_value": 656501823.0775535,
+      "cash": 0.0,
+      "debt": 0.0,
+      "net_debt": 0.0,
+      "shares_calculated_from_market_cap": true
+    },
+    "error": null
+  },
+  "ddm_valuation": {
+    "intrinsic_value_per_share": 4.103327808906943,
+    "current_price": 23.399999618530277,
+    "currency": "CAD",
+    "discount_premium_pct": 470.26883320744577,
+    "current_dividend": 0.49999999999999994,
+    "next_dividend_estimate": 0.5051288761691557,
+    "growth_rate_used": 1.025775233831161,
+    "required_return_used": 13.336,
+    "model": "Gordon Growth Model",
+    "assumptions": {
+      "growth_rate_source": "historical_dividends",
+      "required_return_source": "estimated_from_beta"
+    },
+    "error": null
+  },
+  "dividend_analysis": {
+    "pays_dividends": true,
+    "dividend_yield": 2.15,
+    "annual_dividend": 0.49999999999999994,
+    "payout_ratio": 46.6,
+    "dividend_growth_rate": 1.025775233831161,
+    "dividend_coverage_ratio": 2.1459227467811157,
+    "consecutive_years": 14,
+    "latest_ex_dividend_date": "2025-12-31 05:00:00",
+    "sustainability_score": 80,
+    "sustainability_rating": "Excellent",
+    "warnings": []
+  },
+  "earnings_analysis": {
+    "current_eps": null,
+    "forward_eps": null,
+    "eps_growth_1y": 114.99999999999999,
+    "eps_growth_3y_cagr": 87.72338049079582,
+    "next_earnings_date": null,
+    "next_earnings_estimate": null,
+    "recent_surprises": [
+      {
+        "quarter": "2024-12-31",
+        "eps_actual": 0.23,
+        "eps_estimate": 0.18,
+        "surprise_pct": 27.779999999999998
+      }
+    ],
+    "surprise_stats": {
+      "avg_surprise_pct": 27.779999999999998,
+      "positive_surprises": 1,
+      "negative_surprises": 0,
+      "beat_rate": 100.0
+    },
+    "earnings_quality": {
+      "assessment": "High Quality (strong cash backing)",
+      "score": 90,
+      "metrics": {
+        "cash_flow_to_earnings_ratio": 1.9098645108963024,
+        "accruals_pct": -90.98645108963022
+      }
+    },
+    "trend": "Strong Growth"
+  }
+}

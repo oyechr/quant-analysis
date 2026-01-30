@@ -176,7 +176,12 @@ class ReportGenerator:
         logger.info(f"JSON report saved: {output_file}")
 
     def _save_markdown_report(
-        self, ticker: str, data: Dict[str, Any], technical_analyzer=None, fundamental_analyzer=None, risk_analyzer_tuple=None
+        self,
+        ticker: str,
+        data: Dict[str, Any],
+        technical_analyzer=None,
+        fundamental_analyzer=None,
+        risk_analyzer_tuple=None,
     ):
         """Save report as Markdown using section handlers"""
         reports_dir = self.output_dir / ticker / "reports"
@@ -438,7 +443,7 @@ class ReportGenerator:
             md.append(f"- **Max DD Date:** {dd.get('max_drawdown_date', 'N/A')}")
             md.append(f"- **Current Drawdown:** {dd.get('current_drawdown', 0):.2%}")
             md.append(f"- **Days Since Peak:** {dd.get('days_since_peak', 0)}")
-            if dd.get('recovery_days'):
+            if dd.get("recovery_days"):
                 md.append(f"- **Recovery Time:** {dd.get('recovery_days')} days")
             md.append(f"- **At Peak:** {'Yes' if dd.get('is_recovered') else 'No'}")
             md.append("")
@@ -451,14 +456,14 @@ class ReportGenerator:
             md.append(f"**Benchmark:** {mr.get('benchmark', 'N/A')}")
             md.append("")
             md.append(f"- **Beta:** {mr.get('beta', 0):.2f}")
-            if mr.get('beta', 0) > 1:
+            if mr.get("beta", 0) > 1:
                 md.append("  - More volatile than market")
-            elif mr.get('beta', 0) < 1:
+            elif mr.get("beta", 0) < 1:
                 md.append("  - Less volatile than market")
             else:
                 md.append("  - Moves with market")
             md.append(f"- **Alpha:** {mr.get('alpha', 0):.2%}")
-            if mr.get('alpha', 0) > 0:
+            if mr.get("alpha", 0) > 0:
                 md.append("  - Outperforming benchmark (risk-adjusted)")
             md.append(f"- **Correlation:** {mr.get('correlation', 0):.2f}")
             md.append(f"- **R-squared:** {mr.get('r_squared', 0):.2%}")

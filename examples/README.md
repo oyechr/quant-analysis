@@ -29,6 +29,15 @@ python examples/04_generate_report.py
 
 # Technical analysis with indicators
 python examples/05_technical_analysis.py
+
+# Error handling validation
+python examples/06_test_error_handling.py
+
+# Risk metrics (Sharpe, Sortino, VaR, drawdowns)
+python examples/07_test_risk_metrics.py
+
+# Valuation analysis (DCF, DDM, dividends, earnings)
+python examples/08_test_valuation.py
 ```
 
 ## Example Details
@@ -164,6 +173,88 @@ data/TICKER/reports/
 
 ---
 
+### 06_test_error_handling.py - Error Handling
+
+**Demonstrates:**
+
+- Handling invalid tickers
+- Graceful degradation with missing data
+- Validation and fallback mechanisms
+- Error reporting without crashes
+
+**Use Case:** Validate robustness of data fetching and analysis modules
+
+---
+
+### 07_test_risk_metrics.py - Risk Analysis
+
+**Demonstrates:**
+
+- Calculating risk-adjusted return metrics:
+  - **Sharpe Ratio:** Excess return per unit of total risk
+  - **Sortino Ratio:** Excess return per unit of downside risk
+  - **Calmar Ratio:** Return per unit of maximum drawdown
+- Volatility measurements:
+  - Historical volatility (annualized)
+  - Downside deviation (negative returns only)
+- Drawdown analysis:
+  - Maximum drawdown and duration
+  - Current drawdown status
+- Value at Risk (VaR):
+  - 95% and 99% confidence levels
+  - Parametric and historical methods
+- Market risk:
+  - Beta calculation vs market index
+
+**Output:**
+
+- JSON report: `data/TICKER/reports/risk_analysis.json`
+- Markdown report: `data/TICKER/reports/risk_analysis.md`
+
+**Key Metrics:**
+
+- Sharpe > 1.0 = good risk-adjusted returns
+- Max drawdown = worst peak-to-trough decline
+- VaR = potential loss at confidence level
+
+---
+
+### 08_test_valuation.py - Valuation Analysis
+
+**Demonstrates:**
+
+- Intrinsic value calculation:
+  - **DCF (Discounted Cash Flow):** Free cash flow projection
+  - **DDM (Dividend Discount Model):** Gordon Growth Model
+- Dividend analysis:
+  - Yield, growth rate, payout ratio
+  - Coverage ratio and sustainability score
+  - Consecutive payment years
+- Earnings analysis:
+  - EPS trends and growth (1Y, 3Y CAGR)
+  - Earnings surprises and beat rate
+  - Quality assessment (cash flow backing)
+- Multi-currency support:
+  - Automatic currency detection (USD, CAD, NOK, EUR, GBP)
+  - Proper symbol formatting (kr, CA$, €, £)
+- Fair value assessment:
+  - Current price vs intrinsic value
+  - Discount/premium percentage
+
+**Output:**
+
+- JSON report: `data/TICKER/reports/valuation_analysis.json`
+- Markdown report: `data/TICKER/reports/valuation_analysis.md`
+
+**Key Concepts:**
+
+- DCF requires positive free cash flow
+- DDM requires dividend payments
+- Growth rate must be < discount rate
+- Sustainability score based on payout, growth, consistency
+
+---
+
 ## Data Organization
 
 Examples write to structured directories:
@@ -244,12 +335,14 @@ for ticker in tickers:
 - ✅ Technical analysis (16+ indicators)
 - ✅ Fundamental analysis (growth, margins, efficiency, quality scores)
 - ✅ Comprehensive reporting (JSON + Markdown)
+- ✅ Risk metrics (Sharpe, Sortino, Calmar, VaR, Beta, drawdowns)
+- ✅ Valuation analysis (DCF, DDM, dividend/earnings)
+- ✅ Multi-currency support
 
 **Planned Enhancements:**
 
-- Risk metrics (Sharpe ratio, Sortino ratio, max drawdown, Beta, VaR)
-- Portfolio correlation and optimization
-- Multi-ticker comparative analysis
+- Portfolio correlation and multi-ticker analysis
+- Portfolio optimization (efficient frontier)
 - Backtesting trading strategies
 - Real-time data monitoring
 - Interactive dashboards

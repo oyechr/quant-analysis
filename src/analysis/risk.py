@@ -11,22 +11,22 @@ Calculates risk and performance metrics for stock analysis:
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
 from ..config import get_config
-from ..utils.serialization import format_date
 from ..utils.financial import (
     TRADING_DAYS_PER_YEAR,
-    to_float,
-    calculate_daily_returns,
     annualize_volatility,
-    validate_price_data,
+    calculate_daily_returns,
     convert_annual_to_daily_rate,
+    to_float,
+    validate_price_data,
 )
-from ..utils.report import validate_dataframe, log_calculation_error
+from ..utils.report import log_calculation_error, validate_dataframe
+from ..utils.serialization import format_date
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,11 @@ class RiskMetrics:
 
             # Downside deviation (only negative returns)
             downside_returns = daily_returns[daily_returns < 0]
-            downside_deviation = annualize_volatility(to_float(downside_returns.std())) if len(downside_returns) > 0 else 0.0
+            downside_deviation = (
+                annualize_volatility(to_float(downside_returns.std()))
+                if len(downside_returns) > 0
+                else 0.0
+            )
 
             metrics = {
                 "daily_volatility": float(daily_vol),
@@ -128,7 +132,9 @@ class RiskMetrics:
 
             # Rolling volatility if window specified
             if window and window > 0 and len(daily_returns) >= window:
-                rolling_vol = daily_returns.rolling(window=window).std() * np.sqrt(TRADING_DAYS_PER_YEAR)
+                rolling_vol = daily_returns.rolling(window=window).std() * np.sqrt(
+                    TRADING_DAYS_PER_YEAR
+                )
                 metrics["rolling_volatility_current"] = to_float(rolling_vol.iloc[-1])
                 metrics["rolling_volatility_mean"] = to_float(rolling_vol.mean())
                 metrics["rolling_volatility_max"] = to_float(rolling_vol.max())
@@ -244,27 +250,27 @@ class RiskMetrics:
 
         try:
             prices = price_data["Close"]
-            
+
             # Running maximum (peak)
             running_max = prices.expanding().max()
-            
+
             # Drawdown from peak
             drawdown = (prices - running_max) / running_max
-            
+
             # Maximum drawdown
             max_drawdown = float(drawdown.min())
             max_dd_date = format_date(drawdown.idxmin(), "iso") if not drawdown.empty else None
-            
+
             # Current drawdown
             current_drawdown = float(drawdown.iloc[-1])
-            
+
             # Days since peak
             days_since_peak = 0
             for i in range(len(prices) - 1, -1, -1):
                 if prices.iloc[i] >= running_max.iloc[i]:
                     break
                 days_since_peak += 1
-            
+
             # Recovery analysis (time from max drawdown to recovery)
             recovery_days = None
             if max_dd_date:
@@ -275,7 +281,7 @@ class RiskMetrics:
                 recovery_idx = prices_after[prices_after >= peak_before_dd].first_valid_index()
                 if recovery_idx is not None:
                     recovery_days = int((recovery_idx - max_dd_idx).days)
-            
+
             return {
                 "max_drawdown": max_drawdown,
                 "max_drawdown_date": max_dd_date,
@@ -284,7 +290,7 @@ class RiskMetrics:
                 "recovery_days": recovery_days,
                 "is_recovered": current_drawdown >= -0.001,  # Within 0.1% of peak
             }
-            
+
         except Exception as e:
             logger.error(f"Error calculating drawdown: {e}")
             return {}
@@ -310,57 +316,58 @@ class RiskMetrics:
             # Fetch benchmark data if not provided
             if benchmark_data is None or benchmark_data.empty:
                 from src.data_fetcher import DataFetcher
-                
+
                 fetcher = DataFetcher()
                 benchmark_ticker = self.config.benchmark_ticker
-                
+
                 # Match period with price_data
                 start_date = price_data.index[0]
                 end_date = price_data.index[-1]
-                
+
                 benchmark_data = fetcher.fetch_ticker(
                     benchmark_ticker,
                     start=start_date.strftime("%Y-%m-%d"),
                     end=end_date.strftime("%Y-%m-%d"),
                 )
-                
+
                 if benchmark_data is None or benchmark_data.empty:
                     logger.warning(f"Could not fetch benchmark data for {benchmark_ticker}")
                     return {}
-            
+
             # Calculate returns
             stock_returns = price_data["Close"].pct_change().dropna()
             benchmark_returns = benchmark_data["Close"].pct_change().dropna()
-            
+
             # Align dates
-            aligned = pd.DataFrame({
-                "stock": stock_returns,
-                "benchmark": benchmark_returns
-            }).dropna()
-            
+            aligned = pd.DataFrame(
+                {"stock": stock_returns, "benchmark": benchmark_returns}
+            ).dropna()
+
             if aligned.empty or len(aligned) < 2:
                 logger.warning("Insufficient overlapping data for beta/alpha")
                 return {}
-            
+
             # Beta (covariance / variance)
             covariance = float(aligned["stock"].cov(aligned["benchmark"]))
             bm_var_result = aligned["benchmark"].var()
-            benchmark_variance = float(bm_var_result) if isinstance(bm_var_result, (int, float, np.number)) else 0.0
+            benchmark_variance = (
+                float(bm_var_result) if isinstance(bm_var_result, (int, float, np.number)) else 0.0
+            )
             beta = covariance / benchmark_variance if benchmark_variance != 0 else 0.0
-            
+
             # Alpha (annualized)
             stock_mean_return = float(aligned["stock"].mean()) * TRADING_DAYS_PER_YEAR
             benchmark_mean_return = float(aligned["benchmark"].mean()) * TRADING_DAYS_PER_YEAR
             rf_rate = self.config.risk_free_rate / 100
-            
+
             alpha = stock_mean_return - (rf_rate + beta * (benchmark_mean_return - rf_rate))
-            
+
             # Correlation
             correlation = float(aligned["stock"].corr(aligned["benchmark"]))
-            
+
             # R-squared
-            r_squared = correlation ** 2
-            
+            r_squared = correlation**2
+
             return {
                 "beta": beta,
                 "alpha": float(alpha),
@@ -368,7 +375,7 @@ class RiskMetrics:
                 "r_squared": r_squared,
                 "benchmark": self.config.benchmark_ticker,
             }
-            
+
         except Exception as e:
             logger.error(f"Error calculating beta/alpha: {e}")
             return {}
@@ -392,23 +399,25 @@ class RiskMetrics:
 
         try:
             daily_returns = price_data["Close"].pct_change().dropna()
-            
+
             if daily_returns.empty:
                 return {}
-            
+
             # Historical VaR (percentile of returns)
             var = float(np.percentile(daily_returns, (1 - confidence_level) * 100))
-            
+
             # CVaR (expected shortfall - mean of returns below VaR)
             returns_below_var = daily_returns[daily_returns <= var]
             cvar = float(returns_below_var.mean()) if len(returns_below_var) > 0 else var
-            
+
             # Parametric VaR (assumes normal distribution)
             mean_return = float(daily_returns.mean())
             std_return = float(daily_returns.std())
-            z_score = np.abs(np.percentile(np.random.standard_normal(10000), (1 - confidence_level) * 100))
+            z_score = np.abs(
+                np.percentile(np.random.standard_normal(10000), (1 - confidence_level) * 100)
+            )
             parametric_var = mean_return - z_score * std_return
-            
+
             return {
                 "confidence_level": confidence_level,
                 "var_historical": var,
@@ -416,7 +425,7 @@ class RiskMetrics:
                 "var_parametric": parametric_var,
                 "worst_day": float(daily_returns.min()),
             }
-            
+
         except Exception as e:
             logger.error(f"Error calculating VaR: {e}")
             return {}
@@ -445,6 +454,7 @@ class RiskMetrics:
             # Fetch benchmark if not provided
             if benchmark_data is None or benchmark_data.empty:
                 from .data_fetcher import DataFetcher
+
                 fetcher = DataFetcher()
                 start_date = price_data.index.min()
                 end_date = price_data.index.max()
@@ -463,7 +473,9 @@ class RiskMetrics:
             benchmark_returns = benchmark_data["Close"].pct_change().dropna()
 
             # Align data
-            aligned = pd.DataFrame({"stock": stock_returns, "benchmark": benchmark_returns}).dropna()
+            aligned = pd.DataFrame(
+                {"stock": stock_returns, "benchmark": benchmark_returns}
+            ).dropna()
 
             if aligned.empty or len(aligned) < 2:
                 return 0.0
@@ -479,7 +491,9 @@ class RiskMetrics:
 
             # Information Ratio (annualized)
             mean_active_return = active_returns.mean()
-            information_ratio = (mean_active_return / tracking_error) * np.sqrt(TRADING_DAYS_PER_YEAR)
+            information_ratio = (mean_active_return / tracking_error) * np.sqrt(
+                TRADING_DAYS_PER_YEAR
+            )
 
             return to_float(information_ratio)
 
@@ -572,7 +586,9 @@ class RiskMetrics:
                 rolling_downside_std = excess_returns.rolling(window=window).apply(
                     calculate_downside_std, raw=False
                 )
-                rolling_sortino = (rolling_mean / rolling_downside_std) * np.sqrt(TRADING_DAYS_PER_YEAR)
+                rolling_sortino = (rolling_mean / rolling_downside_std) * np.sqrt(
+                    TRADING_DAYS_PER_YEAR
+                )
 
                 # Drop NaN values
                 rolling_sharpe = rolling_sharpe.dropna()
@@ -602,7 +618,9 @@ class RiskMetrics:
             logger.error(f"Error calculating rolling ratios: {e}")
             return {}
 
-    def calculate_all_metrics(self, price_data: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
+    def calculate_all_metrics(
+        self, price_data: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None
+    ) -> Dict[str, Any]:
         """
         Calculate all risk metrics
 

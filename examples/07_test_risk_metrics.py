@@ -10,8 +10,8 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.data_fetcher import DataFetcher
 from src.analysis import RiskMetrics
+from src.data_fetcher import DataFetcher
 
 
 def main():
@@ -120,7 +120,7 @@ def main():
         print(f"  Max DD Date:       {dd.get('max_drawdown_date', 'N/A')}")
         print(f"  Current Drawdown:  {dd.get('current_drawdown', 0):.2%}")
         print(f"  Days Since Peak:   {dd.get('days_since_peak', 0)}")
-        if dd.get('recovery_days'):
+        if dd.get("recovery_days"):
             print(f"  Recovery Time:     {dd.get('recovery_days')} days")
         print(f"  At Peak:           {'Yes' if dd.get('is_recovered') else 'No'}")
     else:
@@ -135,14 +135,14 @@ def main():
         print(f"\nBeta & Alpha:")
         print(f"  Benchmark:         {mr.get('benchmark', 'N/A')}")
         print(f"  Beta:              {mr.get('beta', 0):.2f}")
-        if mr.get('beta', 0) > 1:
+        if mr.get("beta", 0) > 1:
             print("    → More volatile than market")
-        elif mr.get('beta', 0) < 1:
+        elif mr.get("beta", 0) < 1:
             print("    → Less volatile than market")
         else:
             print("    → Moves with market")
         print(f"  Alpha:             {mr.get('alpha', 0):.2%}")
-        if mr.get('alpha', 0) > 0:
+        if mr.get("alpha", 0) > 0:
             print("    → Outperforming benchmark (risk-adjusted)")
         print(f"  Correlation:       {mr.get('correlation', 0):.2f}")
         print(f"  R-squared:         {mr.get('r_squared', 0):.2%}")

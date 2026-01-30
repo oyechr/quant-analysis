@@ -62,7 +62,9 @@ def format_percent(value: Any) -> str:
         return "N/A"
 
 
-def safe_get(data: Dict[str, Any], key: str, default: Any = "N/A", formatter: Optional[Callable] = None) -> Any:
+def safe_get(
+    data: Dict[str, Any], key: str, default: Any = "N/A", formatter: Optional[Callable] = None
+) -> Any:
     """
     Safely extract value from dictionary with optional formatting
 
@@ -112,7 +114,7 @@ def save_analysis_report(
     output_dir: Path,
     report_type: str,
     content_generator: Callable[[], List[str]],
-    file_extension: str = "md"
+    file_extension: str = "md",
 ) -> None:
     """
     Template method for saving analysis reports (markdown or JSON)
@@ -130,15 +132,18 @@ def save_analysis_report(
 
     try:
         content = content_generator()
-        
+
         with open(output_file, "w", encoding="utf-8") as f:
             if file_extension == "md":
                 f.write("\n".join(content))
             else:
                 import json
+
                 json.dump(content, f, indent=2, default=str)
-        
-        logger.info(f"{report_type.replace('_', ' ').title()} {file_extension.upper()} saved: {output_file}")
+
+        logger.info(
+            f"{report_type.replace('_', ' ').title()} {file_extension.upper()} saved: {output_file}"
+        )
     except Exception as e:
         logger.error(f"Error saving {report_type} report: {e}")
 
@@ -147,9 +152,7 @@ def save_analysis_report(
 
 
 def validate_dataframe(
-    df: Any,
-    required_columns: Optional[List[str]] = None,
-    min_rows: int = 1
+    df: Any, required_columns: Optional[List[str]] = None, min_rows: int = 1
 ) -> bool:
     """
     Validate DataFrame has required structure and data
@@ -163,18 +166,18 @@ def validate_dataframe(
         True if valid, False otherwise
     """
     import pandas as pd
-    
+
     if df is None or not isinstance(df, pd.DataFrame):
         return False
-    
+
     if df.empty or len(df) < min_rows:
         return False
-    
+
     if required_columns:
         missing = [col for col in required_columns if col not in df.columns]
         if missing:
             return False
-    
+
     return True
 
 

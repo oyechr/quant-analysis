@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from ..analysis.fundamental import FundamentalAnalyzer
+from ..analysis.valuation import ValuationAnalyzer
 from ..utils.report import format_number, format_percent, safe_get
 
 logger = logging.getLogger(__name__)
@@ -84,24 +85,39 @@ class InfoSection(ReportSection):
 
         md.append("\n## Valuation Metrics")
         md.append(f"\n- **Market Cap:** {format_number(raw_data.get('market_cap'))}")
-        md.append(f"- **P/E Ratio:** {safe_get(raw_data, 'pe_ratio', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **Forward P/E:** {safe_get(raw_data, 'forward_pe', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **PEG Ratio:** {safe_get(raw_data, 'peg_ratio', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **Price/Book:** {safe_get(raw_data, 'price_to_book', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **Price/Sales:** {safe_get(raw_data, 'price_to_sales', formatter=lambda x: f'{x:.2f}')}")
+        md.append(
+            f"- **P/E Ratio:** {safe_get(raw_data, 'pe_ratio', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **Forward P/E:** {safe_get(raw_data, 'forward_pe', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **PEG Ratio:** {safe_get(raw_data, 'peg_ratio', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **Price/Book:** {safe_get(raw_data, 'price_to_book', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **Price/Sales:** {safe_get(raw_data, 'price_to_sales', formatter=lambda x: f'{x:.2f}')}"
+        )
 
         md.append("\n## Financial Health")
         md.append(f"\n- **Profit Margin:** {format_percent(raw_data.get('profit_margin'))}")
-        md.append(
-            f"- **Operating Margin:** {format_percent(raw_data.get('operating_margin'))}"
-        )
+        md.append(f"- **Operating Margin:** {format_percent(raw_data.get('operating_margin'))}")
         md.append(f"- **ROE:** {format_percent(raw_data.get('roe'))}")
         md.append(f"- **ROA:** {format_percent(raw_data.get('roa'))}")
-        md.append(f"- **Debt/Equity:** {safe_get(raw_data, 'debt_to_equity', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **Current Ratio:** {safe_get(raw_data, 'current_ratio', formatter=lambda x: f'{x:.2f}')}")
-        md.append(f"- **Quick Ratio:** {safe_get(raw_data, 'quick_ratio', formatter=lambda x: f'{x:.2f}')}")
+        md.append(
+            f"- **Debt/Equity:** {safe_get(raw_data, 'debt_to_equity', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **Current Ratio:** {safe_get(raw_data, 'current_ratio', formatter=lambda x: f'{x:.2f}')}"
+        )
+        md.append(
+            f"- **Quick Ratio:** {safe_get(raw_data, 'quick_ratio', formatter=lambda x: f'{x:.2f}')}"
+        )
 
         return md
+
 
 class PriceDataSection(ReportSection):
     """Price data section"""
@@ -658,4 +674,216 @@ class RiskAnalysisSection(ReportSection):
         md.append("*See risk_analysis.md for detailed risk metrics*")
         md.append("")
 
+        return md
+
+
+class ValuationAnalysisSection(ReportSection):
+    """Valuation analysis section (DCF, DDM, dividends, earnings)"""
+
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
+        logger.info(f"Performing valuation analysis for {ticker}")
+
+        # Fetch required data
+        info = fetcher.get_ticker_info(ticker, use_cache=use_cache)
+        price_data = kwargs.get("price_data")
+        fundamentals = fetcher.fetch_fundamentals(ticker, use_cache=use_cache)
+        earnings_data = fetcher.fetch_earnings(ticker, use_cache=use_cache)
+        dividends_data = kwargs.get("dividends_data")
+
+        # Create analyzer
+        analyzer = ValuationAnalyzer(
+            ticker=ticker,
+            ticker_info=info,
+            price_data=price_data,
+            fundamentals=fundamentals,
+            earnings_data=earnings_data,
+            dividends_data=dividends_data,
+        )
+
+        # Run analysis
+        return analyzer.analyze()
+
+    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Format valuation data for JSON"""
+        return raw_data  # Already in good format
+
+    def format_for_markdown(self, raw_data: Dict[str, Any]) -> List[str]:
+        """Format valuation analysis as markdown"""
+        md = ["## Valuation Analysis", ""]
+
+        # DCF Valuation
+        dcf = raw_data.get("dcf_valuation", {})
+        md.append("### DCF (Discounted Cash Flow) Valuation")
+        md.append("")
+
+        if dcf.get("error"):
+            md.append(f"⚠️ {dcf['error']}")
+        elif dcf.get("intrinsic_value_per_share"):
+            intrinsic = dcf["intrinsic_value_per_share"]
+            current = dcf.get("current_price")
+            discount = dcf.get("discount_premium_pct", 0)
+
+            md.append(f"**Intrinsic Value:** ${intrinsic:.2f}")
+            md.append(f"**Current Price:** ${current:.2f}")
+
+            if discount < 0:
+                md.append(
+                    f"**Valuation:** 🔻 Undervalued by {abs(discount):.1f}% (trading below fair value)"
+                )
+            elif discount > 0:
+                md.append(
+                    f"**Valuation:** 🔺 Overvalued by {discount:.1f}% (trading above fair value)"
+                )
+            else:
+                md.append("**Valuation:** Fairly valued")
+
+            md.append("")
+            md.append("**Assumptions:**")
+            md.append(f"- FCF Growth Rate: {dcf.get('growth_rate_used', 0):.1f}%")
+            md.append(f"- Terminal Growth: {dcf.get('terminal_growth_rate', 0):.1f}%")
+            md.append(f"- WACC: {dcf.get('wacc_used', 0):.1f}%")
+            md.append(f"- Current FCF: ${format_number(dcf.get('fcf_current', 0))}")
+
+        md.append("")
+
+        # DDM Valuation
+        ddm = raw_data.get("ddm_valuation", {})
+        md.append("### DDM (Dividend Discount Model) Valuation")
+        md.append("")
+
+        if ddm.get("error"):
+            md.append(f"⚠️ {ddm['error']}")
+        elif ddm.get("intrinsic_value_per_share"):
+            intrinsic = ddm["intrinsic_value_per_share"]
+            current = ddm.get("current_price")
+            discount = ddm.get("discount_premium_pct", 0)
+
+            md.append(f"**Intrinsic Value:** ${intrinsic:.2f}")
+            md.append(f"**Current Price:** ${current:.2f}")
+
+            if discount < 0:
+                md.append(
+                    f"**Valuation:** 🔻 Undervalued by {abs(discount):.1f}% (dividend investor opportunity)"
+                )
+            elif discount > 0:
+                md.append(f"**Valuation:** 🔺 Overvalued by {discount:.1f}%")
+
+            md.append("")
+            md.append("**Assumptions:**")
+            md.append(f"- Current Dividend: ${ddm.get('current_dividend', 0):.2f}")
+            md.append(f"- Next Dividend Est.: ${ddm.get('next_dividend_estimate', 0):.2f}")
+            md.append(f"- Dividend Growth: {ddm.get('growth_rate_used', 0):.1f}%")
+            md.append(f"- Required Return: {ddm.get('required_return_used', 0):.1f}%")
+
+        md.append("")
+
+        # Dividend Analysis
+        div = raw_data.get("dividend_analysis", {})
+        md.append("### Dividend Analysis")
+        md.append("")
+
+        if not div.get("pays_dividends"):
+            md.append("❌ Company does not pay dividends")
+        else:
+            yield_pct = div.get("dividend_yield", 0)
+            annual_div = div.get("annual_dividend", 0)
+            payout = div.get("payout_ratio", 0)
+            growth = div.get("dividend_growth_rate")
+            coverage = div.get("dividend_coverage_ratio")
+            consecutive = div.get("consecutive_years", 0)
+            score = div.get("sustainability_score", 0)
+            rating = div.get("sustainability_rating", "Unknown")
+
+            md.append(f"**Dividend Yield:** {yield_pct:.2f}%")
+            md.append(f"**Annual Dividend:** ${annual_div:.2f}")
+            md.append(f"**Payout Ratio:** {payout:.1f}%")
+
+            if coverage:
+                md.append(f"**Dividend Coverage:** {coverage:.2f}x")
+
+            if growth:
+                md.append(f"**Dividend Growth Rate:** {growth:.1f}%")
+
+            md.append(f"**Consecutive Years:** {consecutive}")
+            md.append("")
+            md.append(f"**Sustainability Score:** {score}/100 ({rating})")
+
+            warnings = div.get("warnings", [])
+            if warnings:
+                md.append("")
+                md.append("**⚠️ Warnings:**")
+                for warning in warnings:
+                    md.append(f"- {warning}")
+
+        md.append("")
+
+        # Earnings Analysis
+        earn = raw_data.get("earnings_analysis", {})
+        md.append("### Earnings Analysis")
+        md.append("")
+
+        current_eps = earn.get("current_eps")
+        forward_eps = earn.get("forward_eps")
+        growth_1y = earn.get("eps_growth_1y")
+        growth_3y = earn.get("eps_growth_3y_cagr")
+        next_date = earn.get("next_earnings_date")
+        next_est = earn.get("next_earnings_estimate")
+        trend = earn.get("trend")
+
+        if current_eps:
+            md.append(f"**Current EPS (TTM):** ${current_eps:.2f}")
+        if forward_eps:
+            md.append(f"**Forward EPS:** ${forward_eps:.2f}")
+
+        if growth_1y is not None:
+            md.append(f"**EPS Growth (1Y):** {growth_1y:+.1f}%")
+        if growth_3y is not None:
+            md.append(f"**EPS Growth (3Y CAGR):** {growth_3y:+.1f}%")
+
+        if trend:
+            md.append(f"**Trend:** {trend}")
+
+        if next_date:
+            md.append("")
+            md.append(f"**Next Earnings:** {next_date}")
+            if next_est:
+                md.append(f"**Estimate:** ${next_est:.2f}")
+
+        # Recent surprises
+        surprises = earn.get("recent_surprises", [])
+        if surprises:
+            md.append("")
+            md.append("**Recent Earnings Surprises:**")
+            md.append("")
+            md.append("| Quarter | Actual | Estimate | Surprise % |")
+            md.append("|---------|--------|----------|------------|")
+            for s in surprises[-4:]:  # Last 4 quarters
+                quarter = s.get("quarter", "")[:10]  # Truncate date
+                actual = s.get("eps_actual", 0)
+                estimate = s.get("eps_estimate", 0)
+                surprise = s.get("surprise_pct", 0)
+                md.append(f"| {quarter} | ${actual:.2f} | ${estimate:.2f} | {surprise:+.1f}% |")
+
+        # Surprise statistics
+        stats = earn.get("surprise_stats", {})
+        if stats:
+            beat_rate = stats.get("beat_rate", 0)
+            avg_surprise = stats.get("avg_surprise_pct", 0)
+            md.append("")
+            md.append(
+                f"**Beat Rate:** {beat_rate:.0f}% ({stats.get('positive_surprises', 0)}/{len(surprises)} quarters)"
+            )
+            md.append(f"**Avg Surprise:** {avg_surprise:+.1f}%")
+
+        # Earnings quality
+        quality = earn.get("earnings_quality", {})
+        if quality.get("assessment"):
+            md.append("")
+            md.append("**Earnings Quality:**")
+            md.append(f"- {quality['assessment']}")
+            metrics = quality.get("metrics", {})
+            if "cash_flow_to_earnings_ratio" in metrics:
+                md.append(f"- CF/NI Ratio: {metrics['cash_flow_to_earnings_ratio']:.2f}x")
+
+        md.append("")
         return md

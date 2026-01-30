@@ -29,9 +29,7 @@ def to_float(value: Any) -> float:
     return 0.0
 
 
-def calculate_daily_returns(
-    price_data: pd.DataFrame, column: str = "Close"
-) -> pd.Series:
+def calculate_daily_returns(price_data: pd.DataFrame, column: str = "Close") -> pd.Series:
     """
     Calculate daily returns from price data
 
@@ -45,9 +43,7 @@ def calculate_daily_returns(
     return price_data[column].pct_change().dropna()
 
 
-def annualize_return(
-    daily_return: float, periods: int = TRADING_DAYS_PER_YEAR
-) -> float:
+def annualize_return(daily_return: float, periods: int = TRADING_DAYS_PER_YEAR) -> float:
     """
     Convert daily return to annualized return
 
@@ -61,9 +57,7 @@ def annualize_return(
     return daily_return * periods
 
 
-def annualize_volatility(
-    daily_volatility: float, periods: int = TRADING_DAYS_PER_YEAR
-) -> float:
+def annualize_volatility(daily_volatility: float, periods: int = TRADING_DAYS_PER_YEAR) -> float:
     """
     Convert daily volatility to annualized volatility
 
@@ -77,9 +71,7 @@ def annualize_volatility(
     return daily_volatility * np.sqrt(periods)
 
 
-def validate_price_data(
-    price_data: pd.DataFrame, column: str = "Close"
-) -> bool:
+def validate_price_data(price_data: pd.DataFrame, column: str = "Close") -> bool:
     """
     Validate that price data has required column and contains data
 
@@ -90,11 +82,7 @@ def validate_price_data(
     Returns:
         True if valid, False otherwise
     """
-    return (
-        price_data is not None
-        and not price_data.empty
-        and column in price_data.columns
-    )
+    return price_data is not None and not price_data.empty and column in price_data.columns
 
 
 def convert_annual_to_daily_rate(annual_rate_pct: float) -> float:
@@ -108,3 +96,20 @@ def convert_annual_to_daily_rate(annual_rate_pct: float) -> float:
         Daily rate as decimal
     """
     return (1 + annual_rate_pct / 100) ** (1 / TRADING_DAYS_PER_YEAR) - 1
+
+
+def calculate_cagr(ending_value: float, beginning_value: float, num_periods: int) -> float:
+    """
+    Calculate Compound Annual Growth Rate
+
+    Args:
+        ending_value: Final value
+        beginning_value: Initial value
+        num_periods: Number of periods (years)
+
+    Returns:
+        CAGR as percentage, or 0.0 if calculation invalid
+    """
+    if ending_value is None or beginning_value is None or beginning_value <= 0 or num_periods <= 0:
+        return 0.0
+    return (pow(ending_value / beginning_value, 1 / num_periods) - 1) * 100
