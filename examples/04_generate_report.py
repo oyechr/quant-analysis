@@ -45,9 +45,9 @@ def main():
     parser.add_argument("--no-cache", action="store_true", help="Fetch fresh data (ignore cache)")
     parser.add_argument(
         "--format",
-        choices=["json", "markdown", "both"],
+        choices=["json", "markdown", "both", "toon", "all"],
         default="both",
-        help="Output format (default: both)",
+        help="Output format (default: both). Use 'toon' for LLM-optimized output, 'all' for json+markdown+toon",
     )
 
     args = parser.parse_args()
@@ -75,10 +75,12 @@ def main():
     )
 
     print(f"\n✓ Report generated for {ticker}")
-    if args.format in ["both", "json"]:
+    if args.format in ["both", "json", "all"]:
         print(f"  - JSON: data/{ticker}/reports/full_report.json")
-    if args.format in ["both", "markdown"]:
+    if args.format in ["both", "markdown", "all"]:
         print(f"  - Markdown: data/{ticker}/reports/report.md")
+    if args.format in ["toon", "all"]:
+        print(f"  - TOON: data/{ticker}/reports/full_report.toon (LLM-optimized)")
     if not args.exclude_technical:
         print(f"  - Technical Analysis: data/{ticker}/reports/technical_analysis.md + .json")
     if not args.exclude_fundamental:
@@ -98,11 +100,14 @@ def main():
     print("\nView reports:")
     print("  - JSON files: Machine-readable, complete data")
     print("  - Markdown files: Human-readable, formatted (right-click → 'Open Preview')")
+    print("  - TOON files: LLM-optimized, token-efficient representation")
     print(f"\nFiles saved in: data/{ticker}/reports/")
     print("\nUsage examples:")
     print("  python examples\\04_generate_report.py AAPL")
     print("  python examples\\04_generate_report.py TSLA --period 2y")
     print("  python examples\\04_generate_report.py MSFT --no-cache --format markdown")
+    print("  python examples\\04_generate_report.py NVDA --format all")
+    print("  python examples\\04_generate_report.py AAPL --format toon")
     print("  python examples\\04_generate_report.py NVDA --exclude-technical --exclude-risk")
 
 

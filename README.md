@@ -56,6 +56,7 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 
 - JSON reports with complete data aggregation
 - Markdown reports for human-readable analysis
+- TOON reports for LLM-optimized input (Token-Oriented Object Notation)
 - Modular section-based architecture (10 section types)
 - Separate detailed technical and fundamental analysis reports
 - Automatic report versioning via Git
@@ -99,6 +100,12 @@ python examples/04_generate_report.py MSFT --no-fundamental
 
 # Markdown output only
 python examples/04_generate_report.py NVDA --format markdown
+
+# TOON output for LLM consumption
+python examples/04_generate_report.py AAPL --format toon
+
+# All formats (JSON + Markdown + TOON)
+python examples/04_generate_report.py AAPL --format all
 ```
 
 ### Basic Data Fetching
@@ -172,6 +179,13 @@ report = generator.generate_full_report(
     include_technical=True,    # Entry/exit timing signals
     include_fundamental=True   # Intrinsic value assessment
 )
+
+# Generate with TOON output for LLM consumption
+report = generator.generate_full_report(
+    ticker="AAPL",
+    period="1y",
+    output_format="all",  # JSON + Markdown + TOON
+)
 ```
 
 ## Project Structure
@@ -193,6 +207,7 @@ quant-analysis/
 │   │   ├── dataframe_utils.py    # DataFrame/Series helpers
 │   │   ├── report.py             # Report formatting
 │   │   ├── serialization.py      # JSON conversion
+│   │   ├── toon_serializer.py    # TOON format conversion (LLM-optimized)
 │   │   └── types.py              # Type definitions
 │   ├── config.py                 # Configuration settings
 │   └── (legacy files in transition)
@@ -205,6 +220,7 @@ quant-analysis/
 │       │   └── ...
 │       └── reports/              # Generated analysis reports (tracked)
 │           ├── full_report.json
+│           ├── full_report.toon  # LLM-optimized (Token-Oriented Object Notation)
 │           ├── report.md
 │           ├── technical_analysis.json
 │           ├── technical_analysis.md
@@ -217,7 +233,7 @@ quant-analysis/
 │   ├── 04_generate_report.py
 │   ├── 05_technical_analysis.py
 │   └── README.md                 # Detailed examples documentation
-└── tests/                        # Unit tests (planned)
+└── tests/                        # Unit tests
 ```
 
 ## Data Organization
@@ -232,6 +248,12 @@ This separation allows:
 - Regenerating fresh data without losing analysis history
 - Git tracking of trading signals and analysis conclusions
 - Clean separation of raw data vs insights
+
+### TOON Output Format
+
+Reports can be generated in [TOON (Token-Oriented Object Notation)](https://github.com/toon-format/spec) format, a compact encoding optimized for LLM input. TOON provides the same data as JSON but uses YAML-style indentation for objects and CSV-like tabular format for uniform arrays, reducing token count while maintaining readability for language models.
+
+Use `--format toon` for TOON-only output, or `--format all` to generate JSON + Markdown + TOON together. The TOON file is saved as `full_report.toon` alongside the existing report files.
 
 ## Examples
 

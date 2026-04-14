@@ -31,6 +31,7 @@ from .serialization import (
     format_date,
     series_to_dataframe,
 )
+from .toon_serializer import report_to_toon
 
 __all__ = [
     # DataFrame utilities
@@ -63,4 +64,6 @@ __all__ = [
     "dataframe_to_records",
     "format_date",
     "series_to_dataframe",
+    # TOON serialization
+    "report_to_toon",
 ]
