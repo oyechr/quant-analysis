@@ -265,7 +265,9 @@ class ReportGenerator:
         toon_data = dict(data)
         scoring = data.get("scoring")
         if scoring:
-            # Move scoring to the front by rebuilding the dict with scoring first
+            # Renamed to 'scoring_summary' in TOON output to position it first
+            # and signal to LLMs that this is a pre-computed summary. The full
+            # scoring data remains under 'scoring' in the JSON report.
             toon_data = {"scoring_summary": scoring}
             for key, value in data.items():
                 if key != "scoring":

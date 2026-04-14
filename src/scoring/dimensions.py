@@ -1209,7 +1209,10 @@ class ValuationScorer:
             label = "Undervalued for growth"
             strengths.append(f"PEG {peg:.2f} — undervalued relative to growth rate")
         elif peg <= self.params.peg_fair:
-            score = 50.0 + ((self.params.peg_fair - peg) / (self.params.peg_fair - self.params.peg_undervalued)) * 35.0
+            score = 50.0 + (
+                (self.params.peg_fair - peg)
+                / (self.params.peg_fair - self.params.peg_undervalued)
+            ) * 35.0
             label = "Fair"
         else:
             score = max(50.0 - (peg - self.params.peg_fair) * 10, 10.0)

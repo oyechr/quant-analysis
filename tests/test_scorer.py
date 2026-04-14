@@ -336,7 +336,9 @@ class TestTechnicalScorer:
 
     def test_golden_cross_boosts_ma_score(self):
         scorer = TechnicalScorer()
-        data = self._make_tech_data(signals={"MACD": "Neutral", "MA_Trend": "Bullish (Golden Cross)"})
+        data = self._make_tech_data(
+            signals={"MACD": "Neutral", "MA_Trend": "Bullish (Golden Cross)"}
+        )
         result = scorer.score(data)
         ma_score = next(s for s in result.sub_scores if s.name == "MA Alignment")
         assert "Golden Cross" in ma_score.label
