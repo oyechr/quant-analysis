@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from ..data_fetcher import DataFetcher
+from ..utils.toon_serializer import report_to_toon
 from .sections import (
     AnalystRatingsSection,
     DividendsSection,
@@ -62,7 +63,7 @@ class ReportGenerator:
         self,
         ticker: str,
         period: str = "1y",
-        output_format: str = "both",
+        output_format: str = "all",
         use_cache: bool = True,
         include_technical: bool = True,
         include_fundamental: bool = True,
@@ -78,7 +79,7 @@ class ReportGenerator:
         Args:
             ticker: Stock ticker symbol
             period: Period for price data (1mo, 3mo, 6mo, 1y, 2y, 5y, etc.)
-            output_format: "json", "markdown", or "both"
+            output_format: "json", "markdown", "toon", or "all" (json+markdown+toon)
             use_cache: Whether to use cached data
             include_technical: Whether to include technical analysis (default: True)
             include_fundamental: Whether to include fundamental analysis (default: True)
@@ -170,7 +171,7 @@ class ReportGenerator:
                 price_data = self.fetcher.fetch_ticker(ticker, period="1y", use_cache=use_cache)
                 fundamentals = self.fetcher.fetch_fundamentals(ticker, use_cache=use_cache)
                 earnings_data = self.fetcher.fetch_earnings(ticker, use_cache=use_cache)
-                
+
                 # Fetch dividends and convert to Series
                 div_data = self.fetcher.fetch_dividends(ticker, use_cache=use_cache)
                 dividends_series = None
@@ -204,13 +205,21 @@ class ReportGenerator:
                 report_data["valuation_analysis"] = None
 
         # Save outputs
-        if output_format in ["json", "both"]:
+        if output_format in ["json", "all"]:
             self._save_json_report(ticker, report_data)
 
-        if output_format in ["markdown", "both"]:
+        if output_format in ["markdown", "all"]:
             self._save_markdown_report(
-                ticker, report_data, technical_analyzer, fundamental_analyzer, risk_analyzer_tuple, valuation_analyzer
+                ticker,
+                report_data,
+                technical_analyzer,
+                fundamental_analyzer,
+                risk_analyzer_tuple,
+                valuation_analyzer,
             )
+
+        if output_format in ["toon", "all"]:
+            self._save_toon_report(ticker, report_data)
 
         logger.info(f"Report generation complete for {ticker}")
         return report_data
@@ -223,6 +232,16 @@ class ReportGenerator:
         with open(output_file, "w") as f:
             json.dump(data, f, indent=2, default=str)
         logger.info(f"JSON report saved: {output_file}")
+
+    def _save_toon_report(self, ticker: str, data: Dict[str, Any]):
+        """Save report as TOON (Token-Oriented Object Notation) for LLM consumption"""
+        reports_dir = self.output_dir / ticker / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "full_report.toon"
+        toon_str = report_to_toon(data)
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(toon_str)
+        logger.info(f"TOON report saved: {output_file}")
 
     def _save_markdown_report(
         self,
@@ -258,7 +277,11 @@ class ReportGenerator:
         if fundamental_analyzer and data.get("fundamental_analysis"):
             try:
                 fund_section = FundamentalAnalysisSection()
-                md.extend(fund_section.format_for_markdown(data["fundamental_analysis"], currency=currency))
+                md.extend(
+                    fund_section.format_for_markdown(
+                        data["fundamental_analysis"], currency=currency
+                    )
+                )
             except Exception as e:
                 logger.warning(f"Error formatting fundamental analysis markdown: {e}")
 
@@ -282,7 +305,9 @@ class ReportGenerator:
         if valuation_analyzer and data.get("valuation_analysis"):
             try:
                 val_section = ValuationAnalysisSection()
-                md.extend(val_section.format_for_markdown(data["valuation_analysis"], currency=currency))
+                md.extend(
+                    val_section.format_for_markdown(data["valuation_analysis"], currency=currency)
+                )
             except Exception as e:
                 logger.warning(f"Error formatting valuation analysis markdown: {e}")
 
@@ -630,7 +655,7 @@ class ReportGenerator:
 
 
 # Convenience function
-def generate_report(ticker: str, period: str = "1y", output_format: str = "both") -> Dict[str, Any]:
+def generate_report(ticker: str, period: str = "1y", output_format: str = "all") -> Dict[str, Any]:
     """Quick report generation"""
     generator = ReportGenerator()
     return generator.generate_full_report(ticker, period=period, output_format=output_format)
