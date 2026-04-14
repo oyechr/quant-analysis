@@ -119,7 +119,7 @@ class TestReportToToon:
         data = {"value": float("nan")}
         result = report_to_toon(data)
         assert "null" in result
-        assert "nan" not in result.lower() or "null" in result
+        assert "nan" not in result.lower()
 
     def test_roundtrip_simple(self):
         """Simple data should roundtrip through TOON encode/decode."""
