@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from ..data_fetcher import DataFetcher
+from ..scoring import ScoringConfig, StockScorer
 from ..utils.toon_serializer import report_to_toon
 from .sections import (
     AnalystRatingsSection,
@@ -204,6 +205,20 @@ class ReportGenerator:
                 logger.error(f"Error processing valuation analysis: {e}")
                 report_data["valuation_analysis"] = None
 
+        # Run Composite Scoring Engine
+        scoring_result = None
+        try:
+            scorer = StockScorer()
+            scoring_result = scorer.score(report_data)
+            report_data["scoring"] = scoring_result.to_dict()
+            logger.info(
+                f"Scoring complete: {scoring_result.composite_score:.1f}/100 "
+                f"({scoring_result.signal})"
+            )
+        except Exception as e:
+            logger.error(f"Error running scoring engine: {e}")
+            report_data["scoring"] = None
+
         # Save outputs
         if output_format in ["json", "all"]:
             self._save_json_report(ticker, report_data)
@@ -216,10 +231,16 @@ class ReportGenerator:
                 fundamental_analyzer,
                 risk_analyzer_tuple,
                 valuation_analyzer,
+                scoring_result,
             )
 
         if output_format in ["toon", "all"]:
             self._save_toon_report(ticker, report_data)
+
+        # Save separate scoring report
+        if scoring_result:
+            self._save_scoring_json(ticker, scoring_result)
+            self._save_scoring_markdown(ticker, scoring_result)
 
         logger.info(f"Report generation complete for {ticker}")
         return report_data
@@ -238,7 +259,19 @@ class ReportGenerator:
         reports_dir = self.output_dir / ticker / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         output_file = reports_dir / "full_report.toon"
-        toon_str = report_to_toon(data)
+
+        # If scoring is available, build a report with scoring summary at the top
+        # so the LLM reads the quantitative assessment first
+        toon_data = dict(data)
+        scoring = data.get("scoring")
+        if scoring:
+            # Move scoring to the front by rebuilding the dict with scoring first
+            toon_data = {"scoring_summary": scoring}
+            for key, value in data.items():
+                if key != "scoring":
+                    toon_data[key] = value
+
+        toon_str = report_to_toon(toon_data)
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(toon_str)
         logger.info(f"TOON report saved: {output_file}")
@@ -251,6 +284,7 @@ class ReportGenerator:
         fundamental_analyzer=None,
         risk_analyzer_tuple=None,
         valuation_analyzer=None,
+        scoring_result=None,
     ):
         """Save report as Markdown using section handlers"""
         reports_dir = self.output_dir / ticker / "reports"
@@ -261,6 +295,17 @@ class ReportGenerator:
         md.append(f"# {ticker} - Comprehensive Stock Report")
         md.append(f"\n**Generated:** {data['generated_at']}")
         md.append(f"\n**Period:** {data['period']}")
+
+        # Insert Stock Score at the top of the report
+        if scoring_result:
+            md.append("")
+            md.append("---")
+            md.append("")
+            md.append("```")
+            md.append(scoring_result.format_scorecard())
+            md.append("```")
+            md.append("")
+            md.append("---")
 
         # Generate markdown for each section using handlers
         currency = data.get("info", {}).get("currency", "USD")
@@ -652,6 +697,70 @@ class ReportGenerator:
             f.write("\n".join(md))
 
         logger.info(f"Valuation analysis markdown saved: {output_file}")
+
+    def _save_scoring_json(self, ticker: str, scoring_result):
+        """Save scoring results as separate JSON file"""
+        reports_dir = self.output_dir / ticker / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "scoring.json"
+
+        with open(output_file, "w") as f:
+            json.dump(scoring_result.to_dict(), f, indent=2, default=str)
+
+        logger.info(f"Scoring JSON saved: {output_file}")
+
+    def _save_scoring_markdown(self, ticker: str, scoring_result):
+        """Save scoring results as separate markdown file"""
+        reports_dir = self.output_dir / ticker / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / "scoring.md"
+
+        md = []
+        md.append(f"# {ticker} - Stock Score Report")
+        md.append("")
+        md.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        md.append("")
+        md.append("```")
+        md.append(scoring_result.format_scorecard())
+        md.append("```")
+        md.append("")
+
+        # Detailed dimension breakdown
+        for name, dim in [
+            ("Technical", scoring_result.technical),
+            ("Fundamental", scoring_result.fundamental),
+            ("Risk", scoring_result.risk),
+            ("Valuation", scoring_result.valuation),
+        ]:
+            if dim:
+                md.append(f"## {name} Analysis ({dim.score:.1f}/100)")
+                md.append("")
+                md.append(f"Data coverage: {dim.data_coverage:.0%}")
+                md.append("")
+                md.append("| Metric | Score | Weight | Raw Value | Label |")
+                md.append("|--------|-------|--------|-----------|-------|")
+                for s in dim.sub_scores:
+                    avail = "" if s.available else " *(N/A)*"
+                    raw = f"{s.raw_value}" if s.raw_value is not None else "—"
+                    md.append(
+                        f"| {s.name}{avail} | {s.score:.1f} | {s.weight:.0%} | {raw} | {s.label} |"
+                    )
+                md.append("")
+
+        # LLM Context section
+        md.append("## LLM Context Block")
+        md.append("")
+        md.append("*The following block is designed to be prepended to TOON reports for LLM analysis:*")
+        md.append("")
+        md.append("```")
+        md.append(scoring_result.format_llm_context())
+        md.append("```")
+        md.append("")
+
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(md))
+
+        logger.info(f"Scoring markdown saved: {output_file}")
 
 
 # Convenience function

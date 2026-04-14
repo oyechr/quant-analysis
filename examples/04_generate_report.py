@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.reporting import ReportGenerator
+from src.scoring import StockScorer
 
 
 def main():
@@ -89,6 +90,16 @@ def main():
         print(f"  - Risk Analysis: data/{ticker}/reports/risk_analysis.md + .json")
     if not args.exclude_valuation:
         print(f"  - Valuation Analysis: data/{ticker}/reports/valuation_analysis.md + .json")
+    print(f"  - Stock Score: data/{ticker}/reports/scoring.md + .json")
+
+    # Display scoring summary if available
+    scoring_data = report_data.get("scoring")
+    if scoring_data:
+        # Re-score from report data to get the ScoringResult object for formatting
+        scorer = StockScorer()
+        scoring_result = scorer.score(report_data)
+        print()
+        print(scoring_result.format_scorecard())
 
     # Summary
     print("\n" + "=" * 70)
