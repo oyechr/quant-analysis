@@ -45,9 +45,9 @@ def main():
     parser.add_argument("--no-cache", action="store_true", help="Fetch fresh data (ignore cache)")
     parser.add_argument(
         "--format",
-        choices=["json", "markdown", "both", "toon", "all"],
-        default="both",
-        help="Output format (default: both). Use 'toon' for LLM-optimized output, 'all' for json+markdown+toon",
+        choices=["json", "markdown", "toon", "all"],
+        default="all",
+        help="Output format (default: all). 'all' produces JSON + Markdown + TOON (LLM-optimized)",
     )
 
     args = parser.parse_args()
@@ -75,9 +75,9 @@ def main():
     )
 
     print(f"\n✓ Report generated for {ticker}")
-    if args.format in ["both", "json", "all"]:
+    if args.format in ["json", "all"]:
         print(f"  - JSON: data/{ticker}/reports/full_report.json")
-    if args.format in ["both", "markdown", "all"]:
+    if args.format in ["markdown", "all"]:
         print(f"  - Markdown: data/{ticker}/reports/report.md")
     if args.format in ["toon", "all"]:
         print(f"  - TOON: data/{ticker}/reports/full_report.toon (LLM-optimized)")
@@ -106,8 +106,6 @@ def main():
     print("  python examples\\04_generate_report.py AAPL")
     print("  python examples\\04_generate_report.py TSLA --period 2y")
     print("  python examples\\04_generate_report.py MSFT --no-cache --format markdown")
-    print("  python examples\\04_generate_report.py NVDA --format all")
-    print("  python examples\\04_generate_report.py AAPL --format toon")
     print("  python examples\\04_generate_report.py NVDA --exclude-technical --exclude-risk")
 
 

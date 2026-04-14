@@ -63,7 +63,7 @@ class ReportGenerator:
         self,
         ticker: str,
         period: str = "1y",
-        output_format: str = "both",
+        output_format: str = "all",
         use_cache: bool = True,
         include_technical: bool = True,
         include_fundamental: bool = True,
@@ -79,7 +79,7 @@ class ReportGenerator:
         Args:
             ticker: Stock ticker symbol
             period: Period for price data (1mo, 3mo, 6mo, 1y, 2y, 5y, etc.)
-            output_format: "json", "markdown", "both", "toon", or "all" (json+markdown+toon)
+            output_format: "json", "markdown", "toon", or "all" (json+markdown+toon)
             use_cache: Whether to use cached data
             include_technical: Whether to include technical analysis (default: True)
             include_fundamental: Whether to include fundamental analysis (default: True)
@@ -205,10 +205,10 @@ class ReportGenerator:
                 report_data["valuation_analysis"] = None
 
         # Save outputs
-        if output_format in ["json", "both", "all"]:
+        if output_format in ["json", "all"]:
             self._save_json_report(ticker, report_data)
 
-        if output_format in ["markdown", "both", "all"]:
+        if output_format in ["markdown", "all"]:
             self._save_markdown_report(
                 ticker,
                 report_data,
@@ -655,7 +655,7 @@ class ReportGenerator:
 
 
 # Convenience function
-def generate_report(ticker: str, period: str = "1y", output_format: str = "both") -> Dict[str, Any]:
+def generate_report(ticker: str, period: str = "1y", output_format: str = "all") -> Dict[str, Any]:
     """Quick report generation"""
     generator = ReportGenerator()
     return generator.generate_full_report(ticker, period=period, output_format=output_format)
