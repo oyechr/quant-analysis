@@ -185,15 +185,16 @@ def format_correlation_heatmap(
 
     # Optionally save chart
     if save_path:
-        _save_heatmap_chart(corr_df, save_path)
-        lines.append(f"  Chart saved: {save_path}")
-        lines.append("")
+        success = _save_heatmap_chart(corr_df, save_path)
+        if success:
+            lines.append(f"  Chart saved: {save_path}")
+            lines.append("")
 
     return "\n".join(lines)
 
 
-def _save_heatmap_chart(corr_df: pd.DataFrame, save_path: str):
-    """Save a seaborn heatmap chart to disk."""
+def _save_heatmap_chart(corr_df: pd.DataFrame, save_path: str) -> bool:
+    """Save a seaborn heatmap chart to disk. Returns True on success."""
     try:
         import matplotlib
 
@@ -222,10 +223,13 @@ def _save_heatmap_chart(corr_df: pd.DataFrame, save_path: str):
         plt.close(fig)
 
         logger.info(f"Correlation heatmap saved to {save_path}")
+        return True
     except ImportError:
         logger.warning("matplotlib/seaborn not available — skipping chart save")
+        return False
     except Exception as e:
         logger.error(f"Failed to save heatmap chart: {e}")
+        return False
 
 
 def _fmt_cell(value: Any) -> str:
