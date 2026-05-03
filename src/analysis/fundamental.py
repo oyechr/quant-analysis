@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from ..utils.dataframe_utils import safe_get_dataframe_value
+from ..utils.financial import calculate_cagr, calculate_growth_rate, safe_divide
 from ..utils.serialization import format_date
 
 logger = logging.getLogger(__name__)
@@ -58,34 +60,19 @@ class FundamentalAnalyzer:
         self, df: Optional[pd.DataFrame], row_name: str, col_index: int = 0
     ) -> Optional[float]:
         """Safely extract value from financial statement DataFrame"""
-        if df is None or df.empty:
-            return None
-        try:
-            if row_name in df.index:
-                value = df.loc[row_name].iloc[col_index]
-                # Handle both scalar and Series values
-                if isinstance(value, pd.Series):
-                    value = value.iloc[0] if len(value) > 0 else None
-                return float(value) if pd.notna(value) and value is not None else None
-        except (KeyError, IndexError, ValueError, TypeError):
-            pass
-        return None
+        return safe_get_dataframe_value(df, row_name, col_index)
 
     def _calculate_growth_rate(
         self, current: Optional[float], previous: Optional[float]
     ) -> Optional[float]:
         """Calculate percentage growth rate"""
-        if current is None or previous is None or previous == 0:
-            return None
-        return ((current - previous) / abs(previous)) * 100
+        return calculate_growth_rate(current, previous)
 
     def _safe_divide(
         self, numerator: Optional[float], denominator: Optional[float]
     ) -> Optional[float]:
         """Safely divide two numbers"""
-        if numerator is None or denominator is None or denominator == 0:
-            return None
-        return numerator / denominator
+        return safe_divide(numerator, denominator)
 
     # ==================== Growth Rates ====================
 
@@ -176,10 +163,8 @@ class FundamentalAnalyzer:
         """Calculate Compound Annual Growth Rate"""
         if current is None or past is None or past == 0 or years == 0:
             return None
-        try:
-            return (((current / past) ** (1 / years)) - 1) * 100
-        except (ValueError, ZeroDivisionError):
-            return None
+        result = calculate_cagr(current, past, years)
+        return result if result != 0.0 else None
 
     # ==================== FCF Analysis ====================
 

@@ -7,7 +7,9 @@ from .financial import (
     annualize_volatility,
     calculate_cagr,
     calculate_daily_returns,
+    calculate_growth_rate,
     convert_annual_to_daily_rate,
+    safe_divide,
     to_float,
     validate_price_data,
 )
@@ -43,7 +45,9 @@ __all__ = [
     "annualize_volatility",
     "calculate_cagr",
     "calculate_daily_returns",
+    "calculate_growth_rate",
     "convert_annual_to_daily_rate",
+    "safe_divide",
     "to_float",
     "validate_price_data",
     # Report utilities
