@@ -167,8 +167,9 @@ class FundamentalAnalyzer:
         """Calculate Compound Annual Growth Rate"""
         if current is None or past is None or past == 0 or years == 0:
             return None
-        result = calculate_cagr(current, past, years)
-        return result if result != 0.0 else None
+        if past < 0:
+            return None
+        return calculate_cagr(current, past, years)
 
     # ==================== FCF Analysis ====================
 

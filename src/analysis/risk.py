@@ -35,7 +35,7 @@ class RiskMetrics:
     """
     Calculate comprehensive risk and performance metrics
 
-    Can be used statelessly (legacy) or stateully by passing price_data to __init__.
+    Can be used statelessly (legacy) or statefully by passing price_data to __init__.
     When stateful, metrics are cached after first calculation.
     """
 
