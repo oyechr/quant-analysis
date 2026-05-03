@@ -245,10 +245,51 @@ class ReportGenerator:
         logger.info(f"Report generation complete for {ticker}")
         return report_data
 
-    def _save_json_report(self, ticker: str, data: Dict[str, Any]):
-        """Save report as JSON"""
+    def _get_reports_dir(self, ticker: str) -> Path:
+        """Get (and create) reports directory for a ticker"""
         reports_dir = self.output_dir / ticker / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
+        return reports_dir
+
+    def _save_analysis_files(
+        self,
+        ticker: str,
+        report_type: str,
+        json_data: Optional[Dict[str, Any]] = None,
+        markdown_lines: Optional[List[str]] = None,
+    ):
+        """
+        Save analysis as JSON and/or markdown files
+
+        Args:
+            ticker: Stock ticker symbol
+            report_type: Base filename (e.g., 'technical_analysis', 'risk_analysis')
+            json_data: Data to save as JSON (if provided)
+            markdown_lines: Markdown lines to save (if provided)
+        """
+        reports_dir = self._get_reports_dir(ticker)
+
+        if json_data is not None:
+            output_file = reports_dir / f"{report_type}.json"
+            with open(output_file, "w") as f:
+                json.dump(json_data, f, indent=2, default=str)
+            logger.info(f"{report_type.replace('_', ' ').title()} JSON saved: {output_file}")
+
+        if markdown_lines is not None:
+            output_file = reports_dir / f"{report_type}.md"
+            md = [
+                f"# {ticker} - {report_type.replace('_', ' ').title()} Report",
+                "",
+                f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            ]
+            md.extend(markdown_lines)
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(md))
+            logger.info(f"{report_type.replace('_', ' ').title()} markdown saved: {output_file}")
+
+    def _save_json_report(self, ticker: str, data: Dict[str, Any]):
+        """Save report as JSON"""
+        reports_dir = self._get_reports_dir(ticker)
         output_file = reports_dir / "full_report.json"
         with open(output_file, "w") as f:
             json.dump(data, f, indent=2, default=str)
@@ -387,334 +428,72 @@ class ReportGenerator:
 
     def _save_technical_json(self, ticker: str, technical_analyzer):
         """Save detailed technical analysis as separate JSON file"""
-        reports_dir = self.output_dir / ticker / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / "technical_analysis.json"
-
-        # Get summary with all statistics, indicators, and signals
-        technical_data = technical_analyzer.get_summary()
-
-        # Write file
-        with open(output_file, "w") as f:
-            json.dump(technical_data, f, indent=2, default=str)
-
-        logger.info(f"Technical analysis JSON saved: {output_file}")
+        self._save_analysis_files(
+            ticker, "technical_analysis",
+            json_data=technical_analyzer.get_summary(),
+        )
 
     def _save_technical_markdown(self, ticker: str, technical_analyzer):
         """Save detailed technical analysis as separate markdown file"""
-        reports_dir = self.output_dir / ticker / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / "technical_analysis.md"
-
-        md = []
-        md.append(f"# {ticker} - Technical Analysis Report")
-        md.append("")
-        md.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # Get detailed markdown from analyzer
-        md.extend(technical_analyzer.format_markdown())
-
-        # Write file
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(md))
-
-        logger.info(f"Technical analysis markdown saved: {output_file}")
+        self._save_analysis_files(
+            ticker, "technical_analysis",
+            markdown_lines=technical_analyzer.format_markdown(),
+        )
 
     def _save_fundamental_json(self, ticker: str, fundamental_analyzer):
         """Save detailed fundamental analysis as separate JSON file"""
-        reports_dir = self.output_dir / ticker / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / "fundamental_analysis.json"
-
-        # Get summary with all metrics
-        fundamental_data = fundamental_analyzer.get_summary()
-
-        # Write file
-        with open(output_file, "w") as f:
-            json.dump(fundamental_data, f, indent=2, default=str)
-
-        logger.info(f"Fundamental analysis JSON saved: {output_file}")
+        self._save_analysis_files(
+            ticker, "fundamental_analysis",
+            json_data=fundamental_analyzer.get_summary(),
+        )
 
     def _save_fundamental_markdown(self, ticker: str, fundamental_analyzer):
         """Save detailed fundamental analysis as separate markdown file"""
-        reports_dir = self.output_dir / ticker / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / "fundamental_analysis.md"
-
-        md = []
-        md.append(f"# {ticker} - Fundamental Analysis Report")
-        md.append("")
-        md.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # Get detailed markdown from analyzer
-        md.extend(fundamental_analyzer.format_markdown())
-
-        # Write file
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(md))
-
-        logger.info(f"Fundamental analysis markdown saved: {output_file}")
+        self._save_analysis_files(
+            ticker, "fundamental_analysis",
+            markdown_lines=fundamental_analyzer.format_markdown(),
+        )
 
     def _save_risk_json(self, ticker: str, risk_analyzer_tuple):
         """Save detailed risk analysis as separate JSON file"""
-        reports_dir = self.output_dir / ticker / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / "risk_analysis.json"
-
         if not isinstance(risk_analyzer_tuple, tuple) or len(risk_analyzer_tuple) < 2:
             logger.warning("Invalid risk analyzer data for JSON export")
             return
-
         _, metrics, _ = risk_analyzer_tuple
-
-        # Write file
-        with open(output_file, "w") as f:
-            json.dump(metrics, f, indent=2, default=str)
-
-        logger.info(f"Risk analysis JSON saved: {output_file}")
+        self._save_analysis_files(ticker, "risk_analysis", json_data=metrics)
 
     def _save_risk_markdown(self, ticker: str, risk_analyzer_tuple):
         """Save detailed risk analysis as separate markdown file"""
-        reports_dir = self.output_dir / ticker / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / "risk_analysis.md"
-
         if not isinstance(risk_analyzer_tuple, tuple) or len(risk_analyzer_tuple) < 2:
             logger.warning("Invalid risk analyzer data for markdown export")
             return
-
-        _, metrics, _ = risk_analyzer_tuple
-
-        md = []
-        md.append(f"# {ticker} - Risk Analysis Report")
-        md.append("")
-        md.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        md.append("")
-
-        # Returns Analysis
-        md.append("## Returns Analysis")
-        md.append("")
-        if "returns" in metrics and metrics["returns"]:
-            returns = metrics["returns"]
-            md.append("### Daily Returns")
-            md.append("")
-            md.append(f"- **Mean:** {returns.get('daily_mean', 0):.4%}")
-            md.append(f"- **Std Dev:** {returns.get('daily_std', 0):.4%}")
-            md.append(f"- **Min (worst day):** {returns.get('daily_min', 0):.4%}")
-            md.append(f"- **Max (best day):** {returns.get('daily_max', 0):.4%}")
-            md.append("")
-            md.append("### Period Performance")
-            md.append("")
-            md.append(f"- **Cumulative Return:** {returns.get('cumulative_return', 0):.2%}")
-            md.append(f"- **Annualized Return:** {returns.get('annualized_return', 0):.2%}")
-            md.append("")
-            md.append("### Trading Statistics")
-            md.append("")
-            md.append(f"- **Total Days:** {returns.get('total_trading_days', 0)}")
-            md.append(f"- **Positive Days:** {returns.get('positive_days', 0)}")
-            md.append(f"- **Negative Days:** {returns.get('negative_days', 0)}")
-            md.append(f"- **Win Rate:** {returns.get('win_rate', 0):.2%}")
-            md.append("")
-
-        # Volatility Analysis
-        md.append("## Volatility Analysis")
-        md.append("")
-        if "volatility" in metrics and metrics["volatility"]:
-            vol = metrics["volatility"]
-            md.append(f"- **Daily Volatility:** {vol.get('daily_volatility', 0):.4%}")
-            md.append(f"- **Annualized Volatility:** {vol.get('annualized_volatility', 0):.2%}")
-            md.append(f"- **Downside Deviation:** {vol.get('downside_deviation', 0):.2%}")
-            md.append("")
-
-        # Risk-Adjusted Returns
-        md.append("## Risk-Adjusted Returns")
-        md.append("")
-        sharpe = metrics.get("sharpe_ratio", 0)
-        sortino = metrics.get("sortino_ratio", 0)
-        information = metrics.get("information_ratio", 0)
-        calmar = metrics.get("calmar_ratio", 0)
-
-        md.append(f"- **Sharpe Ratio:** {sharpe:.2f}")
-        if sharpe > 1:
-            md.append("  - Good risk-adjusted performance")
-        elif sharpe > 0:
-            md.append("  - Positive but modest risk-adjusted return")
-        else:
-            md.append("  - Underperforming risk-free rate")
-        md.append("")
-
-        md.append(f"- **Sortino Ratio:** {sortino:.2f}")
-        if sortino > sharpe:
-            md.append("  - Better downside risk profile than overall volatility suggests")
-        md.append("  - (Higher is better - focuses on downside risk)")
-        md.append("")
-
-        md.append(f"- **Information Ratio:** {information:.2f}")
-        if information > 1.0:
-            md.append("  - Excellent active management (outperforming benchmark)")
-        elif information > 0.5:
-            md.append("  - Good active management")
-        elif information > 0:
-            md.append("  - Positive excess return vs benchmark")
-        else:
-            md.append("  - Underperforming benchmark")
-        md.append("  - (Measures skill vs benchmark - accounts for tracking error)")
-        md.append("")
-
-        md.append(f"- **Calmar Ratio:** {calmar:.2f}")
-        if calmar > 3.0:
-            md.append("  - Excellent return relative to maximum drawdown")
-        elif calmar > 1.0:
-            md.append("  - Good return-to-drawdown ratio")
-        else:
-            md.append("  - High drawdown risk relative to return")
-        md.append("  - (Return per unit of maximum loss)")
-        md.append("")
-
-        # Drawdown Analysis
-        md.append("## Drawdown Analysis")
-        md.append("")
-        if "drawdown" in metrics and metrics["drawdown"]:
-            dd = metrics["drawdown"]
-            md.append(f"- **Maximum Drawdown:** {dd.get('max_drawdown', 0):.2%}")
-            md.append(f"- **Max DD Date:** {dd.get('max_drawdown_date', 'N/A')}")
-            md.append(f"- **Current Drawdown:** {dd.get('current_drawdown', 0):.2%}")
-            md.append(f"- **Days Since Peak:** {dd.get('days_since_peak', 0)}")
-            if dd.get("recovery_days"):
-                md.append(f"- **Recovery Time:** {dd.get('recovery_days')} days")
-            md.append(f"- **At Peak:** {'Yes' if dd.get('is_recovered') else 'No'}")
-            md.append("")
-
-        # Market Risk
-        md.append("## Market Risk (vs Benchmark)")
-        md.append("")
-        if "market_risk" in metrics and metrics["market_risk"]:
-            mr = metrics["market_risk"]
-            md.append(f"**Benchmark:** {mr.get('benchmark', 'N/A')}")
-            md.append("")
-            md.append(f"- **Beta:** {mr.get('beta', 0):.2f}")
-            if mr.get("beta", 0) > 1:
-                md.append("  - More volatile than market")
-            elif mr.get("beta", 0) < 1:
-                md.append("  - Less volatile than market")
-            else:
-                md.append("  - Moves with market")
-            md.append(f"- **Alpha:** {mr.get('alpha', 0):.2%}")
-            if mr.get("alpha", 0) > 0:
-                md.append("  - Outperforming benchmark (risk-adjusted)")
-            md.append(f"- **Correlation:** {mr.get('correlation', 0):.2f}")
-            md.append(f"- **R-squared:** {mr.get('r_squared', 0):.2%}")
-            md.append("")
-
-        # Tail Risk (VaR)
-        md.append("## Tail Risk (Value at Risk)")
-        md.append("")
-        if "var_95" in metrics and metrics["var_95"]:
-            var95 = metrics["var_95"]
-            md.append("### 95% Confidence Level")
-            md.append("")
-            md.append(f"- **VaR (Historical):** {var95.get('var_historical', 0):.2%}")
-            md.append(f"- **CVaR (Expected):** {var95.get('cvar_historical', 0):.2%}")
-            md.append(f"- **VaR (Parametric):** {var95.get('var_parametric', 0):.2%}")
-            md.append("- *5% chance of losing more than VaR in a day*")
-            md.append("")
-
-        if "var_99" in metrics and metrics["var_99"]:
-            var99 = metrics["var_99"]
-            md.append("### 99% Confidence Level")
-            md.append("")
-            md.append(f"- **VaR (Historical):** {var99.get('var_historical', 0):.2%}")
-            md.append(f"- **CVaR (Expected):** {var99.get('cvar_historical', 0):.2%}")
-            md.append("- *1% chance of losing more than VaR in a day*")
-            md.append("")
-            md.append(f"**Worst Historical Day:** {var99.get('worst_day', 0):.2%}")
-            md.append("")
-
-        # Rolling Risk-Adjusted Ratios
-        md.append("## Rolling Risk-Adjusted Ratios")
-        md.append("")
-        if "rolling_ratios" in metrics and metrics["rolling_ratios"]:
-            rolling = metrics["rolling_ratios"]
-            md.append("*Performance consistency over different time windows*")
-            md.append("")
-
-            for window_key in ["sharpe_30d", "sharpe_60d", "sharpe_90d"]:
-                if window_key in rolling:
-                    window_days = window_key.split("_")[1]
-                    data = rolling[window_key]
-                    md.append(f"### {window_days.upper()} Rolling Sharpe Ratio")
-                    md.append("")
-                    md.append(f"- **Current:** {data.get('current', 0):.2f}")
-                    md.append(f"- **Mean:** {data.get('mean', 0):.2f}")
-                    md.append(f"- **Range:** {data.get('min', 0):.2f} to {data.get('max', 0):.2f}")
-                    md.append(f"- **Std Dev:** {data.get('std', 0):.2f}")
-                    md.append("")
-
-            for window_key in ["sortino_30d", "sortino_60d", "sortino_90d"]:
-                if window_key in rolling:
-                    window_days = window_key.split("_")[1]
-                    data = rolling[window_key]
-                    md.append(f"### {window_days.upper()} Rolling Sortino Ratio")
-                    md.append("")
-                    md.append(f"- **Current:** {data.get('current', 0):.2f}")
-                    md.append(f"- **Mean:** {data.get('mean', 0):.2f}")
-                    md.append(f"- **Range:** {data.get('min', 0):.2f} to {data.get('max', 0):.2f}")
-                    md.append(f"- **Std Dev:** {data.get('std', 0):.2f}")
-                    md.append("")
-
-        # Write file
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(md))
-
-        logger.info(f"Risk analysis markdown saved: {output_file}")
+        risk_analyzer, metrics, _ = risk_analyzer_tuple
+        self._save_analysis_files(
+            ticker, "risk_analysis",
+            markdown_lines=risk_analyzer.format_markdown(ticker=ticker, metrics=metrics),
+        )
 
     def _save_valuation_json(self, ticker: str, valuation_data: Dict[str, Any]):
         """Save detailed valuation analysis as separate JSON file"""
-        reports_dir = self.output_dir / ticker / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / "valuation_analysis.json"
-
-        # Write file
-        with open(output_file, "w") as f:
-            json.dump(valuation_data, f, indent=2, default=str)
-
-        logger.info(f"Valuation analysis JSON saved: {output_file}")
+        self._save_analysis_files(ticker, "valuation_analysis", json_data=valuation_data)
 
     def _save_valuation_markdown(self, ticker: str, valuation_analyzer):
         """Save detailed valuation analysis as separate markdown file"""
-        reports_dir = self.output_dir / ticker / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / "valuation_analysis.md"
-
-        md = []
-        md.append(f"# {ticker} - Valuation Analysis Report")
-        md.append("")
-        md.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # Get detailed markdown from analyzer
-        md.extend(valuation_analyzer.format_markdown())
-
-        # Write file
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(md))
-
-        logger.info(f"Valuation analysis markdown saved: {output_file}")
+        self._save_analysis_files(
+            ticker, "valuation_analysis",
+            markdown_lines=valuation_analyzer.format_markdown(),
+        )
 
     def _save_scoring_json(self, ticker: str, scoring_result):
         """Save scoring results as separate JSON file"""
-        reports_dir = self.output_dir / ticker / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / "scoring.json"
-
-        with open(output_file, "w") as f:
-            json.dump(scoring_result.to_dict(), f, indent=2, default=str)
-
-        logger.info(f"Scoring JSON saved: {output_file}")
+        self._save_analysis_files(
+            ticker, "scoring",
+            json_data=scoring_result.to_dict(),
+        )
 
     def _save_scoring_markdown(self, ticker: str, scoring_result):
         """Save scoring results as separate markdown file"""
-        reports_dir = self.output_dir / ticker / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
+        reports_dir = self._get_reports_dir(ticker)
         output_file = reports_dir / "scoring.md"
 
         md = []
@@ -763,10 +542,3 @@ class ReportGenerator:
             f.write("\n".join(md))
 
         logger.info(f"Scoring markdown saved: {output_file}")
-
-
-# Convenience function
-def generate_report(ticker: str, period: str = "1y", output_format: str = "all") -> Dict[str, Any]:
-    """Quick report generation"""
-    generator = ReportGenerator()
-    return generator.generate_full_report(ticker, period=period, output_format=output_format)

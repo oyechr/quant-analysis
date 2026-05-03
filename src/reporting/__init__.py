@@ -1,6 +1,6 @@
 """Reporting modules for generating comprehensive stock analysis reports"""
 
-from .generator import ReportGenerator, generate_report
+from .generator import ReportGenerator
 from .sections import (
     AnalystRatingsSection,
     DividendsSection,
@@ -19,7 +19,6 @@ from .sections import (
 
 __all__ = [
     "ReportGenerator",
-    "generate_report",
     "AnalystRatingsSection",
     "DividendsSection",
     "EarningsSection",

@@ -2,7 +2,7 @@
 
 from .fundamental import FundamentalAnalyzer
 from .risk import RiskMetrics
-from .technical import TechnicalAnalyzer, analyze_ticker
+from .technical import TechnicalAnalyzer
 from .valuation import ValuationAnalyzer
 
 __all__ = [
@@ -10,5 +10,4 @@ __all__ = [
     "RiskMetrics",
     "TechnicalAnalyzer",
     "ValuationAnalyzer",
-    "analyze_ticker",
 ]
