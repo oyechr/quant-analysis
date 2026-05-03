@@ -333,7 +333,7 @@ class RiskMetrics:
         try:
             # Fetch benchmark data if not provided
             if benchmark_data is None or benchmark_data.empty:
-                from src.data_fetcher import DataFetcher
+                from ..data_fetcher import DataFetcher
 
                 fetcher = DataFetcher()
                 benchmark_ticker = self.config.benchmark_ticker

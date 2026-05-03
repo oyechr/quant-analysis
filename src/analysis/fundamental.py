@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from ..config import AnalysisConfig, get_config
 from ..utils.dataframe_utils import safe_get_dataframe_value
 from ..utils.financial import calculate_cagr, calculate_growth_rate, safe_divide
 from ..utils.serialization import format_date
@@ -33,6 +34,7 @@ class FundamentalAnalyzer:
         ticker_info: Dict[str, Any],
         fundamentals: Optional[Dict[str, pd.DataFrame]] = None,
         price_data: Optional[pd.DataFrame] = None,
+        config: Optional[AnalysisConfig] = None,
     ):
         """
         Initialize analyzer with financial data
@@ -41,10 +43,12 @@ class FundamentalAnalyzer:
             ticker_info: Dictionary from yfinance ticker.info
             fundamentals: Dictionary with income_stmt, balance_sheet, cash_flow DataFrames
             price_data: Historical price data for market-based calculations
+            config: Analysis configuration (uses global defaults if not provided)
         """
         self.info = ticker_info
         self.fundamentals = fundamentals or {}
         self.price_data = price_data
+        self.config = config or get_config()
 
         # Extract financial statements
         self.income_stmt_q = self.fundamentals.get("income_stmt_quarterly")
@@ -833,9 +837,9 @@ class FundamentalAnalyzer:
         # Altman Z-Score
         z_score = quality.get("altman_z")
         if z_score:
-            if z_score > 2.99:
+            if z_score > self.config.z_score_safe:
                 z_interp = "Safe Zone"
-            elif z_score > 1.81:
+            elif z_score > self.config.z_score_distress:
                 z_interp = "Grey Zone"
             else:
                 z_interp = "Distress Zone"
@@ -846,9 +850,9 @@ class FundamentalAnalyzer:
         # Piotroski F-Score
         f_score = quality.get("piotroski_f")
         if f_score is not None:
-            if f_score >= 8:
+            if f_score >= self.config.min_f_score_strong:
                 f_interp = "Strong"
-            elif f_score >= 5:
+            elif f_score >= self.config.min_f_score_average:
                 f_interp = "Average"
             else:
                 f_interp = "Weak"
