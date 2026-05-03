@@ -164,7 +164,7 @@ markdown_report = analyzer.format_markdown()
 ### Generate Reports
 
 ```python
-from src.report_generator import ReportGenerator
+from src.reporting import ReportGenerator
 
 generator = ReportGenerator()
 
@@ -205,8 +205,11 @@ quant-analysis/
 │   │   ├── serialization.py      # JSON conversion
 │   │   ├── toon_serializer.py    # TOON format conversion (LLM-optimized)
 │   │   └── types.py              # Type definitions
-│   ├── config.py                 # Configuration settings
-│   └── (legacy files in transition)
+│   ├── scoring/                  # Composite scoring engine
+│   │   ├── config.py             # Scoring configuration & presets
+│   │   ├── dimensions.py         # Dimension scorers (technical, fundamental, risk, valuation)
+│   │   └── scorer.py             # StockScorer orchestrator
+│   └── config.py                 # Configuration settings
 ├── data/                         # Data directory (organized by ticker)
 │   └── TICKER/
 │       ├── cache/                # Ephemeral API responses (gitignored)
