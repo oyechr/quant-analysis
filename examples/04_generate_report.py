@@ -1,10 +1,15 @@
 """
 Example: Generate Comprehensive Reports
 Demonstrates using ReportGenerator to create JSON and Markdown reports
+
+NOTE: This script is kept for backward compatibility.
+      Prefer the new CLI: ``quant analyze AAPL``
+      Install with: ``pip install -e .``
 """
 
 import argparse
 import sys
+import warnings
 from pathlib import Path
 
 # Add parent directory to path
@@ -15,6 +20,13 @@ from src.scoring import StockScorer
 
 
 def main():
+    warnings.warn(
+        "This example script is deprecated. "
+        "Prefer the CLI: quant analyze <TICKER>  (install with: pip install -e .)",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Generate comprehensive stock analysis reports")
     parser.add_argument("ticker", help="Stock ticker symbol (e.g., AAPL, MSFT, TSLA)")
