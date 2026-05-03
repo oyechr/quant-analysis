@@ -732,17 +732,3 @@ class TechnicalAnalyzer:
 
         return md
 
-
-def analyze_ticker(price_data: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Convenience function to analyze price data with all indicators
-
-    Args:
-        price_data: DataFrame with OHLCV data
-
-    Returns:
-        Dictionary with complete technical analysis
-    """
-    analyzer = TechnicalAnalyzer(price_data)
-    analyzer.calculate_all_indicators()
-    return analyzer.get_summary()

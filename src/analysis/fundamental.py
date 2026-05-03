@@ -865,23 +865,3 @@ class FundamentalAnalyzer:
         if value is None:
             return "N/A"
         return f"{value:+.2f}%"
-
-
-def analyze_fundamentals(
-    ticker_info: Dict[str, Any],
-    fundamentals: Dict[str, pd.DataFrame],
-    price_data: Optional[pd.DataFrame] = None,
-) -> Dict[str, Any]:
-    """
-    Convenience function for fundamental analysis
-
-    Args:
-        ticker_info: Dictionary from yfinance ticker.info
-        fundamentals: Dictionary with financial statements
-        price_data: Historical price data
-
-    Returns:
-        Complete fundamental analysis summary
-    """
-    analyzer = FundamentalAnalyzer(ticker_info, fundamentals, price_data)
-    return analyzer.get_summary()

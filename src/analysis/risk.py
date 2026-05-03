@@ -32,11 +32,29 @@ logger = logging.getLogger(__name__)
 
 
 class RiskMetrics:
-    """Calculate comprehensive risk and performance metrics"""
+    """
+    Calculate comprehensive risk and performance metrics
 
-    def __init__(self):
-        """Initialize with configuration"""
+    Can be used statelessly (legacy) or stateully by passing price_data to __init__.
+    When stateful, metrics are cached after first calculation.
+    """
+
+    def __init__(
+        self,
+        price_data: Optional[pd.DataFrame] = None,
+        benchmark_data: Optional[pd.DataFrame] = None,
+    ):
+        """
+        Initialize risk metrics calculator
+
+        Args:
+            price_data: DataFrame with 'Close' prices and DatetimeIndex (optional)
+            benchmark_data: Optional benchmark data for beta/alpha
+        """
         self.config = get_config()
+        self.price_data = price_data
+        self.benchmark_data = benchmark_data
+        self._cached_metrics: Optional[Dict[str, Any]] = None
 
     def calculate_returns(self, price_data: pd.DataFrame) -> Dict[str, Any]:
         """
@@ -619,18 +637,24 @@ class RiskMetrics:
             return {}
 
     def calculate_all_metrics(
-        self, price_data: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None
+        self, price_data: Optional[pd.DataFrame] = None, benchmark_data: Optional[pd.DataFrame] = None
     ) -> Dict[str, Any]:
         """
         Calculate all risk metrics
 
         Args:
-            price_data: DataFrame with 'Close' prices and DatetimeIndex
-            benchmark_data: Optional benchmark data for beta/alpha (fetches if None)
+            price_data: DataFrame with 'Close' prices and DatetimeIndex.
+                        If None, uses self.price_data from __init__.
+            benchmark_data: Optional benchmark data for beta/alpha (fetches if None).
+                           If None, uses self.benchmark_data from __init__.
 
         Returns:
             Dictionary with all risk and performance metrics
         """
+        # Use instance data if not provided
+        price_data = price_data if price_data is not None else self.price_data
+        benchmark_data = benchmark_data if benchmark_data is not None else self.benchmark_data
+
         logger.info("Calculating risk metrics...")
 
         if price_data is None or price_data.empty:
@@ -652,9 +676,202 @@ class RiskMetrics:
                 "rolling_ratios": self.calculate_rolling_ratios(price_data),
             }
 
+            self._cached_metrics = metrics
             logger.info("Risk metrics calculation complete")
             return metrics
 
         except Exception as e:
             logger.error(f"Error calculating risk metrics: {e}")
             return {}
+
+    def format_markdown(self, ticker: str = "", metrics: Optional[Dict[str, Any]] = None) -> List[str]:
+        """
+        Format risk analysis as detailed markdown report
+
+        Args:
+            ticker: Stock ticker symbol for the report header
+            metrics: Pre-computed metrics dict. If None, uses cached metrics.
+
+        Returns:
+            List of markdown lines
+        """
+        if metrics is None:
+            metrics = self._cached_metrics or {}
+
+        if not metrics:
+            return ["*Risk analysis not available*"]
+
+        md: List[str] = []
+
+        # Returns Analysis
+        md.append("## Returns Analysis")
+        md.append("")
+        if "returns" in metrics and metrics["returns"]:
+            returns = metrics["returns"]
+            md.append("### Daily Returns")
+            md.append("")
+            md.append(f"- **Mean:** {returns.get('daily_mean', 0):.4%}")
+            md.append(f"- **Std Dev:** {returns.get('daily_std', 0):.4%}")
+            md.append(f"- **Min (worst day):** {returns.get('daily_min', 0):.4%}")
+            md.append(f"- **Max (best day):** {returns.get('daily_max', 0):.4%}")
+            md.append("")
+            md.append("### Period Performance")
+            md.append("")
+            md.append(f"- **Cumulative Return:** {returns.get('cumulative_return', 0):.2%}")
+            md.append(f"- **Annualized Return:** {returns.get('annualized_return', 0):.2%}")
+            md.append("")
+            md.append("### Trading Statistics")
+            md.append("")
+            md.append(f"- **Total Days:** {returns.get('total_trading_days', 0)}")
+            md.append(f"- **Positive Days:** {returns.get('positive_days', 0)}")
+            md.append(f"- **Negative Days:** {returns.get('negative_days', 0)}")
+            md.append(f"- **Win Rate:** {returns.get('win_rate', 0):.2%}")
+            md.append("")
+
+        # Volatility Analysis
+        md.append("## Volatility Analysis")
+        md.append("")
+        if "volatility" in metrics and metrics["volatility"]:
+            vol = metrics["volatility"]
+            md.append(f"- **Daily Volatility:** {vol.get('daily_volatility', 0):.4%}")
+            md.append(f"- **Annualized Volatility:** {vol.get('annualized_volatility', 0):.2%}")
+            md.append(f"- **Downside Deviation:** {vol.get('downside_deviation', 0):.2%}")
+            md.append("")
+
+        # Risk-Adjusted Returns
+        md.append("## Risk-Adjusted Returns")
+        md.append("")
+        sharpe = metrics.get("sharpe_ratio", 0)
+        sortino = metrics.get("sortino_ratio", 0)
+        information = metrics.get("information_ratio", 0)
+        calmar = metrics.get("calmar_ratio", 0)
+
+        md.append(f"- **Sharpe Ratio:** {sharpe:.2f}")
+        if sharpe > 1:
+            md.append("  - Good risk-adjusted performance")
+        elif sharpe > 0:
+            md.append("  - Positive but modest risk-adjusted return")
+        else:
+            md.append("  - Underperforming risk-free rate")
+        md.append("")
+
+        md.append(f"- **Sortino Ratio:** {sortino:.2f}")
+        if sortino > sharpe:
+            md.append("  - Better downside risk profile than overall volatility suggests")
+        md.append("  - (Higher is better - focuses on downside risk)")
+        md.append("")
+
+        md.append(f"- **Information Ratio:** {information:.2f}")
+        if information > 1.0:
+            md.append("  - Excellent active management (outperforming benchmark)")
+        elif information > 0.5:
+            md.append("  - Good active management")
+        elif information > 0:
+            md.append("  - Positive excess return vs benchmark")
+        else:
+            md.append("  - Underperforming benchmark")
+        md.append("  - (Measures skill vs benchmark - accounts for tracking error)")
+        md.append("")
+
+        md.append(f"- **Calmar Ratio:** {calmar:.2f}")
+        if calmar > 3.0:
+            md.append("  - Excellent return relative to maximum drawdown")
+        elif calmar > 1.0:
+            md.append("  - Good return-to-drawdown ratio")
+        else:
+            md.append("  - High drawdown risk relative to return")
+        md.append("  - (Return per unit of maximum loss)")
+        md.append("")
+
+        # Drawdown Analysis
+        md.append("## Drawdown Analysis")
+        md.append("")
+        if "drawdown" in metrics and metrics["drawdown"]:
+            dd = metrics["drawdown"]
+            md.append(f"- **Maximum Drawdown:** {dd.get('max_drawdown', 0):.2%}")
+            md.append(f"- **Max DD Date:** {dd.get('max_drawdown_date', 'N/A')}")
+            md.append(f"- **Current Drawdown:** {dd.get('current_drawdown', 0):.2%}")
+            md.append(f"- **Days Since Peak:** {dd.get('days_since_peak', 0)}")
+            if dd.get("recovery_days"):
+                md.append(f"- **Recovery Time:** {dd.get('recovery_days')} days")
+            md.append(f"- **At Peak:** {'Yes' if dd.get('is_recovered') else 'No'}")
+            md.append("")
+
+        # Market Risk
+        md.append("## Market Risk (vs Benchmark)")
+        md.append("")
+        if "market_risk" in metrics and metrics["market_risk"]:
+            mr = metrics["market_risk"]
+            md.append(f"**Benchmark:** {mr.get('benchmark', 'N/A')}")
+            md.append("")
+            md.append(f"- **Beta:** {mr.get('beta', 0):.2f}")
+            if mr.get("beta", 0) > 1:
+                md.append("  - More volatile than market")
+            elif mr.get("beta", 0) < 1:
+                md.append("  - Less volatile than market")
+            else:
+                md.append("  - Moves with market")
+            md.append(f"- **Alpha:** {mr.get('alpha', 0):.2%}")
+            if mr.get("alpha", 0) > 0:
+                md.append("  - Outperforming benchmark (risk-adjusted)")
+            md.append(f"- **Correlation:** {mr.get('correlation', 0):.2f}")
+            md.append(f"- **R-squared:** {mr.get('r_squared', 0):.2%}")
+            md.append("")
+
+        # Tail Risk (VaR)
+        md.append("## Tail Risk (Value at Risk)")
+        md.append("")
+        if "var_95" in metrics and metrics["var_95"]:
+            var95 = metrics["var_95"]
+            md.append("### 95% Confidence Level")
+            md.append("")
+            md.append(f"- **VaR (Historical):** {var95.get('var_historical', 0):.2%}")
+            md.append(f"- **CVaR (Expected):** {var95.get('cvar_historical', 0):.2%}")
+            md.append(f"- **VaR (Parametric):** {var95.get('var_parametric', 0):.2%}")
+            md.append("- *5% chance of losing more than VaR in a day*")
+            md.append("")
+
+        if "var_99" in metrics and metrics["var_99"]:
+            var99 = metrics["var_99"]
+            md.append("### 99% Confidence Level")
+            md.append("")
+            md.append(f"- **VaR (Historical):** {var99.get('var_historical', 0):.2%}")
+            md.append(f"- **CVaR (Expected):** {var99.get('cvar_historical', 0):.2%}")
+            md.append("- *1% chance of losing more than VaR in a day*")
+            md.append("")
+            md.append(f"**Worst Historical Day:** {var99.get('worst_day', 0):.2%}")
+            md.append("")
+
+        # Rolling Risk-Adjusted Ratios
+        md.append("## Rolling Risk-Adjusted Ratios")
+        md.append("")
+        if "rolling_ratios" in metrics and metrics["rolling_ratios"]:
+            rolling = metrics["rolling_ratios"]
+            md.append("*Performance consistency over different time windows*")
+            md.append("")
+
+            for window_key in ["sharpe_30d", "sharpe_60d", "sharpe_90d"]:
+                if window_key in rolling:
+                    window_days = window_key.split("_")[1]
+                    data = rolling[window_key]
+                    md.append(f"### {window_days.upper()} Rolling Sharpe Ratio")
+                    md.append("")
+                    md.append(f"- **Current:** {data.get('current', 0):.2f}")
+                    md.append(f"- **Mean:** {data.get('mean', 0):.2f}")
+                    md.append(f"- **Range:** {data.get('min', 0):.2f} to {data.get('max', 0):.2f}")
+                    md.append(f"- **Std Dev:** {data.get('std', 0):.2f}")
+                    md.append("")
+
+            for window_key in ["sortino_30d", "sortino_60d", "sortino_90d"]:
+                if window_key in rolling:
+                    window_days = window_key.split("_")[1]
+                    data = rolling[window_key]
+                    md.append(f"### {window_days.upper()} Rolling Sortino Ratio")
+                    md.append("")
+                    md.append(f"- **Current:** {data.get('current', 0):.2f}")
+                    md.append(f"- **Mean:** {data.get('mean', 0):.2f}")
+                    md.append(f"- **Range:** {data.get('min', 0):.2f} to {data.get('max', 0):.2f}")
+                    md.append(f"- **Std Dev:** {data.get('std', 0):.2f}")
+                    md.append("")
+
+        return md
