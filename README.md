@@ -86,7 +86,39 @@ pip install -r requirements.txt
 
 ## Quick Start
 
-### Generate Comprehensive Report (Easiest)
+### CLI Interface (Recommended)
+
+Install the package, then use the `quant` command:
+
+```bash
+pip install -e .
+
+# Analyze a single stock (full report)
+quant analyze AAPL
+quant analyze TSLA --period 2y --format markdown
+quant analyze MSFT --exclude-technical --no-cache
+
+# Score one or more stocks
+quant score AAPL MSFT TSLA
+quant score NVDA --config value   # value/growth/income presets
+
+# Compare stocks side-by-side
+quant compare AAPL MSFT GOOGL
+quant compare AAPL MSFT --weights 0.6,0.4 --save-chart data/corr.png
+
+# Watch mode (continuous refresh)
+quant watch AAPL MSFT --interval 60 --count 5
+```
+
+Global options apply to all subcommands:
+
+```bash
+quant --period 2y --no-cache --format json analyze AAPL
+quant -v compare AAPL MSFT GOOGL    # verbose logging
+quant -q score AAPL                 # quiet mode
+```
+
+### Generate Report via Example Script (Legacy)
 
 ```bash
 # Generate full report with technical + fundamental analysis
@@ -104,6 +136,7 @@ python examples/04_generate_report.py NVDA --format markdown
 # TOON-only output for LLM consumption
 python examples/04_generate_report.py AAPL --format toon
 ```
+
 
 ### Basic Data Fetching
 
@@ -189,27 +222,31 @@ report = generator.generate_full_report(
 ```
 quant-analysis/
 ├── src/
-│   ├── data_fetcher.py           # Yahoo Finance data fetching with caching
-│   ├── analysis/                 # Analysis modules
-│   │   ├── technical.py          # Technical indicators (moved)
-│   │   ├── fundamental.py        # Fundamental metrics (moved)
-│   │   ├── valuation.py          # DCF/DDM valuation & earnings analysis
-│   │   └── risk.py               # Risk metrics & VaR calculations
-│   ├── reporting/                # Report generation
-│   │   ├── generator.py          # Report aggregation
-│   │   └── sections.py           # Modular section handlers
-│   ├── utils/                    # Utility modules
-│   │   ├── financial.py          # Financial calculations (CAGR, ratios)
-│   │   ├── dataframe_utils.py    # DataFrame/Series helpers
-│   │   ├── report.py             # Report formatting
-│   │   ├── serialization.py      # JSON conversion
-│   │   ├── toon_serializer.py    # TOON format conversion (LLM-optimized)
-│   │   └── types.py              # Type definitions
-│   ├── scoring/                  # Composite scoring engine
-│   │   ├── config.py             # Scoring configuration & presets
-│   │   ├── dimensions.py         # Dimension scorers (technical, fundamental, risk, valuation)
-│   │   └── scorer.py             # StockScorer orchestrator
-│   └── config.py                 # Configuration settings
+│   ├── cli.py                       # CLI entry point (Click subcommands)
+│   ├── data_fetcher.py              # Yahoo Finance data fetching with caching
+│   ├── analysis/                    # Analysis modules
+│   │   ├── technical.py             # Technical indicators (moved)
+│   │   ├── fundamental.py           # Fundamental metrics (moved)
+│   │   ├── valuation.py             # DCF/DDM valuation & earnings analysis
+│   │   └── risk.py                  # Risk metrics & VaR calculations
+│   ├── comparison/                  # Multi-ticker comparison
+│   │   ├── comparator.py            # TickerComparator & PortfolioView
+│   │   └── formatters.py            # Table, Markdown, JSON, heatmap output
+│   ├── reporting/                   # Report generation
+│   │   ├── generator.py             # Report aggregation
+│   │   └── sections.py              # Modular section handlers
+│   ├── utils/                       # Utility modules
+│   │   ├── financial.py             # Financial calculations (CAGR, ratios)
+│   │   ├── dataframe_utils.py       # DataFrame/Series helpers
+│   │   ├── report.py                # Report formatting
+│   │   ├── serialization.py         # JSON conversion
+│   │   ├── toon_serializer.py       # TOON format conversion (LLM-optimized)
+│   │   └── types.py                 # Type definitions
+│   ├── scoring/                     # Composite scoring engine
+│   │   ├── config.py                # Scoring configuration & presets
+│   │   ├── dimensions.py            # Dimension scorers (technical, fundamental, risk, valuation)
+│   │   └── scorer.py                # StockScorer orchestrator
+│   └── config.py                    # Configuration settings
 ├── data/                         # Data directory (organized by ticker)
 │   └── TICKER/
 │       ├── cache/                # Ephemeral API responses (gitignored)
@@ -292,9 +329,9 @@ python examples/04_generate_report.py
 - ✅ Dividend sustainability analysis
 - ✅ Earnings quality assessment
 - ✅ Multi-currency support
-- Multi-ticker correlation analysis
+- ✅ Multi-ticker correlation analysis
+- ✅ Relative strength and sector comparisons
 - Portfolio optimization (efficient frontier)
-- Relative strength and sector comparisons
 
 ### Phase 3: Advanced Features
 
@@ -305,8 +342,8 @@ python examples/04_generate_report.py
 
 ### Phase 4: Deployment & Tooling
 
-- Unit test coverage
-- CLI interface
+- ✅ CLI interface (Click subcommands: analyze, score, compare, watch)
+- ✅ Unit test coverage
 - REST API wrapper
 - Interactive dashboard (Streamlit)
 - ML-based forecasting

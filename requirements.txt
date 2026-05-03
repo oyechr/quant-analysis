@@ -26,6 +26,9 @@ isort>=5.13.0
 # TOON (Token-Oriented Object Notation) for LLM-optimized reports
 python-toon>=0.1.3
 
+# CLI
+click>=8.1.0
+
 # Utilities
 python-dateutil>=2.8.0
 requests>=2.31.0
