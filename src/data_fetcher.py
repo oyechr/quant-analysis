@@ -7,7 +7,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
 import yfinance as yf
@@ -345,27 +345,17 @@ class DataFetcher:
             Dictionary with keys: 'income_stmt', 'balance_sheet', 'cash_flow'
             Each containing quarterly and annual DataFrames
         """
-        ticker = ticker.upper()
-        cache_file = self._get_cache_file_path(ticker, "fundamentals.json")
+        keys = [
+            "income_stmt_quarterly",
+            "income_stmt_annual",
+            "balance_sheet_quarterly",
+            "balance_sheet_annual",
+            "cash_flow_quarterly",
+            "cash_flow_annual",
+        ]
 
-        # Check cache
-        if use_cache:
-            cached = self._load_json_cache(cache_file)
-            if cached is not None:
-                return {
-                    "income_stmt_quarterly": pd.DataFrame(cached["income_stmt_quarterly"]),
-                    "income_stmt_annual": pd.DataFrame(cached["income_stmt_annual"]),
-                    "balance_sheet_quarterly": pd.DataFrame(cached["balance_sheet_quarterly"]),
-                    "balance_sheet_annual": pd.DataFrame(cached["balance_sheet_annual"]),
-                    "cash_flow_quarterly": pd.DataFrame(cached["cash_flow_quarterly"]),
-                    "cash_flow_annual": pd.DataFrame(cached["cash_flow_annual"]),
-                }
-
-        try:
-            logger.info(f"Fetching fundamentals for {ticker}")
-            stock = yf.Ticker(ticker)
-
-            result = {
+        def fetch_fn(stock):
+            return {
                 "income_stmt_quarterly": stock.quarterly_income_stmt,
                 "income_stmt_annual": stock.income_stmt,
                 "balance_sheet_quarterly": stock.quarterly_balance_sheet,
@@ -374,25 +364,18 @@ class DataFetcher:
                 "cash_flow_annual": stock.cashflow,
             }
 
-            # Cache as JSON using serialization utility
-            cache_data = {
-                k: dataframe_to_json_dict(v) if not v.empty else {} for k, v in result.items()
-            }
-
-            self._save_json_cache(cache_file, cache_data)
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error fetching fundamentals for {ticker}: {e}")
-            return {
-                "income_stmt_quarterly": pd.DataFrame(),
-                "income_stmt_annual": pd.DataFrame(),
-                "balance_sheet_quarterly": pd.DataFrame(),
-                "balance_sheet_annual": pd.DataFrame(),
-                "cash_flow_quarterly": pd.DataFrame(),
-                "cash_flow_annual": pd.DataFrame(),
-            }
+        return self._fetch_resource(
+            ticker=ticker,
+            resource_name="fundamentals",
+            cache_filename="fundamentals.json",
+            fetch_fn=fetch_fn,
+            serialize_fn=lambda r: {
+                k: dataframe_to_json_dict(v) if not v.empty else {} for k, v in r.items()
+            },
+            deserialize_fn=lambda c: {k: pd.DataFrame(c.get(k, {})) for k in keys},
+            empty_result={k: pd.DataFrame() for k in keys},
+            use_cache=use_cache,
+        )
 
     def fetch_earnings(self, ticker: str, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
         """
@@ -405,23 +388,10 @@ class DataFetcher:
         Returns:
             Dictionary with 'earnings_history' and 'earnings_dates' DataFrames
         """
-        ticker = ticker.upper()
-        cache_file = self._get_cache_file_path(ticker, "earnings.json")
+        keys = ["earnings_history", "earnings_dates"]
 
-        # Check cache
-        if use_cache:
-            cached = self._load_json_cache(cache_file)
-            if cached is not None:
-                return {
-                    "earnings_history": pd.DataFrame(cached.get("earnings_history", {})),
-                    "earnings_dates": pd.DataFrame(cached.get("earnings_dates", {})),
-                }
-
-        try:
-            logger.info(f"Fetching earnings for {ticker}")
-            stock = yf.Ticker(ticker)
-
-            result = {
+        def fetch_fn(stock):
+            return {
                 "earnings_history": (
                     stock.earnings_history if hasattr(stock, "earnings_history") else pd.DataFrame()
                 ),
@@ -430,21 +400,18 @@ class DataFetcher:
                 ),
             }
 
-            # Cache as JSON using serialization utility
-            cache_data = {
-                k: dataframe_to_records(v) if not v.empty else [] for k, v in result.items()
-            }
-
-            self._save_json_cache(cache_file, cache_data)
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error fetching earnings for {ticker}: {e}")
-            return {
-                "earnings_history": pd.DataFrame(),
-                "earnings_dates": pd.DataFrame(),
-            }
+        return self._fetch_resource(
+            ticker=ticker,
+            resource_name="earnings",
+            cache_filename="earnings.json",
+            fetch_fn=fetch_fn,
+            serialize_fn=lambda r: {
+                k: dataframe_to_records(v) if not v.empty else [] for k, v in r.items()
+            },
+            deserialize_fn=lambda c: {k: pd.DataFrame(c.get(k, {})) for k in keys},
+            empty_result={k: pd.DataFrame() for k in keys},
+            use_cache=use_cache,
+        )
 
     def fetch_institutional_holders(
         self, ticker: str, use_cache: bool = True
@@ -459,43 +426,27 @@ class DataFetcher:
         Returns:
             Dictionary with 'institutional_holders' and 'mutualfund_holders'
         """
-        ticker = ticker.upper()
-        cache_file = self._get_cache_file_path(ticker, "holders.json")
+        keys = ["institutional_holders", "mutualfund_holders"]
 
-        # Check cache
-        if use_cache:
-            cached = self._load_json_cache(cache_file)
-            if cached is not None:
-                return {
-                    "institutional_holders": pd.DataFrame(cached.get("institutional_holders", {})),
-                    "mutualfund_holders": pd.DataFrame(cached.get("mutualfund_holders", {})),
-                }
-
-        try:
-            logger.info(f"Fetching holders for {ticker}")
-            stock = yf.Ticker(ticker)
-
-            result = {
+        def fetch_fn(stock):
+            return {
                 "institutional_holders": stock.institutional_holders,
                 "mutualfund_holders": stock.mutualfund_holders,
             }
 
-            # Cache as JSON using serialization utility
-            cache_data = {
+        return self._fetch_resource(
+            ticker=ticker,
+            resource_name="holders",
+            cache_filename="holders.json",
+            fetch_fn=fetch_fn,
+            serialize_fn=lambda r: {
                 k: dataframe_to_records(v, preserve_index=False) if not v.empty else []
-                for k, v in result.items()
-            }
-
-            self._save_json_cache(cache_file, cache_data)
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error fetching holders for {ticker}: {e}")
-            return {
-                "institutional_holders": pd.DataFrame(),
-                "mutualfund_holders": pd.DataFrame(),
-            }
+                for k, v in r.items()
+            },
+            deserialize_fn=lambda c: {k: pd.DataFrame(c.get(k, {})) for k in keys},
+            empty_result={k: pd.DataFrame() for k in keys},
+            use_cache=use_cache,
+        )
 
     def fetch_dividends(self, ticker: str, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
         """
@@ -583,56 +534,34 @@ class DataFetcher:
         Returns:
             Dictionary with 'recommendations' and 'upgrades_downgrades' DataFrames
         """
-        ticker = ticker.upper()
-        cache_file = self._get_cache_file_path(ticker, "analyst_ratings.json")
+        keys = ["recommendations", "upgrades_downgrades"]
 
-        # Check cache
-        if use_cache:
-            cached = self._load_json_cache(cache_file)
-            if cached is not None:
-                return {
-                    "recommendations": pd.DataFrame(cached.get("recommendations", {})),
-                    "upgrades_downgrades": pd.DataFrame(cached.get("upgrades_downgrades", {})),
-                }
-
-        try:
-            logger.info(f"Fetching analyst ratings for {ticker}")
-            stock = yf.Ticker(ticker)
-
-            # Get data safely
+        def fetch_fn(stock):
             recommendations_data = getattr(stock, "recommendations", None)
             upgrades_data = getattr(stock, "upgrades_downgrades", None)
-
-            # Ensure we have DataFrames
-            recommendations_df = (
-                recommendations_data
-                if isinstance(recommendations_data, pd.DataFrame)
-                else pd.DataFrame()
-            )
-            upgrades_df = (
-                upgrades_data if isinstance(upgrades_data, pd.DataFrame) else pd.DataFrame()
-            )
-
-            result = {
-                "recommendations": recommendations_df,
-                "upgrades_downgrades": upgrades_df,
-            }
-
-            # Cache as JSON using serialization utility
-            cache_data = {
-                k: dataframe_to_records(v) if not v.empty else [] for k, v in result.items()
-            }
-
-            self._save_json_cache(cache_file, cache_data)
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error fetching analyst ratings for {ticker}: {e}")
             return {
-                "recommendations": pd.DataFrame(),
-                "upgrades_downgrades": pd.DataFrame(),
+                "recommendations": (
+                    recommendations_data
+                    if isinstance(recommendations_data, pd.DataFrame)
+                    else pd.DataFrame()
+                ),
+                "upgrades_downgrades": (
+                    upgrades_data if isinstance(upgrades_data, pd.DataFrame) else pd.DataFrame()
+                ),
             }
+
+        return self._fetch_resource(
+            ticker=ticker,
+            resource_name="analyst ratings",
+            cache_filename="analyst_ratings.json",
+            fetch_fn=fetch_fn,
+            serialize_fn=lambda r: {
+                k: dataframe_to_records(v) if not v.empty else [] for k, v in r.items()
+            },
+            deserialize_fn=lambda c: {k: pd.DataFrame(c.get(k, {})) for k in keys},
+            empty_result={k: pd.DataFrame() for k in keys},
+            use_cache=use_cache,
+        )
 
     def fetch_news(
         self, ticker: str, use_cache: bool = False  # News is time-sensitive, default to fresh
@@ -742,6 +671,56 @@ class DataFetcher:
         except TypeError as e:
             logger.warning(f"Data not JSON-serializable for {cache_path}: {e}")
 
+    # ==================== Fetch Template ====================
+
+    def _fetch_resource(
+        self,
+        ticker: str,
+        resource_name: str,
+        cache_filename: str,
+        fetch_fn: Callable[[yf.Ticker], Dict[str, pd.DataFrame]],
+        serialize_fn: Callable[[Dict[str, pd.DataFrame]], Any],
+        deserialize_fn: Callable[[Any], Dict[str, pd.DataFrame]],
+        empty_result: Dict[str, pd.DataFrame],
+        use_cache: bool = True,
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Generic template for fetching and caching financial data resources
+
+        Args:
+            ticker: Stock ticker symbol
+            resource_name: Human-readable name for logging
+            cache_filename: Cache file name (e.g., 'fundamentals.json')
+            fetch_fn: Function that fetches data from yfinance Ticker
+            serialize_fn: Function to serialize data for caching
+            deserialize_fn: Function to deserialize cached data
+            empty_result: Default empty result on failure
+            use_cache: Whether to use cached data
+
+        Returns:
+            Dictionary with fetched data
+        """
+        ticker = ticker.upper()
+        cache_file = self._get_cache_file_path(ticker, cache_filename)
+
+        # Check cache
+        if use_cache:
+            cached = self._load_json_cache(cache_file)
+            if cached is not None:
+                return deserialize_fn(cached)
+
+        try:
+            logger.info(f"Fetching {resource_name} for {ticker}")
+            stock = yf.Ticker(ticker)
+            result = fetch_fn(stock)
+            cache_data = serialize_fn(result)
+            self._save_json_cache(cache_file, cache_data)
+            return result
+
+        except Exception as e:
+            logger.error(f"Error fetching {resource_name} for {ticker}: {e}")
+            return empty_result
+
     # ==================== Legacy Methods ====================
 
     def _get_cache_filename(
@@ -780,16 +759,3 @@ class DataFetcher:
                 if ticker_dir.is_dir():
                     shutil.rmtree(ticker_dir)
             logger.info("Cleared all cache directories")
-
-
-# Convenience functions
-def fetch_ticker(ticker: str, period: str = "1y", **kwargs) -> pd.DataFrame:
-    """Quick fetch for a single ticker"""
-    fetcher = DataFetcher()
-    return fetcher.fetch_ticker(ticker, period=period, **kwargs)
-
-
-def fetch_multiple(tickers: List[str], period: str = "1y", **kwargs) -> dict[str, pd.DataFrame]:
-    """Quick fetch for multiple tickers"""
-    fetcher = DataFetcher()
-    return fetcher.fetch_multiple_tickers(tickers, period=period, **kwargs)

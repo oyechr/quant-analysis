@@ -5,7 +5,7 @@ Provides reusable financial calculations and type-safe conversions
 used across technical, fundamental, and risk analysis modules.
 """
 
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -113,3 +113,39 @@ def calculate_cagr(ending_value: float, beginning_value: float, num_periods: int
     if ending_value is None or beginning_value is None or beginning_value <= 0 or num_periods <= 0:
         return 0.0
     return (pow(ending_value / beginning_value, 1 / num_periods) - 1) * 100
+
+
+def calculate_growth_rate(
+    current: Optional[float], previous: Optional[float]
+) -> Optional[float]:
+    """
+    Calculate percentage growth rate between two values
+
+    Args:
+        current: Current period value
+        previous: Previous period value
+
+    Returns:
+        Growth rate as percentage, or None if calculation invalid
+    """
+    if current is None or previous is None or previous == 0:
+        return None
+    return ((current - previous) / abs(previous)) * 100
+
+
+def safe_divide(
+    numerator: Optional[float], denominator: Optional[float]
+) -> Optional[float]:
+    """
+    Safely divide two numbers, returning None on invalid inputs
+
+    Args:
+        numerator: Dividend
+        denominator: Divisor
+
+    Returns:
+        Division result or None if inputs are invalid
+    """
+    if numerator is None or denominator is None or denominator == 0:
+        return None
+    return numerator / denominator
