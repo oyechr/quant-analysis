@@ -12,6 +12,7 @@ import pandas as pd
 # Import ta submodules
 from ta import momentum, trend, volatility, volume
 
+from ..config import AnalysisConfig, get_config
 from ..utils.report import get_currency_symbol
 from ..utils.serialization import format_date
 
@@ -26,7 +27,12 @@ class TechnicalAnalyzer:
     Separates concerns: price data storage vs. indicator calculation.
     """
 
-    def __init__(self, price_data: pd.DataFrame, currency: str = "USD"):
+    def __init__(
+        self,
+        price_data: pd.DataFrame,
+        currency: str = "USD",
+        config: Optional[AnalysisConfig] = None,
+    ):
         """
         Initialize analyzer with price data
 
@@ -34,6 +40,7 @@ class TechnicalAnalyzer:
             price_data: DataFrame with OHLCV columns (Open, High, Low, Close, Volume)
                        Must have datetime index
             currency: ISO 4217 currency code (e.g., 'USD', 'NOK', 'CAD')
+            config: Analysis configuration (uses global defaults if not provided)
         """
 
         # Validate required columns
@@ -44,6 +51,7 @@ class TechnicalAnalyzer:
 
         self.df = price_data.copy()
         self.currency = currency
+        self.config = config or get_config()
 
     # ==================== Trend Indicators ====================
 
@@ -314,25 +322,33 @@ class TechnicalAnalyzer:
 
     def calculate_all_indicators(self) -> pd.DataFrame:
         """
-        Calculate all standard technical indicators
+        Calculate all standard technical indicators using config parameters
 
         Returns:
             DataFrame with all indicators added
         """
         logger.info("Calculating all technical indicators...")
+        cfg = self.config
 
         # Trend indicators
-        self.calculate_moving_averages()
+        self.calculate_moving_averages(
+            sma_periods=cfg.sma_periods or [20, 50, 200],
+            ema_periods=[cfg.ema_short, cfg.ema_long],
+        )
         self.calculate_macd()
 
         # Momentum indicators
-        self.calculate_rsi()
-        self.calculate_stochastic()
+        self.calculate_rsi(period=cfg.rsi_period)
+        self.calculate_stochastic(
+            k_period=cfg.stochastic_k_period, d_period=cfg.stochastic_d_period
+        )
         self.calculate_williams_r()
 
         # Volatility indicators
-        self.calculate_bollinger_bands()
-        self.calculate_atr()
+        self.calculate_bollinger_bands(
+            period=cfg.bollinger_period, std_dev=cfg.bollinger_std
+        )
+        self.calculate_atr(period=cfg.atr_period)
         self.calculate_adx()
 
         # Volume indicators
