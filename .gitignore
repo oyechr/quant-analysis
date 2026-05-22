@@ -2,6 +2,9 @@
 data/
 !data/.gitkeep
 
+# Local configuration - may contain API keys
+config.json
+
 # Generated package metadata
 *.egg-info/
 

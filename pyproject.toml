@@ -12,6 +12,12 @@ dependencies = [
     "lxml>=5.0.0",
 ]
 
+[project.optional-dependencies]
+llm = [
+    "anthropic>=0.25.0",
+    "openai>=1.0.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]

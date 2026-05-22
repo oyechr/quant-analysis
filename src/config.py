@@ -66,6 +66,12 @@ class AnalysisConfig:
     default_interval: str = "1d"
     cache_enabled: bool = True
 
+    # ==================== LLM Integration ====================
+    llm_model: str = "gpt-4.1"
+    llm_anthropic_api_key: Optional[str] = None
+    llm_openai_api_key: Optional[str] = None
+    llm_github_token: Optional[str] = None  # GitHub PAT for GitHub Models (free gpt-4.1)
+
     # Validation sets
     valid_periods: Optional[set] = None
     valid_intervals: Optional[set] = None

@@ -1,7 +1,7 @@
 """
 CLI Interface for Quantitative Analysis Tool
 
-Provides subcommands: report, score, compare, watch
+Provides subcommands: report, score, compare, explain, watch
 Install with: pip install -e .
 Usage: quant report AAPL
 """
@@ -342,6 +342,66 @@ def compare(ctx, tickers, config_name, save_chart, weights):
             sc = h.get("score", "N/A")
             click.echo(f"  {h['ticker']:<8} weight={h['weight']:.1%}  score={sc}  signal={sig}")
         click.echo()
+
+
+@cli.command()
+@click.argument("ticker")
+@click.option("--model", default=None,
+              help="LLM model override (e.g. gpt-4o, claude-sonnet-4-5). Reads llm_model from config.json if not set.")
+@click.pass_context
+def explain(ctx, ticker, model):
+    """Generate a plain-English investment brief using an LLM.
+
+    Reads the existing full_report.json (generates one if missing), builds a
+    focused ~1,500-token context (strips raw indicator history, holders, etc.),
+    streams the LLM response to stdout, and saves the narrative to
+    reports/narrative.md.
+
+    Configure API keys in config.json:
+        { "llm_anthropic_api_key": "sk-ant-...", "llm_model": "claude-haiku-3-5" }
+
+    Example: quant explain EQNR
+    Example: quant explain AAPL --model claude-sonnet-4-5
+    """
+    from .llm import build_brief_context, explain as llm_explain
+
+    ticker = ticker.upper()
+    output_dir = ctx.obj["output_dir"]
+    period = ctx.obj["period"]
+    use_cache = ctx.obj["use_cache"]
+    json_path = Path(output_dir) / ticker / "reports" / "full_report.json"
+
+    if not json_path.exists():
+        click.echo(f"No report found for {ticker}. Generating...")
+        generator = ReportGenerator(output_dir=output_dir)
+        generator.generate_full_report(
+            ticker=ticker,
+            period=period,
+            output_format="all",
+            use_cache=use_cache,
+        )
+
+    if not json_path.exists():
+        raise click.ClickException(f"Failed to generate report for {ticker}.")
+
+    import json as _json
+    report_data = _json.loads(json_path.read_text(encoding="utf-8"))
+    context = build_brief_context(report_data)
+
+    click.echo(f"\n  Investment Brief: {ticker}")
+    click.echo("  " + "=" * 50 + "\n")
+
+    try:
+        narrative = llm_explain(context, model=model)
+    except (ValueError, ImportError) as e:
+        raise click.ClickException(str(e))
+
+    narrative_path = Path(output_dir) / ticker / "reports" / "narrative.md"
+    narrative_path.write_text(
+        f"# {ticker} - Investment Brief\n\n{narrative}\n",
+        encoding="utf-8",
+    )
+    click.echo(f"\n  Saved: {narrative_path}")
 
 
 @cli.command()
