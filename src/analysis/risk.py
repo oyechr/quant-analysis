@@ -338,14 +338,14 @@ class RiskMetrics:
                 fetcher = DataFetcher()
                 benchmark_ticker = self.config.benchmark_ticker
 
-                # Match period with price_data
-                start_date = price_data.index[0]
-                end_date = price_data.index[-1]
+                # Infer approximate period from price_data length and use period=
+                # so the cache filename stays stable (start/end shifts daily).
+                days = (price_data.index[-1] - price_data.index[0]).days
+                period = "2y" if days > 400 else "1y" if days > 180 else "6mo"
 
                 benchmark_data = fetcher.fetch_ticker(
                     benchmark_ticker,
-                    start=start_date.strftime("%Y-%m-%d"),
-                    end=end_date.strftime("%Y-%m-%d"),
+                    period=period,
                 )
 
                 if benchmark_data is None or benchmark_data.empty:

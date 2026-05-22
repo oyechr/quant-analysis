@@ -592,9 +592,9 @@ class RiskAnalysisSection(ReportSection):
         from ..analysis.risk import RiskMetrics
         from ..config import get_config
 
+        period = kwargs.get("period", "1y")
         price_data = kwargs.get("price_data")
         if price_data is None or price_data.empty:
-            period = kwargs.get("period", "1y")
             price_data = fetcher.fetch_ticker(ticker, period=period, use_cache=use_cache)
 
         # Fetch benchmark data once (cache-aware)
@@ -602,13 +602,11 @@ class RiskAnalysisSection(ReportSection):
         benchmark_ticker = config.benchmark_ticker
         benchmark_data = kwargs.get("benchmark_data")
         if not isinstance(benchmark_data, pd.DataFrame) or benchmark_data.empty:
-            # Get date range from stock price data
-            start_date = price_data.index.min()
-            end_date = price_data.index.max()
+            # Use period= (not start=/end=) so the cache filename is stable across days.
+            # start/end shift daily, causing a fresh fetch every run.
             benchmark_data = fetcher.fetch_ticker(
                 benchmark_ticker,
-                start=start_date.strftime("%Y-%m-%d"),
-                end=end_date.strftime("%Y-%m-%d"),
+                period=period,
                 use_cache=use_cache,
             )
 
