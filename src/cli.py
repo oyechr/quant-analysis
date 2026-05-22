@@ -1,9 +1,9 @@
 """
 CLI Interface for Quantitative Analysis Tool
 
-Provides subcommands: analyze, score, compare, watch
+Provides subcommands: report, score, compare, watch
 Install with: pip install -e .
-Usage: quant analyze AAPL
+Usage: quant report AAPL
 """
 
 import logging
@@ -28,6 +28,10 @@ from .scoring import ScoringConfig, StockScorer
 
 def _configure_logging(verbose: bool, quiet: bool):
     """Set up logging based on verbosity flags."""
+    # Ensure UTF-8 output on Windows where the default console encoding (cp1252)
+    # cannot represent the Unicode block characters used in scorecards.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if quiet:
         level = logging.WARNING
     elif verbose:
@@ -87,10 +91,14 @@ def cli(ctx, output_dir, no_cache, output_format, period, verbose, quiet):
 @click.option("--exclude-risk", is_flag=True, help="Exclude risk analysis.")
 @click.option("--exclude-valuation", is_flag=True, help="Exclude valuation analysis.")
 @click.pass_context
-def analyze(ctx, ticker, exclude_technical, exclude_fundamental, exclude_risk, exclude_valuation):
-    """Generate a comprehensive analysis report for a single ticker.
+def report(ctx, ticker, exclude_technical, exclude_fundamental, exclude_risk, exclude_valuation):
+    """Generate a full report and detailed scorecard for a single ticker.
 
-    Example: quant analyze AAPL --period 2y
+    Prints the complete scorecard breakdown (dimension scores, strengths,
+    concerns) and saves json/md/toon report files.
+    Use 'score' instead when screening multiple tickers at once.
+
+    Example: quant report AAPL --period 2y
     """
     output_dir = ctx.obj["output_dir"]
     use_cache = ctx.obj["use_cache"]
@@ -115,7 +123,7 @@ def analyze(ctx, ticker, exclude_technical, exclude_fundamental, exclude_risk, e
         include_valuation=not exclude_valuation,
     )
 
-    click.echo(f"\n✓ Report generated for {ticker}")
+    click.echo(f"\nReport generated for {ticker}")
     if output_format in ("json", "all"):
         click.echo(f"  - JSON: {output_dir}/{ticker}/reports/full_report.json")
     if output_format in ("markdown", "all"):
@@ -146,10 +154,14 @@ def analyze(ctx, ticker, exclude_technical, exclude_fundamental, exclude_risk, e
 def score(ctx, tickers, config_name):
     """Score one or more tickers and display a summary table.
 
+    Prints a compact one-row-per-ticker table with composite score, signal,
+    and dimension breakdown. Use 'report' for a single-ticker deep dive.
+
     Example: quant score AAPL MSFT TSLA --config value
     """
     output_dir = ctx.obj["output_dir"]
     use_cache = ctx.obj["use_cache"]
+    output_format = ctx.obj["output_format"]
     period = ctx.obj["period"]
 
     scoring_config = _get_scoring_config(config_name)
@@ -165,7 +177,7 @@ def score(ctx, tickers, config_name):
             report_data = generator.generate_full_report(
                 ticker=ticker,
                 period=period,
-                output_format="json",
+                output_format=output_format,
                 use_cache=use_cache,
             )
             result = scorer.score(report_data)
@@ -240,6 +252,7 @@ def compare(ctx, tickers, config_name, save_chart, weights):
         period=period,
         scoring_config=scoring_config,
         output_dir=output_dir,
+        output_format=output_format,
     )
 
     click.echo("\n  Fetching data...")
@@ -353,6 +366,7 @@ def watch(ctx, tickers, interval, count, config_name):
     """
     output_dir = ctx.obj["output_dir"]
     period = ctx.obj["period"]
+    output_format = ctx.obj["output_format"]
 
     scoring_config = _get_scoring_config(config_name)
     generator = ReportGenerator(output_dir=output_dir)
@@ -368,7 +382,7 @@ def watch(ctx, tickers, interval, count, config_name):
 
             click.clear()
             click.echo("=" * 70)
-            click.echo(f"  WATCH MODE — Iteration {iteration}"
+            click.echo(f"  WATCH MODE  -  Iteration {iteration}"
                        f"{'/' + str(count) if count else ''}")
             click.echo(f"  Refresh: {interval}s | Period: {period} | Preset: {config_name}")
             click.echo("=" * 70)
@@ -381,7 +395,7 @@ def watch(ctx, tickers, interval, count, config_name):
                     report_data = generator.generate_full_report(
                         ticker=ticker,
                         period=period,
-                        output_format="json",
+                        output_format=output_format,
                         use_cache=False,
                     )
                     result = scorer.score(report_data)

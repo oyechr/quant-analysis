@@ -38,6 +38,7 @@ class TickerComparator:
         period: str = "1y",
         scoring_config: Optional[ScoringConfig] = None,
         output_dir: str = "data",
+        output_format: str = "all",
     ):
         """
         Initialize TickerComparator.
@@ -57,6 +58,7 @@ class TickerComparator:
         self.period = period
         self.scoring_config = scoring_config
         self.output_dir = output_dir
+        self.output_format = output_format
 
         self._reports: Dict[str, Dict[str, Any]] = {}
         self._scores: Dict[str, ScoringResult] = {}
@@ -79,7 +81,7 @@ class TickerComparator:
                 report_data = generator.generate_full_report(
                     ticker=ticker,
                     period=self.period,
-                    output_format="json",
+                    output_format=self.output_format,
                     use_cache=use_cache,
                 )
                 self._reports[ticker] = report_data

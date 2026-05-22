@@ -206,7 +206,7 @@ class ScoringResult:
         """Create a visual score bar"""
         filled = int(score / 100 * width)
         empty = width - filled
-        return f"[{'█' * filled}{'░' * empty}]"
+        return f"[{'#' * filled}{'-' * empty}]"
 
 
 class StockScorer:

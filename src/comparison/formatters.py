@@ -225,7 +225,7 @@ def _save_heatmap_chart(corr_df: pd.DataFrame, save_path: str) -> bool:
         logger.info(f"Correlation heatmap saved to {save_path}")
         return True
     except ImportError:
-        logger.warning("matplotlib/seaborn not available — skipping chart save")
+        logger.warning("matplotlib/seaborn not available  -  skipping chart save")
         return False
     except Exception as e:
         logger.error(f"Failed to save heatmap chart: {e}")

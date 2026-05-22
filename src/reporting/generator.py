@@ -522,7 +522,7 @@ class ReportGenerator:
                 md.append("|--------|-------|--------|-----------|-------|")
                 for s in dim.sub_scores:
                     avail = "" if s.available else " *(N/A)*"
-                    raw = f"{s.raw_value}" if s.raw_value is not None else "—"
+                    raw = f"{s.raw_value}" if s.raw_value is not None else " - "
                     md.append(
                         f"| {s.name}{avail} | {s.score:.1f} | {s.weight:.0%} | {raw} | {s.label} |"
                     )
