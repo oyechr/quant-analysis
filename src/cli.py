@@ -348,8 +348,10 @@ def compare(ctx, tickers, config_name, save_chart, weights):
 @click.argument("ticker")
 @click.option("--model", default=None,
               help="LLM model override (e.g. gpt-4o, claude-sonnet-4-5). Reads llm_model from config.json if not set.")
+@click.option("--debug-context", is_flag=True, default=False,
+              help="Print the context sent to the LLM and exit without calling the API.")
 @click.pass_context
-def explain(ctx, ticker, model):
+def explain(ctx, ticker, model, debug_context):
     """Generate a plain-English investment brief using an LLM.
 
     Reads the existing full_report.json (generates one if missing), builds a
@@ -387,6 +389,10 @@ def explain(ctx, ticker, model):
     import json as _json
     report_data = _json.loads(json_path.read_text(encoding="utf-8"))
     context = build_brief_context(report_data)
+
+    if debug_context:
+        click.echo(context)
+        return
 
     click.echo(f"\n  Investment Brief: {ticker}")
     click.echo("  " + "=" * 50 + "\n")
