@@ -18,7 +18,30 @@ Use claude-sonnet-4-5 or gpt-4.1 for richer analysis at ~5x cost.
 import json
 import logging
 import sys
+from datetime import date
+from pathlib import Path
 from typing import Any, Dict, Optional
+
+_USAGE_FILE = Path(__file__).parent.parent / "data" / ".llm_usage.json"
+
+# RPD limits for known GitHub Models (free tier)
+_GITHUB_MODEL_LIMITS: Dict[str, int] = {
+    "gpt-4.1":               50,
+    "gpt-4o":                50,
+    "o3-mini":               50,
+    "o4-mini":               50,
+    "gpt-4.1-mini":          150,
+    "Meta-Llama-3.3-70B":    150,
+    "Mistral-Small-3.1":     128,
+    "DeepSeek-R1":           150,
+}
+
+# Quality-ordered fallback chain used when the preferred model is exhausted
+_GITHUB_FALLBACK_CHAIN = [
+    "gpt-4.1",        # best quality,   50 RPD
+    "gpt-4.1-mini",   # very good,     150 RPD
+    "Meta-Llama-3.3-70B",  # solid OSS, 150 RPD
+]
 
 logger = logging.getLogger(__name__)
 
@@ -330,20 +353,84 @@ def _stream_anthropic(toon_text: str, model: str, api_key: str) -> str:
     return "".join(tokens)
 
 
+def _read_github_usage() -> Dict[str, Any]:
+    """Read today's per-model usage counters from disk."""
+    today = str(date.today())
+    if _USAGE_FILE.exists():
+        try:
+            stored = json.loads(_USAGE_FILE.read_text(encoding="utf-8"))
+            if stored.get("date") == today:
+                # Migrate old flat format {date, count} -> {date, models: {}}
+                if "count" in stored and "models" not in stored:
+                    return {"date": today, "models": {}}
+                return stored
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"date": today, "models": {}}
+
+
+def _write_github_usage(data: Dict[str, Any]) -> None:
+    _USAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _USAGE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _select_and_increment_github_model(preferred: str) -> tuple:
+    """Select the best available GitHub Model and increment its counter.
+
+    Tries preferred model first, then walks _GITHUB_FALLBACK_CHAIN.
+    Returns (model_name, used_after_increment, daily_limit).
+    """
+    usage = _read_github_usage()
+    counters = usage.setdefault("models", {})
+
+    # Build candidate list: preferred first, then fallbacks not already tried
+    candidates = [preferred] + [m for m in _GITHUB_FALLBACK_CHAIN if m != preferred]
+
+    for model in candidates:
+        limit = _GITHUB_MODEL_LIMITS.get(model, 50)
+        used = counters.get(model, 0)
+        if used < limit:
+            counters[model] = used + 1
+            _write_github_usage(usage)
+            return model, counters[model], limit
+
+    # All candidates exhausted — build a helpful summary
+    lines = ["All GitHub Models daily limits reached:"]
+    for m in candidates:
+        lim = _GITHUB_MODEL_LIMITS.get(m, 50)
+        lines.append(f"  {m}: {counters.get(m, 0)}/{lim} RPD")
+    lines.append("Limits reset at midnight UTC.")
+    raise ValueError("\n".join(lines))
+
+
 def _stream_github(toon_text: str, model: str, github_token: str) -> str:
-    """Stream via GitHub Models free tier (OpenAI SDK, different base URL)."""
+    """Stream via GitHub Models free tier, with automatic model fallback."""
     try:
-        import openai
+        import openai  # noqa: F401 (verify installed before tracking quota)
     except ImportError:
         raise ImportError(
             "openai package not installed. Run: pip install openai"
         )
-    return _stream_openai(
+
+    actual_model, used, limit = _select_and_increment_github_model(model)
+    if actual_model != model:
+        sys.stdout.write(
+            f"  [Note: {model} exhausted, falling back to {actual_model}]\n"
+        )
+        sys.stdout.flush()
+
+    result = _stream_openai(
         toon_text,
-        model,
+        actual_model,
         api_key=github_token,
         base_url="https://models.inference.ai.azure.com",
     )
+    remaining = limit - used
+    sys.stdout.write(
+        f"  [GitHub Models: {actual_model} {used}/{limit} today, {remaining} remaining]\n"
+    )
+    sys.stdout.flush()
+    return result
 
 
 def _stream_openai(
@@ -370,13 +457,22 @@ def _stream_openai(
             stream=True,
         )
     except openai.AuthenticationError as e:
+        if base_url:
+            raise ValueError(
+                "GitHub Models authentication failed - check your GitHub PAT in config.json."
+            ) from e
         raise ValueError(f"OpenAI authentication failed - check your API key. ({e})") from e
     except openai.RateLimitError as e:
+        if base_url:
+            raise ValueError(
+                f"GitHub Models rate limit hit ({_GITHUB_DAILY_LIMIT} RPD). "
+                "Resets at midnight UTC."
+            ) from e
         raise ValueError(
             "OpenAI quota exceeded. Add billing credits at https://platform.openai.com/billing"
         ) from e
     except openai.APIError as e:
-        raise ValueError(f"OpenAI API error: {e}") from e
+        raise ValueError(f"API error: {e}") from e
     try:
         for chunk in stream:
             if not chunk.choices:
