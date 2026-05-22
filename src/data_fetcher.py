@@ -150,7 +150,9 @@ class DataFetcher:
         if use_cache and cache_file.exists():
             logger.info(f"Loading cached data for {ticker} from {cache_file}")
             try:
-                return pd.read_csv(cache_file, index_col=0, parse_dates=True)
+                df = pd.read_csv(cache_file, index_col=0)
+                df.index = pd.to_datetime(df.index, utc=True)
+                return df
             except Exception as e:
                 logger.warning(f"Failed to load cache for {ticker}: {e}")
                 logger.info("Fetching fresh data instead")

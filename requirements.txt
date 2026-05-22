@@ -5,19 +5,11 @@ numpy>=1.26.0
 lxml>=5.0.0
 
 # Technical analysis
-ta>=0.11.0
+finta>=1.3
 
-# Visualization
-plotly>=5.18.0
+# Visualization (optional - used for correlation heatmap in quant compare)
 matplotlib>=3.8.0
 seaborn>=0.13.0
-
-# Optional: Interactive dashboards
-streamlit>=1.31.0
-
-# Optional: ML/Forecasting
-scikit-learn>=1.4.0
-statsmodels>=0.14.0
 
 # Development tools
 black>=24.0.0

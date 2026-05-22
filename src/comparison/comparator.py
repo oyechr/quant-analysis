@@ -159,15 +159,19 @@ class TickerComparator:
             info = report.get("info", {})
             valuation = report.get("valuation_analysis", {})
             dcf = valuation.get("dcf_valuation", {}) if valuation else {}
+            fcf_metrics = (
+                report.get("fundamental_analysis", {})
+                .get("analysis", {})
+                .get("fcf_metrics", {})
+            )
 
             rows[ticker] = {
-                "P/E": _safe_metric(info, "trailingPE"),
-                "Forward P/E": _safe_metric(info, "forwardPE"),
-                "P/B": _safe_metric(info, "priceToBook"),
-                "PEG": _safe_metric(info, "pegRatio"),
-                "EV/EBITDA": _safe_metric(info, "enterpriseToEbitda"),
-                "FCF Yield %": _safe_metric(info, "freeCashflow", divisor_key="marketCap",
-                                            multiply=100, source=info),
+                "P/E": _safe_metric(info, "pe_ratio"),
+                "Forward P/E": _safe_metric(info, "forward_pe"),
+                "P/B": _safe_metric(info, "price_to_book"),
+                "PEG": _safe_metric(info, "peg_ratio"),
+                "EV/EBITDA": _safe_metric(info, "enterprise_to_ebitda"),
+                "FCF Yield %": _safe_metric(fcf_metrics, "fcf_yield"),
                 "DCF Upside %": _safe_metric(dcf, "discount_premium_pct"),
             }
 
@@ -223,14 +227,20 @@ class TickerComparator:
                 continue
 
             info = report.get("info", {})
+            revenue_growth = (
+                report.get("fundamental_analysis", {})
+                .get("analysis", {})
+                .get("growth_rates", {})
+                .get("revenue", {})
+            )
             rows[ticker] = {
-                "Market Cap": _format_large_number(info.get("marketCap")),
-                "Revenue Growth %": _safe_metric(info, "revenueGrowth", multiply=100),
-                "ROE %": _safe_metric(info, "returnOnEquity", multiply=100),
-                "Dividend Yield %": _safe_metric(info, "dividendYield", multiply=100),
+                "Market Cap": _format_large_number(info.get("market_cap")),
+                "Revenue Growth %": _safe_metric(revenue_growth, "1y"),
+                "ROE %": _safe_metric(info, "roe", multiply=100),
+                "Dividend Yield %": _safe_metric(info, "dividend_yield"),
                 "Beta": _safe_metric(info, "beta"),
-                "52w High": _safe_metric(info, "fiftyTwoWeekHigh"),
-                "52w Low": _safe_metric(info, "fiftyTwoWeekLow"),
+                "52w High": _safe_metric(info, "52w_high"),
+                "52w Low": _safe_metric(info, "52w_low"),
             }
 
         if not rows:

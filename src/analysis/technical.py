@@ -1,6 +1,6 @@
 """
 Technical Analysis Module
-Calculates technical indicators from price data using ta library
+Calculates technical indicators from price data using finta library
 """
 
 import logging
@@ -8,9 +8,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
-
-# Import ta submodules
-from ta import momentum, trend, volatility, volume
+from finta import TA
 
 from ..config import AnalysisConfig, get_config
 from ..utils.report import get_currency_symbol
@@ -53,6 +51,13 @@ class TechnicalAnalyzer:
         self.currency = currency
         self.config = config or get_config()
 
+    def _finta_df(self) -> pd.DataFrame:
+        """Return a finta-compatible DataFrame with lowercase column names."""
+        return self.df.rename(columns={
+            "Open": "open", "High": "high", "Low": "low",
+            "Close": "close", "Volume": "volume",
+        })
+
     # ==================== Trend Indicators ====================
 
     def calculate_moving_averages(
@@ -68,13 +73,12 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with SMA and EMA columns added
         """
+        fdf = self._finta_df()
         for period in sma_periods:
-            col_name = f"SMA_{period}"
-            self.df[col_name] = trend.sma_indicator(self.df["Close"], window=period)
+            self.df[f"SMA_{period}"] = TA.SMA(fdf, period=period).values
 
         for period in ema_periods:
-            col_name = f"EMA_{period}"
-            self.df[col_name] = trend.ema_indicator(self.df["Close"], window=period)
+            self.df[f"EMA_{period}"] = TA.EMA(fdf, period=period).values
 
         return self.df
 
@@ -90,15 +94,10 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with MACD, MACD_signal, MACD_diff columns
         """
-        self.df["MACD"] = trend.macd(
-            self.df["Close"], window_slow=slow, window_fast=fast, fillna=False
-        )
-        self.df["MACD_signal"] = trend.macd_signal(
-            self.df["Close"], window_slow=slow, window_fast=fast, window_sign=signal, fillna=False
-        )
-        self.df["MACD_diff"] = trend.macd_diff(
-            self.df["Close"], window_slow=slow, window_fast=fast, window_sign=signal, fillna=False
-        )
+        macd_df = TA.MACD(self._finta_df(), period_fast=fast, period_slow=slow, signal=signal)
+        self.df["MACD"] = macd_df["MACD"].values
+        self.df["MACD_signal"] = macd_df["SIGNAL"].values
+        self.df["MACD_diff"] = (macd_df["MACD"] - macd_df["SIGNAL"]).values
         return self.df
 
     # ==================== Momentum Indicators ====================
@@ -113,7 +112,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with RSI column added
         """
-        self.df[f"RSI_{period}"] = momentum.rsi(self.df["Close"], window=period)
+        self.df[f"RSI_{period}"] = TA.RSI(self._finta_df(), period=period).values
         return self.df
 
     def calculate_stochastic(self, k_period: int = 14, d_period: int = 3) -> pd.DataFrame:
@@ -127,20 +126,9 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with Stochastic %K and %D columns
         """
-        self.df["Stoch_K"] = momentum.stoch(
-            self.df["High"],
-            self.df["Low"],
-            self.df["Close"],
-            window=k_period,
-            smooth_window=d_period,
-        )
-        self.df["Stoch_D"] = momentum.stoch_signal(
-            self.df["High"],
-            self.df["Low"],
-            self.df["Close"],
-            window=k_period,
-            smooth_window=d_period,
-        )
+        fdf = self._finta_df()
+        self.df["Stoch_K"] = TA.STOCH(fdf, period=k_period).values
+        self.df["Stoch_D"] = TA.STOCHD(fdf, period=d_period, stoch_period=k_period).values
         return self.df
 
     # ==================== Volatility Indicators ====================
@@ -156,12 +144,10 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with BB_lower, BB_middle, BB_upper columns
         """
-        bb = volatility.BollingerBands(
-            close=self.df["Close"], window=period, window_dev=int(std_dev)
-        )
-        self.df["BB_upper"] = bb.bollinger_hband()
-        self.df["BB_middle"] = bb.bollinger_mavg()
-        self.df["BB_lower"] = bb.bollinger_lband()
+        bb_df = TA.BBANDS(self._finta_df(), period=period, std_multiplier=std_dev)
+        self.df["BB_upper"] = bb_df["BB_UPPER"].values
+        self.df["BB_middle"] = bb_df["BB_MIDDLE"].values
+        self.df["BB_lower"] = bb_df["BB_LOWER"].values
         return self.df
 
     def calculate_atr(self, period: int = 14) -> pd.DataFrame:
@@ -174,9 +160,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with ATR column added
         """
-        self.df[f"ATR_{period}"] = volatility.average_true_range(
-            self.df["High"], self.df["Low"], self.df["Close"], window=period
-        )
+        self.df[f"ATR_{period}"] = TA.ATR(self._finta_df(), period=period).values
         return self.df
 
     def calculate_adx(self, period: int = 14) -> pd.DataFrame:
@@ -189,9 +173,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with ADX column added
         """
-        self.df[f"ADX_{period}"] = trend.adx(
-            self.df["High"], self.df["Low"], self.df["Close"], window=period
-        )
+        self.df[f"ADX_{period}"] = TA.ADX(self._finta_df(), period=period).values
         return self.df
 
     # ==================== Volume Indicators ====================
@@ -203,7 +185,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with OBV column added
         """
-        self.df["OBV"] = volume.on_balance_volume(self.df["Close"], self.df["Volume"])
+        self.df["OBV"] = TA.OBV(self._finta_df()).values
         return self.df
 
     def calculate_vwap(self) -> pd.DataFrame:
@@ -213,9 +195,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with VWAP column added
         """
-        self.df["VWAP"] = volume.volume_weighted_average_price(
-            self.df["High"], self.df["Low"], self.df["Close"], self.df["Volume"]
-        )
+        self.df["VWAP"] = TA.VWAP(self._finta_df()).values
         return self.df
 
     def calculate_mfi(self, period: int = 14) -> pd.DataFrame:
@@ -228,9 +208,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with MFI column added
         """
-        self.df[f"MFI_{period}"] = volume.money_flow_index(
-            self.df["High"], self.df["Low"], self.df["Close"], self.df["Volume"], window=period
-        )
+        self.df[f"MFI_{period}"] = TA.MFI(self._finta_df(), period=period).values
         return self.df
 
     def calculate_williams_r(self, period: int = 14) -> pd.DataFrame:
@@ -243,9 +221,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with Williams %R column added
         """
-        self.df[f"Williams_R_{period}"] = momentum.williams_r(
-            self.df["High"], self.df["Low"], self.df["Close"], lbp=period
-        )
+        self.df[f"Williams_R_{period}"] = TA.WILLIAMS(self._finta_df(), period=period).values
         return self.df
 
     def calculate_statistics(self) -> Dict[str, Any]:

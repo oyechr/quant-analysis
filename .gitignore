@@ -1,9 +1,9 @@
-# Data directory structure
-# Cache: ephemeral API responses (can be regenerated)
-data/**/cache/
+# Data directory - all generated/fetched content, can be regenerated
+data/
+!data/.gitkeep
 
-# Reports: generated analysis outputs (tracked for versioning)
-# data/**/reports/ - intentionally tracked
+# Generated package metadata
+*.egg-info/
 
 # Python
 __pycache__/
