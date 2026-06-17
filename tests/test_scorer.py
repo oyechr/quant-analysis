@@ -822,8 +822,8 @@ class TestOutputFormatting:
         from src.scoring.scorer import ScoringResult
 
         bar = ScoringResult._score_bar(50.0, width=10)
-        assert "█" in bar
-        assert "░" in bar
+        assert "#" in bar
+        assert "-" in bar
         assert len(bar) == 12  # 10 chars + 2 brackets
 
 
