@@ -57,18 +57,19 @@ class TestCLIGroup:
     def test_subcommands_listed(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["--help"])
-        assert "analyze" in result.output
+        assert "report" in result.output
         assert "score" in result.output
         assert "compare" in result.output
         assert "watch" in result.output
+        assert "chat" in result.output
 
 
-class TestAnalyzeCommand:
-    """Test the 'analyze' subcommand."""
+class TestReportCommand:
+    """Test the 'report' subcommand."""
 
     @patch("src.cli.StockScorer")
     @patch("src.cli.ReportGenerator")
-    def test_analyze_basic(self, mock_gen_cls, mock_scorer_cls):
+    def test_report_basic(self, mock_gen_cls, mock_scorer_cls):
         mock_gen = MagicMock()
         mock_gen.generate_full_report.return_value = _mock_report_data()
         mock_gen_cls.return_value = mock_gen
@@ -78,14 +79,14 @@ class TestAnalyzeCommand:
         mock_scorer_cls.return_value = mock_scorer
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["analyze", "AAPL"])
+        result = runner.invoke(cli, ["report", "AAPL"])
         assert result.exit_code == 0
         assert "AAPL" in result.output
         mock_gen.generate_full_report.assert_called_once()
 
     @patch("src.cli.StockScorer")
     @patch("src.cli.ReportGenerator")
-    def test_analyze_with_options(self, mock_gen_cls, mock_scorer_cls):
+    def test_report_with_options(self, mock_gen_cls, mock_scorer_cls):
         mock_gen = MagicMock()
         mock_gen.generate_full_report.return_value = _mock_report_data()
         mock_gen_cls.return_value = mock_gen
@@ -94,7 +95,7 @@ class TestAnalyzeCommand:
         runner = CliRunner()
         result = runner.invoke(cli, [
             "--period", "2y", "--no-cache", "--format", "json",
-            "analyze", "TSLA", "--exclude-technical",
+            "report", "TSLA", "--exclude-technical",
         ])
         assert result.exit_code == 0
         call_kwargs = mock_gen.generate_full_report.call_args[1]
@@ -103,9 +104,9 @@ class TestAnalyzeCommand:
         assert call_kwargs["output_format"] == "json"
         assert call_kwargs["include_technical"] is False
 
-    def test_analyze_missing_ticker(self):
+    def test_report_missing_ticker(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["analyze"])
+        result = runner.invoke(cli, ["report"])
         assert result.exit_code != 0
 
 
@@ -222,3 +223,144 @@ class TestWatchCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["watch"])
         assert result.exit_code != 0
+
+
+class TestChatCommand:
+    """Test the 'chat' subcommand."""
+
+    def test_chat_missing_ticker(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["chat"])
+        assert result.exit_code != 0
+
+    def test_chat_help(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["chat", "--help"])
+        assert result.exit_code == 0
+        assert "TICKER" in result.output
+        assert "--no-intro" in result.output
+        assert "--debug-context" in result.output
+
+    @patch("src.cli.ReportGenerator")
+    def test_chat_debug_context_uses_existing_report(self, mock_gen_cls, tmp_path):
+        """--debug-context prints context and exits without calling the LLM."""
+        report_dir = tmp_path / "AAPL" / "reports"
+        report_dir.mkdir(parents=True)
+        report_path = report_dir / "full_report.json"
+        import json
+        report_path.write_text(json.dumps(_mock_report_data("AAPL")), encoding="utf-8")
+
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "--output-dir", str(tmp_path),
+            "chat", "AAPL", "--debug-context",
+        ])
+        assert result.exit_code == 0
+        # Should print the context block and exit — no LLM call
+        assert "TICKER: AAPL" in result.output
+        mock_gen_cls.return_value.generate_full_report.assert_not_called()
+
+    @patch("src.cli.ReportGenerator")
+    def test_chat_generates_report_when_missing(self, mock_gen_cls, tmp_path):
+        """chat auto-generates a report if none exists, then starts the session."""
+        mock_gen = MagicMock()
+        mock_gen.generate_full_report.return_value = _mock_report_data("MSFT")
+        mock_gen_cls.return_value = mock_gen
+
+        # Patch chat_turn so we never hit the LLM; simulate user typing /quit
+        with patch("src.llm.chat_turn", return_value="Brief here.") as mock_turn:
+            runner = CliRunner()
+            result = runner.invoke(
+                cli,
+                ["--output-dir", str(tmp_path), "chat", "MSFT"],
+                # no-intro skips the auto-brief; /quit exits the loop
+                input="/quit\n",
+                catch_exceptions=False,
+            )
+
+        # Report was generated because no JSON existed
+        mock_gen.generate_full_report.assert_called_once()
+        # Session header should be present
+        assert "MSFT" in result.output
+
+    @patch("src.cli.ReportGenerator")
+    def test_chat_loads_existing_report_without_regenerating(self, mock_gen_cls, tmp_path):
+        """chat loads an existing report without re-generating it."""
+        report_dir = tmp_path / "AAPL" / "reports"
+        report_dir.mkdir(parents=True)
+        import json
+        (report_dir / "full_report.json").write_text(
+            json.dumps(_mock_report_data("AAPL")), encoding="utf-8"
+        )
+
+        with patch("src.llm.chat_turn", return_value="Brief."):
+            runner = CliRunner()
+            runner.invoke(
+                cli,
+                ["--output-dir", str(tmp_path), "chat", "AAPL", "--no-intro"],
+                input="/quit\n",
+                catch_exceptions=False,
+            )
+
+        mock_gen_cls.return_value.generate_full_report.assert_not_called()
+
+    @patch("src.cli.ReportGenerator")
+    def test_chat_conversation_loop(self, mock_gen_cls, tmp_path):
+        """Messages are accumulated and passed to chat_turn on each turn."""
+        report_dir = tmp_path / "AAPL" / "reports"
+        report_dir.mkdir(parents=True)
+        import json
+        (report_dir / "full_report.json").write_text(
+            json.dumps(_mock_report_data("AAPL")), encoding="utf-8"
+        )
+
+        call_messages = []
+
+        def _capture_turn(context, messages, model=None):
+            call_messages.append(list(messages))
+            return "Analyst response."
+
+        with patch("src.llm.chat_turn", side_effect=_capture_turn):
+            runner = CliRunner()
+            runner.invoke(
+                cli,
+                ["--output-dir", str(tmp_path), "chat", "AAPL", "--no-intro"],
+                input="What is the bear case?\nWhat is the bull case?\n/quit\n",
+                catch_exceptions=False,
+            )
+
+        # Two user turns — each successive call should have more history
+        assert len(call_messages) == 2
+        assert call_messages[0][-1]["content"] == "What is the bear case?"
+        assert len(call_messages[1]) > len(call_messages[0])
+        assert call_messages[1][-1]["content"] == "What is the bull case?"
+
+    @patch("src.cli.ReportGenerator")
+    def test_chat_clear_resets_history(self, mock_gen_cls, tmp_path):
+        """/clear resets message history but context is preserved."""
+        report_dir = tmp_path / "AAPL" / "reports"
+        report_dir.mkdir(parents=True)
+        import json
+        (report_dir / "full_report.json").write_text(
+            json.dumps(_mock_report_data("AAPL")), encoding="utf-8"
+        )
+
+        call_messages = []
+
+        def _capture_turn(context, messages, model=None):
+            call_messages.append(list(messages))
+            return "Response."
+
+        with patch("src.llm.chat_turn", side_effect=_capture_turn):
+            runner = CliRunner()
+            runner.invoke(
+                cli,
+                ["--output-dir", str(tmp_path), "chat", "AAPL", "--no-intro"],
+                input="First question?\n/clear\nSecond question?\n/quit\n",
+                catch_exceptions=False,
+            )
+
+        # After /clear the second question should arrive with only 1 message in history
+        assert len(call_messages) == 2
+        assert len(call_messages[1]) == 1
+        assert call_messages[1][0]["content"] == "Second question?"

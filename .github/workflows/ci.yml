@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "feat/**", "fix/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    name: Lint, test, type-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[llm]"
+          pip install pytest ruff mypy
+
+      - name: Lint (ruff)
+        run: ruff check src/ tests/
+
+      - name: Format check (ruff)
+        run: ruff format --check src/ tests/
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+      - name: Type check (mypy)
+        run: mypy src/ --ignore-missing-imports
+        # Non-blocking for now: mypy findings are reported but don't fail the build
+        # until the codebase is fully annotated. Remove `continue-on-error` when ready.
+        continue-on-error: true
