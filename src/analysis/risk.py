@@ -25,7 +25,7 @@ from ..utils.financial import (
     to_float,
     validate_price_data,
 )
-from ..utils.report import log_calculation_error, validate_dataframe
+from ..utils.report import validate_dataframe
 from ..utils.serialization import format_date
 
 logger = logging.getLogger(__name__)
@@ -637,7 +637,9 @@ class RiskMetrics:
             return {}
 
     def calculate_all_metrics(
-        self, price_data: Optional[pd.DataFrame] = None, benchmark_data: Optional[pd.DataFrame] = None
+        self,
+        price_data: Optional[pd.DataFrame] = None,
+        benchmark_data: Optional[pd.DataFrame] = None,
     ) -> Dict[str, Any]:
         """
         Calculate all risk metrics
@@ -684,7 +686,9 @@ class RiskMetrics:
             logger.error(f"Error calculating risk metrics: {e}")
             return {}
 
-    def format_markdown(self, ticker: str = "", metrics: Optional[Dict[str, Any]] = None) -> List[str]:
+    def format_markdown(
+        self, ticker: str = "", metrics: Optional[Dict[str, Any]] = None
+    ) -> List[str]:
         """
         Format risk analysis as detailed markdown report
 

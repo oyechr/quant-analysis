@@ -39,7 +39,7 @@ def _values_equal(a, b, float_tolerance: float = 1e-9) -> bool:
     """
     if a is None and b is None:
         return True
-    if type(a) != type(b):
+    if type(a) is not type(b):
         # Allow int/float comparison
         if isinstance(a, (int, float)) and isinstance(b, (int, float)):
             return abs(float(a) - float(b)) < float_tolerance
@@ -198,9 +198,9 @@ class TestFullReportToon:
         # Build equivalent compact JSON without excluded sections
         data_no_excluded = {k: v for k, v in data.items() if k not in TOON_EXCLUDED_SECTIONS}
         compact_json = json.dumps(data_no_excluded, separators=(",", ":"), default=str)
-        assert len(toon_str) < len(
-            compact_json
-        ), f"TOON ({len(toon_str)}) should be smaller than compact JSON ({len(compact_json)})"
+        assert len(toon_str) < len(compact_json), (
+            f"TOON ({len(toon_str)}) should be smaller than compact JSON ({len(compact_json)})"
+        )
 
     def test_full_report_roundtrip(self):
         """Full report (sans excluded sections) should roundtrip through TOON."""

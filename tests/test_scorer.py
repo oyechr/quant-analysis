@@ -4,7 +4,6 @@ Tests dimension scorers, composite scoring, configuration, and output formatting
 """
 
 import json
-import math
 import sys
 from pathlib import Path
 
@@ -21,9 +20,9 @@ from src.scoring import (
     TechnicalScorer,
     ValuationScorer,
 )
-from src.scoring.config import DimensionWeight, SignalThresholds
+from src.scoring.config import DimensionWeight
 from src.scoring.dimensions import DimensionResult, SubScore, _clamp, _linear_scale, _safe_float
-
+from src.scoring.scorer import ScoringResult
 
 # ============================================================
 # Test Fixtures
@@ -41,13 +40,7 @@ def _load_sample_report(ticker: str = "AAPL") -> dict:
 
 def _load_analysis_json(ticker: str, analysis_type: str) -> dict:
     """Load a specific analysis JSON file"""
-    path = (
-        Path(__file__).parent.parent
-        / "data"
-        / ticker
-        / "reports"
-        / f"{analysis_type}.json"
-    )
+    path = Path(__file__).parent.parent / "data" / ticker / "reports" / f"{analysis_type}.json"
     if not path.exists():
         pytest.skip(f"Analysis file not found: {path}")
     with open(path) as f:
@@ -277,10 +270,13 @@ class TestTechnicalScorer:
                 "close_price": overrides.get("close_price", 100.0),
                 "indicators": indicators,
             },
-            "signals": overrides.get("signals", {
-                "MACD": "Bullish",
-                "MA_Trend": "Bullish (Golden Cross)",
-            }),
+            "signals": overrides.get(
+                "signals",
+                {
+                    "MACD": "Bullish",
+                    "MA_Trend": "Bullish (Golden Cross)",
+                },
+            ),
         }
 
     def test_score_returns_dimension_result(self):
@@ -587,49 +583,37 @@ class TestValuationScorer:
 
     def test_deeply_undervalued_dcf(self):
         scorer = ValuationScorer()
-        result = scorer.score(
-            self._make_val_data(dcf_premium=-40.0), self._make_ticker_info()
-        )
+        result = scorer.score(self._make_val_data(dcf_premium=-40.0), self._make_ticker_info())
         dcf_sub = next(s for s in result.sub_scores if s.name == "DCF Valuation")
         assert dcf_sub.score >= 85.0
 
     def test_overvalued_dcf(self):
         scorer = ValuationScorer()
-        result = scorer.score(
-            self._make_val_data(dcf_premium=100.0), self._make_ticker_info()
-        )
+        result = scorer.score(self._make_val_data(dcf_premium=100.0), self._make_ticker_info())
         dcf_sub = next(s for s in result.sub_scores if s.name == "DCF Valuation")
         assert dcf_sub.score <= 30.0
 
     def test_low_pe_attractive(self):
         scorer = ValuationScorer()
-        result = scorer.score(
-            self._make_val_data(), self._make_ticker_info(pe=10.0)
-        )
+        result = scorer.score(self._make_val_data(), self._make_ticker_info(pe=10.0))
         pe_sub = next(s for s in result.sub_scores if s.name == "P/E Ratio")
         assert pe_sub.score >= 75.0
 
     def test_high_pe_expensive(self):
         scorer = ValuationScorer()
-        result = scorer.score(
-            self._make_val_data(), self._make_ticker_info(pe=50.0)
-        )
+        result = scorer.score(self._make_val_data(), self._make_ticker_info(pe=50.0))
         pe_sub = next(s for s in result.sub_scores if s.name == "P/E Ratio")
         assert pe_sub.score <= 30.0
 
     def test_low_peg_undervalued(self):
         scorer = ValuationScorer()
-        result = scorer.score(
-            self._make_val_data(), self._make_ticker_info(peg=0.8)
-        )
+        result = scorer.score(self._make_val_data(), self._make_ticker_info(peg=0.8))
         peg_sub = next(s for s in result.sub_scores if s.name == "PEG Ratio")
         assert peg_sub.score >= 80.0
 
     def test_no_dividend_neutral_score(self):
         scorer = ValuationScorer()
-        result = scorer.score(
-            self._make_val_data(pays_dividends=False), self._make_ticker_info()
-        )
+        result = scorer.score(self._make_val_data(pays_dividends=False), self._make_ticker_info())
         div_sub = next(s for s in result.sub_scores if s.name == "Dividend Sustainability")
         assert div_sub.score == 50.0
 

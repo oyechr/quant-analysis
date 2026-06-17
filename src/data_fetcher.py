@@ -74,14 +74,14 @@ class DataFetcher:
         # Validate period
         if period and not self.config.validate_period(period):
             valid_options = sorted(self.config.valid_periods) if self.config.valid_periods else []
-            raise ValueError(f"Invalid period '{period}'. " f"Valid options: {valid_options}")
+            raise ValueError(f"Invalid period '{period}'. Valid options: {valid_options}")
 
         # Validate interval
         if not self.config.validate_interval(interval):
             valid_options = (
                 sorted(self.config.valid_intervals) if self.config.valid_intervals else []
             )
-            raise ValueError(f"Invalid interval '{interval}'. " f"Valid options: {valid_options}")
+            raise ValueError(f"Invalid interval '{interval}'. Valid options: {valid_options}")
 
         # Validate date range if provided
         if start and end:
@@ -93,14 +93,12 @@ class DataFetcher:
                     raise ValueError(f"Start date '{start}' must be before end date '{end}'")
 
                 if end_date > datetime.now():
-                    logger.warning(
-                        f"End date '{end}' is in the future, " f"using current date instead"
-                    )
+                    logger.warning(f"End date '{end}' is in the future, using current date instead")
 
             except ValueError as e:
                 if "does not match format" in str(e):
                     raise ValueError(
-                        f"Invalid date format. Use YYYY-MM-DD. " f"Got start='{start}', end='{end}'"
+                        f"Invalid date format. Use YYYY-MM-DD. Got start='{start}', end='{end}'"
                     ) from e
                 raise
 
@@ -192,8 +190,7 @@ class DataFetcher:
         except ConnectionError as e:
             logger.error(f"Network error fetching {ticker}: {e}")
             raise ConnectionError(
-                f"Failed to connect to Yahoo Finance for {ticker}. "
-                f"Check your internet connection."
+                f"Failed to connect to Yahoo Finance for {ticker}. Check your internet connection."
             ) from e
         except Exception as e:
             error_msg = str(e).lower()
@@ -201,16 +198,15 @@ class DataFetcher:
             # Detect specific error types
             if "404" in error_msg or "not found" in error_msg:
                 raise ValueError(
-                    f"Ticker '{ticker}' not found. " f"Verify the symbol is correct."
+                    f"Ticker '{ticker}' not found. Verify the symbol is correct."
                 ) from e
             elif "timeout" in error_msg:
                 raise ConnectionError(
-                    f"Request timeout for {ticker}. " f"Yahoo Finance may be slow or unreachable."
+                    f"Request timeout for {ticker}. Yahoo Finance may be slow or unreachable."
                 ) from e
             elif "rate limit" in error_msg or "429" in error_msg:
                 raise RuntimeError(
-                    f"Yahoo Finance rate limit exceeded. "
-                    f"Please wait a few minutes before retrying."
+                    "Yahoo Finance rate limit exceeded. Please wait a few minutes before retrying."
                 ) from e
             else:
                 logger.error(f"Unexpected error fetching {ticker}: {e}")
@@ -566,7 +562,9 @@ class DataFetcher:
         )
 
     def fetch_news(
-        self, ticker: str, use_cache: bool = False  # News is time-sensitive, default to fresh
+        self,
+        ticker: str,
+        use_cache: bool = False,  # News is time-sensitive, default to fresh
     ) -> List[Dict[str, Any]]:
         """
         Fetch recent news articles for a ticker

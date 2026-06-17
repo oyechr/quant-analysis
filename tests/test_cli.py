@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -93,10 +92,19 @@ class TestReportCommand:
         mock_scorer_cls.return_value = MagicMock()
 
         runner = CliRunner()
-        result = runner.invoke(cli, [
-            "--period", "2y", "--no-cache", "--format", "json",
-            "report", "TSLA", "--exclude-technical",
-        ])
+        result = runner.invoke(
+            cli,
+            [
+                "--period",
+                "2y",
+                "--no-cache",
+                "--format",
+                "json",
+                "report",
+                "TSLA",
+                "--exclude-technical",
+            ],
+        )
         assert result.exit_code == 0
         call_kwargs = mock_gen.generate_full_report.call_args[1]
         assert call_kwargs["period"] == "2y"
@@ -248,13 +256,20 @@ class TestChatCommand:
         report_dir.mkdir(parents=True)
         report_path = report_dir / "full_report.json"
         import json
+
         report_path.write_text(json.dumps(_mock_report_data("AAPL")), encoding="utf-8")
 
         runner = CliRunner()
-        result = runner.invoke(cli, [
-            "--output-dir", str(tmp_path),
-            "chat", "AAPL", "--debug-context",
-        ])
+        result = runner.invoke(
+            cli,
+            [
+                "--output-dir",
+                str(tmp_path),
+                "chat",
+                "AAPL",
+                "--debug-context",
+            ],
+        )
         assert result.exit_code == 0
         # Should print the context block and exit — no LLM call
         assert "TICKER: AAPL" in result.output
@@ -268,7 +283,7 @@ class TestChatCommand:
         mock_gen_cls.return_value = mock_gen
 
         # Patch chat_turn so we never hit the LLM; simulate user typing /quit
-        with patch("src.llm.chat_turn", return_value="Brief here.") as mock_turn:
+        with patch("src.llm.chat_turn", return_value="Brief here."):
             runner = CliRunner()
             result = runner.invoke(
                 cli,
@@ -289,6 +304,7 @@ class TestChatCommand:
         report_dir = tmp_path / "AAPL" / "reports"
         report_dir.mkdir(parents=True)
         import json
+
         (report_dir / "full_report.json").write_text(
             json.dumps(_mock_report_data("AAPL")), encoding="utf-8"
         )
@@ -310,6 +326,7 @@ class TestChatCommand:
         report_dir = tmp_path / "AAPL" / "reports"
         report_dir.mkdir(parents=True)
         import json
+
         (report_dir / "full_report.json").write_text(
             json.dumps(_mock_report_data("AAPL")), encoding="utf-8"
         )
@@ -341,6 +358,7 @@ class TestChatCommand:
         report_dir = tmp_path / "AAPL" / "reports"
         report_dir.mkdir(parents=True)
         import json
+
         (report_dir / "full_report.json").write_text(
             json.dumps(_mock_report_data("AAPL")), encoding="utf-8"
         )

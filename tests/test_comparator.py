@@ -28,7 +28,6 @@ from src.comparison.formatters import (
 from src.scoring.dimensions import DimensionResult
 from src.scoring.scorer import ScoringResult
 
-
 # ============================================================
 # Fixtures
 # ============================================================
@@ -265,8 +264,10 @@ class TestSafeMetric:
 
     def test_with_divisor(self):
         result = _safe_metric(
-            {"fcf": 50e9}, "fcf",
-            divisor_key="mcap", multiply=100,
+            {"fcf": 50e9},
+            "fcf",
+            divisor_key="mcap",
+            multiply=100,
             source={"mcap": 1e12},
         )
         assert result == 5.0
@@ -299,10 +300,12 @@ class TestFormatLargeNumber:
 
 class TestFormatters:
     def _sample_df(self):
-        return pd.DataFrame({
-            "AAPL": {"Score": 72.5, "Signal": "Buy"},
-            "MSFT": {"Score": 68.0, "Signal": "Hold"},
-        })
+        return pd.DataFrame(
+            {
+                "AAPL": {"Score": 72.5, "Signal": "Buy"},
+                "MSFT": {"Score": 68.0, "Signal": "Hold"},
+            }
+        )
 
     def test_format_table(self):
         output = format_comparison_table(self._sample_df(), title="Test")

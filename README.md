@@ -316,3 +316,25 @@ The project uses a two-tier data structure:
 - **``reports/``** -- Analysis outputs, version-controlled for historical tracking
 
 This allows regenerating fresh data without losing analysis history, and enables Git-tracked evolution of trading signals over time.
+
+## Development
+
+Install all dev dependencies (linter, formatter, test runner, type checker):
+
+```bash
+pip install -e ".[dev,llm]"
+```
+
+Before pushing, run lint + format in one pass:
+
+```bash
+ruff check src/ tests/ --fix && ruff format src/ tests/
+```
+
+Run the test suite:
+
+```bash
+pytest tests/ -q
+```
+
+CI (GitHub Actions) runs `ruff check`, `ruff format --check`, and `pytest` automatically on every push and pull request to ``main``.

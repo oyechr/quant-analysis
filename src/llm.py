@@ -26,20 +26,20 @@ _USAGE_FILE = Path(__file__).parent.parent / "data" / ".llm_usage.json"
 
 # RPD limits for known GitHub Models (free tier)
 _GITHUB_MODEL_LIMITS: Dict[str, int] = {
-    "gpt-4.1":               50,
-    "gpt-4o":                50,
-    "o3-mini":               50,
-    "o4-mini":               50,
-    "gpt-4.1-mini":          150,
-    "Meta-Llama-3.3-70B":    150,
-    "Mistral-Small-3.1":     128,
-    "DeepSeek-R1":           150,
+    "gpt-4.1": 50,
+    "gpt-4o": 50,
+    "o3-mini": 50,
+    "o4-mini": 50,
+    "gpt-4.1-mini": 150,
+    "Meta-Llama-3.3-70B": 150,
+    "Mistral-Small-3.1": 128,
+    "DeepSeek-R1": 150,
 }
 
 # Quality-ordered fallback chain used when the preferred model is exhausted
 _GITHUB_FALLBACK_CHAIN = [
-    "gpt-4.1",        # best quality,   50 RPD
-    "gpt-4.1-mini",   # very good,     150 RPD
+    "gpt-4.1",  # best quality,   50 RPD
+    "gpt-4.1-mini",  # very good,     150 RPD
     "Meta-Llama-3.3-70B",  # solid OSS, 150 RPD
 ]
 
@@ -137,9 +137,11 @@ def build_brief_context(report_data: Dict[str, Any]) -> str:
         score = _fmt(dim.get("score"))
         coverage = _fmt((dim.get("data_coverage") or 0) * 100, pct=True, decimals=0)
         lines.append(f"  {dim_name.capitalize()}: {score}/100  [{coverage} data]")
-        for sub in (dim.get("sub_scores") or []):
-            lines.append(f"    {sub.get('name')}: {_fmt(sub.get('score'))}/100  "
-                         f"raw={_fmt(sub.get('raw_value'), decimals=2)}  ({sub.get('label', '')})")
+        for sub in dim.get("sub_scores") or []:
+            lines.append(
+                f"    {sub.get('name')}: {_fmt(sub.get('score'))}/100  "
+                f"raw={_fmt(sub.get('raw_value'), decimals=2)}  ({sub.get('label', '')})"
+            )
     strengths = scoring.get("strengths") or []
     concerns = scoring.get("concerns") or []
     if strengths:
@@ -270,7 +272,11 @@ def build_brief_context(report_data: Dict[str, Any]) -> str:
     if history:
         lines.append("=== RECENT EARNINGS ===")
         for e in history[:4]:
-            surprise = _fmt(e.get("surprisePercent"), pct=True) if e.get("surprisePercent") is not None else "N/A"
+            surprise = (
+                _fmt(e.get("surprisePercent"), pct=True)
+                if e.get("surprisePercent") is not None
+                else "N/A"
+            )
             lines.append(
                 f"  {e.get('quarter', '')}  EPS actual={_fmt(e.get('epsActual'))}  "
                 f"estimate={_fmt(e.get('epsEstimate'))}  surprise={surprise}"
@@ -314,8 +320,7 @@ def explain(
         key = anthropic_api_key or config.llm_anthropic_api_key
         if not key:
             raise ValueError(
-                "Anthropic API key not configured.\n"
-                "Add 'llm_anthropic_api_key' to config.json."
+                "Anthropic API key not configured.\nAdd 'llm_anthropic_api_key' to config.json."
             )
         return _stream_anthropic(toon_text, resolved_model, key)
 
@@ -339,9 +344,7 @@ def _stream_anthropic(toon_text: str, model: str, api_key: str) -> str:
     try:
         import anthropic
     except ImportError:
-        raise ImportError(
-            "anthropic package not installed. Run: pip install anthropic"
-        )
+        raise ImportError("anthropic package not installed. Run: pip install anthropic")
 
     client = anthropic.Anthropic(api_key=api_key)
     tokens = []
@@ -417,15 +420,11 @@ def _stream_github(toon_text: str, model: str, github_token: str) -> str:
     try:
         import openai  # noqa: F401 (verify installed before tracking quota)
     except ImportError:
-        raise ImportError(
-            "openai package not installed. Run: pip install openai"
-        )
+        raise ImportError("openai package not installed. Run: pip install openai")
 
     actual_model, used, limit = _select_and_increment_github_model(model)
     if actual_model != model:
-        sys.stdout.write(
-            f"  [Note: {model} exhausted, falling back to {actual_model}]\n"
-        )
+        sys.stdout.write(f"  [Note: {model} exhausted, falling back to {actual_model}]\n")
         sys.stdout.flush()
 
     result = _stream_openai(
@@ -442,15 +441,11 @@ def _stream_github(toon_text: str, model: str, github_token: str) -> str:
     return result
 
 
-def _stream_openai(
-    toon_text: str, model: str, api_key: str, base_url: Optional[str] = None
-) -> str:
+def _stream_openai(toon_text: str, model: str, api_key: str, base_url: Optional[str] = None) -> str:
     try:
         import openai
     except ImportError:
-        raise ImportError(
-            "openai package not installed. Run: pip install openai"
-        )
+        raise ImportError("openai package not installed. Run: pip install openai")
 
     client = openai.OpenAI(api_key=api_key, base_url=base_url)
     tokens = []
@@ -473,9 +468,7 @@ def _stream_openai(
         raise ValueError(f"OpenAI authentication failed - check your API key. ({e})") from e
     except openai.RateLimitError as e:
         if base_url:
-            raise ValueError(
-                "GitHub Models rate limit hit. Resets at midnight UTC."
-            ) from e
+            raise ValueError("GitHub Models rate limit hit. Resets at midnight UTC.") from e
         raise ValueError(
             "OpenAI quota exceeded. Add billing credits at https://platform.openai.com/billing"
         ) from e
@@ -501,6 +494,7 @@ def _stream_openai(
 # ---------------------------------------------------------------------------
 # Interactive chat
 # ---------------------------------------------------------------------------
+
 
 def chat_turn(
     context: str,
@@ -537,8 +531,7 @@ def chat_turn(
         key = anthropic_api_key or config.llm_anthropic_api_key
         if not key:
             raise ValueError(
-                "Anthropic API key not configured.\n"
-                "Add 'llm_anthropic_api_key' to config.json."
+                "Anthropic API key not configured.\nAdd 'llm_anthropic_api_key' to config.json."
             )
         return _chat_anthropic(system, messages, resolved_model, key)
 
@@ -556,9 +549,7 @@ def chat_turn(
     return _chat_openai_messages(system, messages, resolved_model, key)
 
 
-def _chat_anthropic(
-    system: str, messages: List[Dict[str, str]], model: str, api_key: str
-) -> str:
+def _chat_anthropic(system: str, messages: List[Dict[str, str]], model: str, api_key: str) -> str:
     try:
         import anthropic
     except ImportError:
@@ -583,9 +574,7 @@ def _chat_anthropic(
     return "".join(tokens)
 
 
-def _chat_github(
-    system: str, messages: List[Dict[str, str]], model: str, github_token: str
-) -> str:
+def _chat_github(system: str, messages: List[Dict[str, str]], model: str, github_token: str) -> str:
     try:
         import openai  # noqa: F401
     except ImportError:
@@ -597,7 +586,9 @@ def _chat_github(
         sys.stdout.flush()
 
     result = _chat_openai_messages(
-        system, messages, actual_model,
+        system,
+        messages,
+        actual_model,
         api_key=github_token,
         base_url="https://models.inference.ai.azure.com",
     )

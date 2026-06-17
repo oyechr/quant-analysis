@@ -5,7 +5,7 @@ Helper functions for working with pandas DataFrames and Series,
 particularly for financial data with datetime indices.
 """
 
-from typing import Any, Optional
+from typing import Optional
 
 import pandas as pd
 

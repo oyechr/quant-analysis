@@ -9,10 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
-
 from ..data_fetcher import DataFetcher
-from ..scoring import ScoringConfig, StockScorer
+from ..scoring import StockScorer
 from ..utils.toon_serializer import report_to_toon
 from .sections import (
     AnalystRatingsSection,
@@ -429,28 +427,32 @@ class ReportGenerator:
     def _save_technical_json(self, ticker: str, technical_analyzer):
         """Save detailed technical analysis as separate JSON file"""
         self._save_analysis_files(
-            ticker, "technical_analysis",
+            ticker,
+            "technical_analysis",
             json_data=technical_analyzer.get_summary(),
         )
 
     def _save_technical_markdown(self, ticker: str, technical_analyzer):
         """Save detailed technical analysis as separate markdown file"""
         self._save_analysis_files(
-            ticker, "technical_analysis",
+            ticker,
+            "technical_analysis",
             markdown_lines=technical_analyzer.format_markdown(),
         )
 
     def _save_fundamental_json(self, ticker: str, fundamental_analyzer):
         """Save detailed fundamental analysis as separate JSON file"""
         self._save_analysis_files(
-            ticker, "fundamental_analysis",
+            ticker,
+            "fundamental_analysis",
             json_data=fundamental_analyzer.get_summary(),
         )
 
     def _save_fundamental_markdown(self, ticker: str, fundamental_analyzer):
         """Save detailed fundamental analysis as separate markdown file"""
         self._save_analysis_files(
-            ticker, "fundamental_analysis",
+            ticker,
+            "fundamental_analysis",
             markdown_lines=fundamental_analyzer.format_markdown(),
         )
 
@@ -469,7 +471,8 @@ class ReportGenerator:
             return
         risk_analyzer, metrics, _ = risk_analyzer_tuple
         self._save_analysis_files(
-            ticker, "risk_analysis",
+            ticker,
+            "risk_analysis",
             markdown_lines=risk_analyzer.format_markdown(ticker=ticker, metrics=metrics),
         )
 
@@ -480,14 +483,16 @@ class ReportGenerator:
     def _save_valuation_markdown(self, ticker: str, valuation_analyzer):
         """Save detailed valuation analysis as separate markdown file"""
         self._save_analysis_files(
-            ticker, "valuation_analysis",
+            ticker,
+            "valuation_analysis",
             markdown_lines=valuation_analyzer.format_markdown(),
         )
 
     def _save_scoring_json(self, ticker: str, scoring_result):
         """Save scoring results as separate JSON file"""
         self._save_analysis_files(
-            ticker, "scoring",
+            ticker,
+            "scoring",
             json_data=scoring_result.to_dict(),
         )
 
@@ -531,7 +536,9 @@ class ReportGenerator:
         # LLM Context section
         md.append("## LLM Context Block")
         md.append("")
-        md.append("*The following block is designed to be prepended to TOON reports for LLM analysis:*")
+        md.append(
+            "*The following block is designed to be prepended to TOON reports for LLM analysis:*"
+        )
         md.append("")
         md.append("```")
         md.append(scoring_result.format_llm_context())

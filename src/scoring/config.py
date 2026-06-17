@@ -7,7 +7,6 @@ import json
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -231,25 +230,19 @@ class ScoringConfig:
     def value_investor(cls) -> "ScoringConfig":
         """Preset: Value-oriented investor (emphasizes fundamentals + valuation)"""
         return cls(
-            weights=DimensionWeight(
-                technical=0.10, fundamental=0.35, risk=0.20, valuation=0.35
-            ),
+            weights=DimensionWeight(technical=0.10, fundamental=0.35, risk=0.20, valuation=0.35),
         )
 
     @classmethod
     def growth_investor(cls) -> "ScoringConfig":
         """Preset: Growth-oriented investor (emphasizes growth + momentum)"""
         return cls(
-            weights=DimensionWeight(
-                technical=0.30, fundamental=0.35, risk=0.15, valuation=0.20
-            ),
+            weights=DimensionWeight(technical=0.30, fundamental=0.35, risk=0.15, valuation=0.20),
         )
 
     @classmethod
     def income_investor(cls) -> "ScoringConfig":
         """Preset: Income-oriented investor (emphasizes dividends + risk)"""
         return cls(
-            weights=DimensionWeight(
-                technical=0.10, fundamental=0.25, risk=0.30, valuation=0.35
-            ),
+            weights=DimensionWeight(technical=0.10, fundamental=0.25, risk=0.30, valuation=0.35),
         )
