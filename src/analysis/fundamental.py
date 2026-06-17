@@ -6,13 +6,11 @@ Analyzes financial statements and calculates fundamental metrics
 import logging
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
 from ..config import AnalysisConfig, get_config
 from ..utils.dataframe_utils import safe_get_dataframe_value
 from ..utils.financial import calculate_cagr, calculate_growth_rate, safe_divide
-from ..utils.serialization import format_date
 
 logger = logging.getLogger(__name__)
 
@@ -119,11 +117,11 @@ class FundamentalAnalyzer:
                 "Total Cash From Operating Activities",
                 "Net Cash Provided By Operating Activities",
             ]
-            
+
             fcf_current = self._get_value(self.cash_flow_a, "Free Cash Flow", 0)
             fcf_1y = self._get_value(self.cash_flow_a, "Free Cash Flow", 1)
             fcf_3y = self._get_value(self.cash_flow_a, "Free Cash Flow", 3)
-            
+
             # If FCF not available directly, calculate from OCF - CapEx
             if fcf_current is None:
                 ocf_current = None
@@ -131,12 +129,12 @@ class FundamentalAnalyzer:
                     ocf_current = self._get_value(self.cash_flow_a, field_name, 0)
                     if ocf_current is not None:
                         break
-                        
+
                 capex_current = self._get_value(self.cash_flow_a, "Capital Expenditure", 0)
                 fcf_current = (
                     ocf_current + capex_current if ocf_current and capex_current else None
                 )  # CapEx is negative
-            
+
             if fcf_1y is None:
                 ocf_1y = None
                 for field_name in ocf_field_names:
@@ -145,7 +143,7 @@ class FundamentalAnalyzer:
                         break
                 capex_1y = self._get_value(self.cash_flow_a, "Capital Expenditure", 1)
                 fcf_1y = ocf_1y + capex_1y if ocf_1y and capex_1y else None
-            
+
             if fcf_3y is None:
                 ocf_3y = None
                 for field_name in ocf_field_names:
@@ -186,7 +184,7 @@ class FundamentalAnalyzer:
         if self.cash_flow_a is not None and not self.cash_flow_a.empty:
             # Try to get FCF directly first (some providers include it)
             fcf = self._get_value(self.cash_flow_a, "Free Cash Flow", 0)
-            
+
             # If not available, calculate from OCF - CapEx
             if fcf is None:
                 # Try multiple field name variants for Operating Cash Flow
@@ -201,12 +199,12 @@ class FundamentalAnalyzer:
                     ocf = self._get_value(self.cash_flow_a, field_name, 0)
                     if ocf is not None:
                         break
-                
+
                 capex = self._get_value(self.cash_flow_a, "Capital Expenditure", 0)
 
                 if ocf and capex:
                     fcf = ocf + capex  # CapEx is negative
-            
+
             if fcf:
                 fcf_metrics["fcf"] = fcf
 
@@ -591,9 +589,8 @@ class FundamentalAnalyzer:
                 score += 1
 
         # 7. No New Shares Issued
-        shares = self.info.get("shares_outstanding") or self.info.get("sharesOutstanding")
-        # This requires historical shares data which yfinance doesn't always provide
-        # Skip for now or mark as N/A
+        # Requires historical shares data which yfinance doesn't always provide — skip
+        _ = self.info.get("shares_outstanding") or self.info.get("sharesOutstanding")
 
         # 8. Increasing Gross Margin
         revenue = self._get_value(self.income_stmt_a, "Total Revenue", 0)

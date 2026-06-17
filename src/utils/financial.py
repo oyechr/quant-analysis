@@ -115,9 +115,7 @@ def calculate_cagr(ending_value: float, beginning_value: float, num_periods: int
     return (pow(ending_value / beginning_value, 1 / num_periods) - 1) * 100
 
 
-def calculate_growth_rate(
-    current: Optional[float], previous: Optional[float]
-) -> Optional[float]:
+def calculate_growth_rate(current: Optional[float], previous: Optional[float]) -> Optional[float]:
     """
     Calculate percentage growth rate between two values
 
@@ -133,9 +131,7 @@ def calculate_growth_rate(
     return ((current - previous) / abs(previous)) * 100
 
 
-def safe_divide(
-    numerator: Optional[float], denominator: Optional[float]
-) -> Optional[float]:
+def safe_divide(numerator: Optional[float], denominator: Optional[float]) -> Optional[float]:
     """
     Safely divide two numbers, returning None on invalid inputs
 

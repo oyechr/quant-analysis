@@ -89,9 +89,7 @@ class ScoringResult:
         lines.append(f"  STOCK SCORE: {self.ticker}")
         lines.append("=" * 60)
         lines.append("")
-        lines.append(
-            f"  Composite Score:  {self.composite_score:.0f}/100  ({self.signal})"
-        )
+        lines.append(f"  Composite Score:  {self.composite_score:.0f}/100  ({self.signal})")
         lines.append(f"  Confidence:       {self.confidence} ({self.confidence_score:.0%})")
         lines.append("")
         lines.append("-" * 60)
@@ -108,7 +106,9 @@ class ScoringResult:
         for name, dim in dimensions:
             if dim:
                 bar = self._score_bar(dim.score)
-                lines.append(f"  {name:<14} {dim.score:5.1f}/100  {bar}  [{dim.data_coverage:.0%} data]")
+                lines.append(
+                    f"  {name:<14} {dim.score:5.1f}/100  {bar}  [{dim.data_coverage:.0%} data]"
+                )
             else:
                 lines.append(f"  {name:<14}   N/A       [no data]")
 
@@ -312,9 +312,7 @@ class StockScorer:
         fundamental_result = None
         if fundamental_data:
             try:
-                fundamental_result = self.fundamental_scorer.score(
-                    fundamental_data, ticker_info
-                )
+                fundamental_result = self.fundamental_scorer.score(fundamental_data, ticker_info)
                 dimensions.append(("fundamental", fundamental_result))
                 all_strengths.extend(fundamental_result.strengths)
                 all_concerns.extend(fundamental_result.concerns)
@@ -368,9 +366,7 @@ class StockScorer:
             dimensions_total=4,
         )
 
-    def _calculate_composite(
-        self, dimensions: List[tuple]
-    ) -> float:
+    def _calculate_composite(self, dimensions: List[tuple]) -> float:
         """
         Calculate weighted composite score from available dimensions.
         Re-normalizes weights when some dimensions are missing.
@@ -390,9 +386,7 @@ class StockScorer:
             return weighted_sum / total_weight
         return 50.0
 
-    def _calculate_confidence(
-        self, dimensions: List[tuple]
-    ) -> float:
+    def _calculate_confidence(self, dimensions: List[tuple]) -> float:
         """
         Calculate confidence score (0-1) based on:
         1. Number of dimensions available (40% weight)

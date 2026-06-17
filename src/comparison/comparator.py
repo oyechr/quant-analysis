@@ -162,9 +162,7 @@ class TickerComparator:
             valuation = report.get("valuation_analysis", {})
             dcf = valuation.get("dcf_valuation", {}) if valuation else {}
             fcf_metrics = (
-                report.get("fundamental_analysis", {})
-                .get("analysis", {})
-                .get("fcf_metrics", {})
+                report.get("fundamental_analysis", {}).get("analysis", {}).get("fcf_metrics", {})
             )
 
             rows[ticker] = {
@@ -197,9 +195,7 @@ class TickerComparator:
 
         for ticker in self.tickers:
             try:
-                prices = self.fetcher.fetch_ticker(
-                    ticker, period=self.period, use_cache=use_cache
-                )
+                prices = self.fetcher.fetch_ticker(ticker, period=self.period, use_cache=use_cache)
                 if not prices.empty and "Close" in prices.columns:
                     price_frames[ticker] = prices["Close"]
             except Exception as e:

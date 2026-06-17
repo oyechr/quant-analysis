@@ -6,7 +6,6 @@ Calculates technical indicators from price data using finta library
 import logging
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 from finta import TA
 
@@ -53,10 +52,15 @@ class TechnicalAnalyzer:
 
     def _finta_df(self) -> pd.DataFrame:
         """Return a finta-compatible DataFrame with lowercase column names."""
-        return self.df.rename(columns={
-            "Open": "open", "High": "high", "Low": "low",
-            "Close": "close", "Volume": "volume",
-        })
+        return self.df.rename(
+            columns={
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Close": "close",
+                "Volume": "volume",
+            }
+        )
 
     # ==================== Trend Indicators ====================
 
@@ -321,9 +325,7 @@ class TechnicalAnalyzer:
         self.calculate_williams_r()
 
         # Volatility indicators
-        self.calculate_bollinger_bands(
-            period=cfg.bollinger_period, std_dev=cfg.bollinger_std
-        )
+        self.calculate_bollinger_bands(period=cfg.bollinger_period, std_dev=cfg.bollinger_std)
         self.calculate_atr(period=cfg.atr_period)
         self.calculate_adx()
 
@@ -695,8 +697,6 @@ class TechnicalAnalyzer:
         # Recent Price Action (last 5 days)
         md.append("### Recent Price Action (Last 5 Days)")
         md.append("")
-        recent = self.df[["Close", "Volume"]].tail(5)
-
         # Add key indicators if available
         display_cols = ["Close", "Volume"]
         optional_cols = ["SMA_20", "RSI_14", "MACD"]
@@ -723,4 +723,3 @@ class TechnicalAnalyzer:
         md.append("")
 
         return md
-

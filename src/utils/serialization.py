@@ -7,7 +7,7 @@ Provides consistent DataFrame/Series to JSON conversion with proper handling of:
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Sequence, Union
+from typing import Any, Dict, List
 
 import pandas as pd
 
@@ -37,7 +37,7 @@ def format_date(date_value: Any, format_type: str = "iso") -> str:
             else:
                 dt = pd.to_datetime(date_str)
             return dt.strftime("%b %d, %Y")
-        except:
+        except Exception:
             # Fallback to ISO if parsing fails
             return date_str[:10]
     else:

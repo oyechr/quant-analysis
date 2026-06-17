@@ -7,7 +7,7 @@ Each scorer normalizes metrics to a 0-100 scale and tracks data coverage for con
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .config import ScoringConfig
 
@@ -85,9 +85,7 @@ def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
 
 
-def _linear_scale(
-    value: float, worst: float, best: float, invert: bool = False
-) -> float:
+def _linear_scale(value: float, worst: float, best: float, invert: bool = False) -> float:
     """
     Linearly scale a value to 0-100.
 
@@ -359,9 +357,7 @@ class TechnicalScorer:
         concerns: List[str],
     ) -> SubScore:
         if close is None or bb_upper is None or bb_lower is None:
-            return SubScore(
-                name="Bollinger Bands", score=50.0, weight=0.10, available=False
-            )
+            return SubScore(name="Bollinger Bands", score=50.0, weight=0.10, available=False)
 
         bb_width = bb_upper - bb_lower
         if bb_width < 1e-10:
@@ -599,10 +595,14 @@ class FundamentalScorer:
             label = "Strong growth"
             strengths.append(f"Revenue growth {growth:.1f}%  -  strong")
         elif growth >= self.params.revenue_growth_moderate:
-            score = 50.0 + (
-                (growth - self.params.revenue_growth_moderate)
-                / (self.params.revenue_growth_strong - self.params.revenue_growth_moderate)
-            ) * 25.0
+            score = (
+                50.0
+                + (
+                    (growth - self.params.revenue_growth_moderate)
+                    / (self.params.revenue_growth_strong - self.params.revenue_growth_moderate)
+                )
+                * 25.0
+            )
             label = "Moderate growth"
         elif growth >= 0:
             score = 30.0 + (growth / self.params.revenue_growth_moderate) * 20.0
@@ -636,10 +636,14 @@ class FundamentalScorer:
             label = "Strong growth"
             strengths.append(f"Earnings growth {growth:.1f}%  -  strong")
         elif growth >= self.params.earnings_growth_moderate:
-            score = 50.0 + (
-                (growth - self.params.earnings_growth_moderate)
-                / (self.params.earnings_growth_strong - self.params.earnings_growth_moderate)
-            ) * 25.0
+            score = (
+                50.0
+                + (
+                    (growth - self.params.earnings_growth_moderate)
+                    / (self.params.earnings_growth_strong - self.params.earnings_growth_moderate)
+                )
+                * 25.0
+            )
             label = "Moderate growth"
         elif growth >= 0:
             score = 30.0 + (growth / self.params.earnings_growth_moderate) * 20.0
@@ -730,10 +734,14 @@ class FundamentalScorer:
             label = "Excellent"
             strengths.append(f"ROE {roe_pct:.1f}%  -  excellent return on equity")
         elif roe_pct >= self.params.roe_good:
-            score = 55.0 + (
-                (roe_pct - self.params.roe_good)
-                / (self.params.roe_excellent - self.params.roe_good)
-            ) * 25.0
+            score = (
+                55.0
+                + (
+                    (roe_pct - self.params.roe_good)
+                    / (self.params.roe_excellent - self.params.roe_good)
+                )
+                * 25.0
+            )
             label = "Good"
         elif roe_pct >= 0:
             score = 25.0 + (roe_pct / self.params.roe_good) * 30.0
@@ -837,17 +845,25 @@ class RiskScorer:
             label = "Excellent"
             strengths.append(f"Sharpe ratio {sharpe:.2f}  -  excellent risk-adjusted returns")
         elif sharpe >= self.params.sharpe_good:
-            score = 70.0 + (
-                (sharpe - self.params.sharpe_good)
-                / (self.params.sharpe_excellent - self.params.sharpe_good)
-            ) * 20.0
+            score = (
+                70.0
+                + (
+                    (sharpe - self.params.sharpe_good)
+                    / (self.params.sharpe_excellent - self.params.sharpe_good)
+                )
+                * 20.0
+            )
             label = "Good"
             strengths.append(f"Sharpe ratio {sharpe:.2f}  -  good risk-adjusted returns")
         elif sharpe >= self.params.sharpe_acceptable:
-            score = 50.0 + (
-                (sharpe - self.params.sharpe_acceptable)
-                / (self.params.sharpe_good - self.params.sharpe_acceptable)
-            ) * 20.0
+            score = (
+                50.0
+                + (
+                    (sharpe - self.params.sharpe_acceptable)
+                    / (self.params.sharpe_good - self.params.sharpe_acceptable)
+                )
+                * 20.0
+            )
             label = "Acceptable"
         elif sharpe >= 0:
             score = 25.0 + (sharpe / self.params.sharpe_acceptable) * 25.0
@@ -856,7 +872,9 @@ class RiskScorer:
         else:
             score = max(25.0 + sharpe * 10, 0.0)
             label = "Negative"
-            concerns.append(f"Negative Sharpe ratio ({sharpe:.2f})  -  underperforming risk-free rate")
+            concerns.append(
+                f"Negative Sharpe ratio ({sharpe:.2f})  -  underperforming risk-free rate"
+            )
 
         return SubScore(
             name="Sharpe Ratio", score=_clamp(score), weight=0.25, raw_value=sharpe, label=label
@@ -903,16 +921,24 @@ class RiskScorer:
             label = "Low risk"
             strengths.append(f"Max drawdown only {dd_abs:.1%}  -  low downside risk")
         elif dd_abs <= self.params.drawdown_moderate:
-            score = 65.0 + (
-                (self.params.drawdown_moderate - dd_abs)
-                / (self.params.drawdown_moderate - self.params.drawdown_low)
-            ) * 25.0
+            score = (
+                65.0
+                + (
+                    (self.params.drawdown_moderate - dd_abs)
+                    / (self.params.drawdown_moderate - self.params.drawdown_low)
+                )
+                * 25.0
+            )
             label = "Moderate"
         elif dd_abs <= self.params.drawdown_high:
-            score = 35.0 + (
-                (self.params.drawdown_high - dd_abs)
-                / (self.params.drawdown_high - self.params.drawdown_moderate)
-            ) * 30.0
+            score = (
+                35.0
+                + (
+                    (self.params.drawdown_high - dd_abs)
+                    / (self.params.drawdown_high - self.params.drawdown_moderate)
+                )
+                * 30.0
+            )
             label = "High risk"
             concerns.append(f"Max drawdown {dd_abs:.1%}  -  significant downside risk")
         else:
@@ -955,9 +981,7 @@ class RiskScorer:
             if beta > 1.8:
                 concerns.append(f"Beta {beta:.2f}  -  highly volatile relative to market")
 
-        return SubScore(
-            name="Beta", score=_clamp(score), weight=0.15, raw_value=beta, label=label
-        )
+        return SubScore(name="Beta", score=_clamp(score), weight=0.15, raw_value=beta, label=label)
 
     def _score_volatility(
         self, ann_vol: Optional[float], strengths: List[str], concerns: List[str]
@@ -970,16 +994,24 @@ class RiskScorer:
             label = "Low"
             strengths.append(f"Annualized volatility {ann_vol:.1%}  -  low")
         elif ann_vol <= self.params.volatility_moderate:
-            score = 60.0 + (
-                (self.params.volatility_moderate - ann_vol)
-                / (self.params.volatility_moderate - self.params.volatility_low)
-            ) * 30.0
+            score = (
+                60.0
+                + (
+                    (self.params.volatility_moderate - ann_vol)
+                    / (self.params.volatility_moderate - self.params.volatility_low)
+                )
+                * 30.0
+            )
             label = "Moderate"
         elif ann_vol <= self.params.volatility_high:
-            score = 25.0 + (
-                (self.params.volatility_high - ann_vol)
-                / (self.params.volatility_high - self.params.volatility_moderate)
-            ) * 35.0
+            score = (
+                25.0
+                + (
+                    (self.params.volatility_high - ann_vol)
+                    / (self.params.volatility_high - self.params.volatility_moderate)
+                )
+                * 35.0
+            )
             label = "High"
             concerns.append(f"Annualized volatility {ann_vol:.1%}  -  elevated risk")
         else:
@@ -1116,12 +1148,8 @@ class ValuationScorer:
 
         # 6. Earnings Quality (weight: 0.15)
         earnings = valuation_data.get("earnings_analysis", {})
-        earnings_quality_score = _safe_float(
-            (earnings.get("earnings_quality") or {}).get("score")
-        )
-        beat_rate = _safe_float(
-            (earnings.get("surprise_stats") or {}).get("beat_rate")
-        )
+        earnings_quality_score = _safe_float((earnings.get("earnings_quality") or {}).get("score"))
+        beat_rate = _safe_float((earnings.get("surprise_stats") or {}).get("beat_rate"))
         sub_scores.append(
             self._score_earnings_quality(earnings_quality_score, beat_rate, strengths, concerns)
         )
@@ -1147,17 +1175,25 @@ class ValuationScorer:
                 f"DCF shows {abs(premium_pct):.0f}% discount to intrinsic value  -  deeply undervalued"
             )
         elif premium_pct <= self.params.dcf_moderate_discount:
-            score = 70.0 + (
-                (self.params.dcf_moderate_discount - premium_pct)
-                / (self.params.dcf_moderate_discount - self.params.dcf_deep_discount)
-            ) * 20.0
+            score = (
+                70.0
+                + (
+                    (self.params.dcf_moderate_discount - premium_pct)
+                    / (self.params.dcf_moderate_discount - self.params.dcf_deep_discount)
+                )
+                * 20.0
+            )
             label = "Undervalued"
             strengths.append(f"DCF shows {abs(premium_pct):.0f}% discount  -  undervalued")
         elif premium_pct <= self.params.dcf_fair_value_range:
-            score = 50.0 + (
-                (self.params.dcf_fair_value_range - premium_pct)
-                / (self.params.dcf_fair_value_range - self.params.dcf_moderate_discount)
-            ) * 20.0
+            score = (
+                50.0
+                + (
+                    (self.params.dcf_fair_value_range - premium_pct)
+                    / (self.params.dcf_fair_value_range - self.params.dcf_moderate_discount)
+                )
+                * 20.0
+            )
             label = "Near fair value"
         else:
             # Overvalued
@@ -1165,7 +1201,9 @@ class ValuationScorer:
             score = max(50.0 - excess * 0.3, 5.0)
             label = "Overvalued"
             if premium_pct > 50:
-                concerns.append(f"DCF shows {premium_pct:.0f}% premium  -  significantly overvalued")
+                concerns.append(
+                    f"DCF shows {premium_pct:.0f}% premium  -  significantly overvalued"
+                )
 
         return SubScore(
             name="DCF Valuation",
@@ -1175,9 +1213,7 @@ class ValuationScorer:
             label=label,
         )
 
-    def _score_pe(
-        self, pe: Optional[float], strengths: List[str], concerns: List[str]
-    ) -> SubScore:
+    def _score_pe(self, pe: Optional[float], strengths: List[str], concerns: List[str]) -> SubScore:
         if pe is None or pe <= 0:
             return SubScore(name="P/E Ratio", score=50.0, weight=0.20, available=False)
 
@@ -1186,16 +1222,21 @@ class ValuationScorer:
             label = "Attractive"
             strengths.append(f"P/E {pe:.1f}  -  attractively valued")
         elif pe <= self.params.pe_fair:
-            score = 50.0 + (
-                (self.params.pe_fair - pe)
-                / (self.params.pe_fair - self.params.pe_undervalued)
-            ) * 30.0
+            score = (
+                50.0
+                + ((self.params.pe_fair - pe) / (self.params.pe_fair - self.params.pe_undervalued))
+                * 30.0
+            )
             label = "Fair"
         elif pe <= self.params.pe_expensive:
-            score = 25.0 + (
-                (self.params.pe_expensive - pe)
-                / (self.params.pe_expensive - self.params.pe_fair)
-            ) * 25.0
+            score = (
+                25.0
+                + (
+                    (self.params.pe_expensive - pe)
+                    / (self.params.pe_expensive - self.params.pe_fair)
+                )
+                * 25.0
+            )
             label = "Expensive"
         else:
             score = max(25.0 - (pe - self.params.pe_expensive) * 0.3, 5.0)
@@ -1217,10 +1258,14 @@ class ValuationScorer:
             label = "Undervalued for growth"
             strengths.append(f"PEG {peg:.2f}  -  undervalued relative to growth rate")
         elif peg <= self.params.peg_fair:
-            score = 50.0 + (
-                (self.params.peg_fair - peg)
-                / (self.params.peg_fair - self.params.peg_undervalued)
-            ) * 35.0
+            score = (
+                50.0
+                + (
+                    (self.params.peg_fair - peg)
+                    / (self.params.peg_fair - self.params.peg_undervalued)
+                )
+                * 35.0
+            )
             label = "Fair"
         else:
             score = max(50.0 - (peg - self.params.peg_fair) * 10, 10.0)
@@ -1241,10 +1286,14 @@ class ValuationScorer:
             label = "Attractive"
             strengths.append(f"FCF yield {fcf_yield:.1f}%  -  strong cash generation")
         elif fcf_yield >= self.params.fcf_yield_moderate:
-            score = 50.0 + (
-                (fcf_yield - self.params.fcf_yield_moderate)
-                / (self.params.fcf_yield_attractive - self.params.fcf_yield_moderate)
-            ) * 30.0
+            score = (
+                50.0
+                + (
+                    (fcf_yield - self.params.fcf_yield_moderate)
+                    / (self.params.fcf_yield_attractive - self.params.fcf_yield_moderate)
+                )
+                * 30.0
+            )
             label = "Moderate"
         elif fcf_yield >= 0:
             score = 25.0 + (fcf_yield / self.params.fcf_yield_moderate) * 25.0

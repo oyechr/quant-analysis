@@ -52,8 +52,7 @@ def _get_scoring_config(config_name: str) -> ScoringConfig:
     factory = presets.get(config_name)
     if factory is None:
         raise click.BadParameter(
-            f"Unknown config preset '{config_name}'. "
-            f"Available: {', '.join(presets.keys())}"
+            f"Unknown config preset '{config_name}'. Available: {', '.join(presets.keys())}"
         )
     return factory()
 
@@ -62,7 +61,8 @@ def _get_scoring_config(config_name: str) -> ScoringConfig:
 @click.option("--output-dir", default="data", help="Output directory for reports and data.")
 @click.option("--no-cache", is_flag=True, default=False, help="Fetch fresh data (ignore cache).")
 @click.option(
-    "--format", "output_format",
+    "--format",
+    "output_format",
     type=click.Choice(["json", "markdown", "toon", "all"], case_sensitive=False),
     default="all",
     help="Output format (default: all).",
@@ -145,7 +145,8 @@ def report(ctx, ticker, exclude_technical, exclude_fundamental, exclude_risk, ex
 @cli.command()
 @click.argument("tickers", nargs=-1, required=True)
 @click.option(
-    "--config", "config_name",
+    "--config",
+    "config_name",
     type=click.Choice(["default", "value", "growth", "income"], case_sensitive=False),
     default="default",
     help="Scoring preset (default, value, growth, income).",
@@ -192,8 +193,10 @@ def score(ctx, tickers, config_name):
     click.echo(f"  STOCK SCORES  (preset: {config_name})")
     click.echo("=" * 70)
     click.echo()
-    click.echo(f"  {'Ticker':<8} {'Score':>6} {'Signal':<12} {'Confidence':<10} {'Tech':>5} "
-               f"{'Fund':>5} {'Risk':>5} {'Val':>5}")
+    click.echo(
+        f"  {'Ticker':<8} {'Score':>6} {'Signal':<12} {'Confidence':<10} {'Tech':>5} "
+        f"{'Fund':>5} {'Risk':>5} {'Val':>5}"
+    )
     click.echo("  " + "-" * 62)
 
     for ticker, result in results:
@@ -215,15 +218,24 @@ def score(ctx, tickers, config_name):
 @cli.command()
 @click.argument("tickers", nargs=-1, required=True)
 @click.option(
-    "--config", "config_name",
+    "--config",
+    "config_name",
     type=click.Choice(["default", "value", "growth", "income"], case_sensitive=False),
     default="default",
     help="Scoring preset.",
 )
-@click.option("--save-chart", default=None, type=str,
-              help="Save correlation heatmap to this file path (e.g., data/corr.png).")
-@click.option("--weights", default=None, type=str,
-              help="Comma-separated portfolio weights (e.g., 0.5,0.3,0.2).")
+@click.option(
+    "--save-chart",
+    default=None,
+    type=str,
+    help="Save correlation heatmap to this file path (e.g., data/corr.png).",
+)
+@click.option(
+    "--weights",
+    default=None,
+    type=str,
+    help="Comma-separated portfolio weights (e.g., 0.5,0.3,0.2).",
+)
 @click.pass_context
 def compare(ctx, tickers, config_name, save_chart, weights):
     """Compare two or more tickers side-by-side.
@@ -297,13 +309,15 @@ def compare(ctx, tickers, config_name, save_chart, weights):
 
     # Output
     if output_format == "json":
-        click.echo(format_comparison_json(
-            scores_df=scores_df,
-            valuation_df=valuation_df,
-            correlation_df=corr_df,
-            metrics_df=metrics_df,
-            portfolio_stats=portfolio_stats,
-        ))
+        click.echo(
+            format_comparison_json(
+                scores_df=scores_df,
+                valuation_df=valuation_df,
+                correlation_df=corr_df,
+                metrics_df=metrics_df,
+                portfolio_stats=portfolio_stats,
+            )
+        )
     elif output_format == "markdown":
         if scores_df is not None:
             click.echo(format_comparison_markdown(scores_df, title="Score Comparison"))
@@ -346,12 +360,23 @@ def compare(ctx, tickers, config_name, save_chart, weights):
 
 @cli.command()
 @click.argument("ticker")
-@click.option("--model", default=None,
-              help="LLM model override (e.g. gpt-4o, claude-sonnet-4-5). Reads llm_model from config.json if not set.")
-@click.option("--no-intro", is_flag=True, default=False,
-              help="Skip the automatic opening investment brief and go straight to the prompt.")
-@click.option("--debug-context", is_flag=True, default=False,
-              help="Print the context sent to the LLM and exit without starting the chat.")
+@click.option(
+    "--model",
+    default=None,
+    help="LLM model override (e.g. gpt-4o, claude-sonnet-4-5). Reads llm_model from config.json if not set.",
+)
+@click.option(
+    "--no-intro",
+    is_flag=True,
+    default=False,
+    help="Skip the automatic opening investment brief and go straight to the prompt.",
+)
+@click.option(
+    "--debug-context",
+    is_flag=True,
+    default=False,
+    help="Print the context sent to the LLM and exit without starting the chat.",
+)
 @click.pass_context
 def chat(ctx, ticker, model, no_intro, debug_context):
     """Interactive analyst chat session for a single ticker.
@@ -373,7 +398,9 @@ def chat(ctx, ticker, model, no_intro, debug_context):
     Example: quant chat AAPL --model claude-sonnet-4-5 --no-intro
     """
     import json as _json
-    from .llm import build_brief_context, chat_turn as llm_chat_turn
+
+    from .llm import build_brief_context
+    from .llm import chat_turn as llm_chat_turn
 
     ticker = ticker.upper()
     output_dir = ctx.obj["output_dir"]
@@ -479,12 +506,13 @@ def chat(ctx, ticker, model, no_intro, debug_context):
 
 @cli.command()
 @click.argument("tickers", nargs=-1, required=True)
-@click.option("--interval", default=300, type=int,
-              help="Refresh interval in seconds (default: 300).")
-@click.option("--count", default=0, type=int,
-              help="Number of iterations (default: 0 = infinite).")
 @click.option(
-    "--config", "config_name",
+    "--interval", default=300, type=int, help="Refresh interval in seconds (default: 300)."
+)
+@click.option("--count", default=0, type=int, help="Number of iterations (default: 0 = infinite).")
+@click.option(
+    "--config",
+    "config_name",
     type=click.Choice(["default", "value", "growth", "income"], case_sensitive=False),
     default="default",
     help="Scoring preset.",
@@ -515,8 +543,7 @@ def watch(ctx, tickers, interval, count, config_name):
 
             click.clear()
             click.echo("=" * 70)
-            click.echo(f"  WATCH MODE  -  Iteration {iteration}"
-                       f"{'/' + str(count) if count else ''}")
+            click.echo(f"  WATCH MODE  -  Iteration {iteration}{'/' + str(count) if count else ''}")
             click.echo(f"  Refresh: {interval}s | Period: {period} | Preset: {config_name}")
             click.echo("=" * 70)
             click.echo()

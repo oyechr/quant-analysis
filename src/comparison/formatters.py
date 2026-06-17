@@ -7,7 +7,7 @@ Supports ASCII table, Markdown, JSON, and correlation heatmap outputs.
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 

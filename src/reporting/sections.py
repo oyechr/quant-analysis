@@ -169,7 +169,7 @@ class PriceDataSection(ReportSection):
         md.append(f"- **High:** {symbol}{raw_data['latest']['high']:.2f}")
         md.append(f"- **Low:** {symbol}{raw_data['latest']['low']:.2f}")
         md.append(f"- **Volume:** {raw_data['latest']['volume']:,}")
-        md.append(f"\n### Statistics")
+        md.append("\n### Statistics")
         md.append(f"- **52W High:** {symbol}{raw_data['statistics']['high_52w']:.2f}")
         md.append(f"- **52W Low:** {symbol}{raw_data['statistics']['low_52w']:.2f}")
         md.append(f"- **Avg Volume:** {raw_data['statistics']['avg_volume']:,.0f}")
@@ -284,7 +284,7 @@ class HoldersSection(ReportSection):
         md.append("\n## Institutional Ownership")
         md.append(f"\n- **Institutional Holders:** {raw_data['institutional_count']}")
         md.append(f"- **Mutual Fund Holders:** {raw_data['mutualfund_count']}")
-        
+
         symbol = get_currency_symbol(currency)
 
         if raw_data["top_institutional"]:
@@ -338,7 +338,7 @@ class DividendsSection(ReportSection):
         md.append("\n## Dividends & Stock Splits")
         md.append(f"\n- **Total Dividend Payments:** {raw_data['dividend_count']}")
         md.append(f"- **Stock Splits:** {raw_data['split_count']}")
-        
+
         # Use currency parameter
         symbol = get_currency_symbol(currency)
 
@@ -469,7 +469,7 @@ class TechnicalAnalysisSection(ReportSection):
         # Fetch 1 year of data for 200-day SMA calculation
         period = kwargs.get("period", "1y")
         price_data = fetcher.fetch_ticker(ticker, period=period, use_cache=use_cache)
-        
+
         # Get currency from ticker info
         ticker_info = fetcher.get_ticker_info(ticker, use_cache=use_cache)
         currency = ticker_info.get("currency", "USD")
@@ -500,7 +500,7 @@ class TechnicalAnalysisSection(ReportSection):
         # Get summary data
         latest = raw_data.get_latest_values()
         signals = raw_data.generate_signals()
-        
+
         symbol = get_currency_symbol(currency)
 
         # Current price
@@ -726,7 +726,7 @@ class ValuationAnalysisSection(ReportSection):
         dcf = raw_data.get("dcf_valuation", {})
         md.append("### DCF (Discounted Cash Flow) Valuation")
         md.append("")
-        
+
         symbol = get_currency_symbol(currency)
 
         if dcf.get("error"):
@@ -755,7 +755,9 @@ class ValuationAnalysisSection(ReportSection):
             md.append(f"- FCF Growth Rate: {dcf.get('growth_rate_used', 0):.1f}%")
             md.append(f"- Terminal Growth: {dcf.get('terminal_growth_rate', 0):.1f}%")
             md.append(f"- WACC: {dcf.get('wacc_used', 0):.1f}%")
-            md.append(f"- Current FCF: {symbol}{format_number(dcf.get('fcf_current', 0), currency)}")
+            md.append(
+                f"- Current FCF: {symbol}{format_number(dcf.get('fcf_current', 0), currency)}"
+            )
 
         md.append("")
 
@@ -763,7 +765,7 @@ class ValuationAnalysisSection(ReportSection):
         ddm = raw_data.get("ddm_valuation", {})
         md.append("### DDM (Dividend Discount Model) Valuation")
         md.append("")
-        
+
         symbol = get_currency_symbol(currency)
 
         if ddm.get("error"):
@@ -880,7 +882,9 @@ class ValuationAnalysisSection(ReportSection):
                 actual = s.get("eps_actual", 0)
                 estimate = s.get("eps_estimate", 0)
                 surprise = s.get("surprise_pct", 0)
-                md.append(f"| {quarter} | {symbol}{actual:.2f} | {symbol}{estimate:.2f} | {surprise:+.1f}% |")
+                md.append(
+                    f"| {quarter} | {symbol}{actual:.2f} | {symbol}{estimate:.2f} | {surprise:+.1f}% |"
+                )
 
         # Surprise statistics
         stats = earn.get("surprise_stats", {})
