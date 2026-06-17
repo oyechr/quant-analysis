@@ -348,24 +348,32 @@ def compare(ctx, tickers, config_name, save_chart, weights):
 @click.argument("ticker")
 @click.option("--model", default=None,
               help="LLM model override (e.g. gpt-4o, claude-sonnet-4-5). Reads llm_model from config.json if not set.")
+@click.option("--no-intro", is_flag=True, default=False,
+              help="Skip the automatic opening investment brief and go straight to the prompt.")
 @click.option("--debug-context", is_flag=True, default=False,
-              help="Print the context sent to the LLM and exit without calling the API.")
+              help="Print the context sent to the LLM and exit without starting the chat.")
 @click.pass_context
-def explain(ctx, ticker, model, debug_context):
-    """Generate a plain-English investment brief using an LLM.
+def chat(ctx, ticker, model, no_intro, debug_context):
+    """Interactive analyst chat session for a single ticker.
 
-    Reads the existing full_report.json (generates one if missing), builds a
-    focused ~1,500-token context (strips raw indicator history, holders, etc.),
-    streams the LLM response to stdout, and saves the narrative to
-    reports/narrative.md.
+    Loads (or generates) the full report for TICKER, then opens a
+    conversational session where you can interrogate the stock data.
+    The LLM has the full quantitative context for every question.
+
+    Special commands (type during the session):
+      /refresh   Re-fetch fresh data and rebuild the report
+      /clear     Reset conversation history (context is always preserved)
+      /help      Show available commands
+      /quit      Exit the session
 
     Configure API keys in config.json:
         { "llm_anthropic_api_key": "sk-ant-...", "llm_model": "claude-haiku-3-5" }
 
-    Example: quant explain EQNR
-    Example: quant explain AAPL --model claude-sonnet-4-5
+    Example: quant chat EQNR
+    Example: quant chat AAPL --model claude-sonnet-4-5 --no-intro
     """
-    from .llm import build_brief_context, explain as llm_explain
+    import json as _json
+    from .llm import build_brief_context, chat_turn as llm_chat_turn
 
     ticker = ticker.upper()
     output_dir = ctx.obj["output_dir"]
@@ -373,41 +381,100 @@ def explain(ctx, ticker, model, debug_context):
     use_cache = ctx.obj["use_cache"]
     json_path = Path(output_dir) / ticker / "reports" / "full_report.json"
 
-    if not json_path.exists():
-        click.echo(f"No report found for {ticker}. Generating...")
-        generator = ReportGenerator(output_dir=output_dir)
-        generator.generate_full_report(
-            ticker=ticker,
-            period=period,
-            output_format="all",
-            use_cache=use_cache,
-        )
+    def _load_report(force_refresh: bool = False):
+        if force_refresh or not json_path.exists():
+            click.echo(f"  Generating report for {ticker}...")
+            generator = ReportGenerator(output_dir=output_dir)
+            generator.generate_full_report(
+                ticker=ticker,
+                period=period,
+                output_format="all",
+                use_cache=(not force_refresh) and use_cache,
+            )
+        if not json_path.exists():
+            raise click.ClickException(f"Failed to generate report for {ticker}.")
+        return _json.loads(json_path.read_text(encoding="utf-8"))
 
-    if not json_path.exists():
-        raise click.ClickException(f"Failed to generate report for {ticker}.")
-
-    import json as _json
-    report_data = _json.loads(json_path.read_text(encoding="utf-8"))
+    report_data = _load_report()
     context = build_brief_context(report_data)
 
     if debug_context:
         click.echo(context)
         return
 
-    click.echo(f"\n  Investment Brief: {ticker}")
-    click.echo("  " + "=" * 50 + "\n")
+    ticker_name = (report_data.get("info") or {}).get("name", ticker)
+    click.echo()
+    click.echo("=" * 70)
+    click.echo(f"  Chat: {ticker} — {ticker_name}")
+    click.echo("  Commands: /refresh  /clear  /help  /quit")
+    click.echo("=" * 70)
+    click.echo()
 
-    try:
-        narrative = llm_explain(context, model=model)
-    except (ValueError, ImportError) as e:
-        raise click.ClickException(str(e))
+    messages = []
 
-    narrative_path = Path(output_dir) / ticker / "reports" / "narrative.md"
-    narrative_path.write_text(
-        f"# {ticker} - Investment Brief\n\n{narrative}\n",
-        encoding="utf-8",
-    )
-    click.echo(f"\n  Saved: {narrative_path}")
+    if not no_intro:
+        intro = (
+            "Give me a concise investment brief: company snapshot, score interpretation, "
+            "top 2-3 strengths, top 2-3 risks, valuation assessment, and a buy/hold/avoid conclusion."
+        )
+        click.echo("  Assistant:\n")
+        try:
+            response = llm_chat_turn(context, [{"role": "user", "content": intro}], model=model)
+            messages.append({"role": "user", "content": intro})
+            messages.append({"role": "assistant", "content": response})
+        except (ValueError, ImportError) as e:
+            raise click.ClickException(str(e))
+        click.echo()
+
+    while True:
+        try:
+            user_input = click.prompt("  You", prompt_suffix=" > ").strip()
+        except (EOFError, KeyboardInterrupt):
+            click.echo("\n  Session ended.")
+            break
+
+        if not user_input:
+            continue
+
+        cmd = user_input.lower()
+
+        if cmd in ("/quit", "/exit", "quit", "exit"):
+            click.echo("  Session ended.")
+            break
+
+        if cmd == "/clear":
+            messages.clear()
+            click.echo("  Conversation history cleared.\n")
+            continue
+
+        if cmd == "/help":
+            click.echo("  /refresh  — re-fetch fresh data and rebuild the report")
+            click.echo("  /clear    — reset conversation history (context is preserved)")
+            click.echo("  /quit     — exit the session\n")
+            continue
+
+        if cmd == "/refresh":
+            click.echo("  Re-fetching data...")
+            try:
+                report_data = _load_report(force_refresh=True)
+                context = build_brief_context(report_data)
+                messages.clear()
+                click.echo("  Data refreshed. Conversation history cleared.\n")
+            except Exception as e:
+                click.echo(f"  Refresh failed: {e}\n")
+            continue
+
+        messages.append({"role": "user", "content": user_input})
+        click.echo("\n  Assistant:\n")
+
+        try:
+            response = llm_chat_turn(context, messages, model=model)
+            messages.append({"role": "assistant", "content": response})
+        except (ValueError, ImportError) as e:
+            click.echo(f"\n  Error: {e}")
+            messages.pop()
+
+        click.echo()
 
 
 @cli.command()
