@@ -58,6 +58,15 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 - Markdown reports for human-readable analysis
 - TOON reports for LLM-optimized input (Token-Oriented Object Notation)
 
+### Interactive Analyst Chat
+
+- Conversational Q&A session grounded in the full quantitative report
+- Supports Anthropic (Claude) and OpenAI / GitHub Models (free tier)
+- Auto-generates the report on first use — no need to run ``report`` first
+- Maintains full conversation history across turns for follow-up questions
+- Opening investment brief generated automatically on session start
+- In-session ``/refresh`` command to re-fetch live data mid-conversation
+
 ## Installation
 
 ```bash
@@ -115,6 +124,48 @@ Options:
 - ``--save-chart`` -- save correlation heatmap to a file (requires matplotlib)
 - ``--config [default|value|growth|income]`` -- scoring preset
 
+### ``quant chat`` -- Interactive analyst session
+
+Opens a conversational session for a single ticker. The LLM has the full quantitative report in context for every question — ask about risks, run hypothetical scenarios, or drill into any metric.
+
+**If no report exists yet, ``chat`` generates one automatically before starting the session.** If a report already exists (e.g. from a previous ``report`` run), it is loaded instantly.
+
+```bash
+quant chat EQNR
+quant chat AAPL --model claude-sonnet-4-5
+quant chat MSFT --no-intro          # skip opening brief, go straight to the prompt
+quant --no-cache chat TSLA          # force fresh data fetch before starting
+```
+
+Options:
+- ``--model`` -- LLM model override (e.g. ``gpt-4o``, ``claude-sonnet-4-5``). Reads ``llm_model`` from ``config.json`` if not set.
+- ``--no-intro`` -- skip the automatic opening investment brief
+- ``--debug-context`` -- print the context sent to the LLM and exit (useful for debugging)
+
+Special commands during the session:
+
+| Command | Effect |
+|---------|--------|
+| ``/refresh`` | Re-fetch fresh data, rebuild report, and clear conversation history |
+| ``/clear`` | Reset conversation history (report context is always preserved) |
+| ``/help`` | Show available commands |
+| ``/quit`` | Exit the session |
+
+Example questions to ask:
+- *"What is the bear case for this stock?"*
+- *"How does the DCF change if I assume 3% growth instead of 5%?"*
+- *"Is the dividend safe given the current payout ratio and debt level?"*
+- *"What would need to change to upgrade this from Hold to Buy?"*
+
+Requires an API key in ``config.json``:
+```json
+{
+    "llm_model": "claude-haiku-3-5",
+    "llm_anthropic_api_key": "sk-ant-..."
+}
+```
+Alternatively, use the free GitHub Models tier with ``"llm_github_token": "ghp_..."`` (no billing required — see [GitHub Models](https://github.com/marketplace/models)).
+
 ### ``quant watch`` -- Continuous refresh
 
 Re-scores tickers on a timer. Useful for monitoring during market hours.
@@ -155,6 +206,7 @@ quant --output-dir /tmp/data report AAPL
 | Goal | Command |
 |------|---------|
 | Deep dive on one stock | ``quant report TICKER`` |
+| Ask follow-up questions / interrogate a stock | ``quant chat TICKER`` |
 | Screen / rank a watchlist | ``quant score T1 T2 T3 ...`` |
 | Compare two candidates | ``quant compare T1 T2`` |
 | Monitor during market hours | ``quant watch T1 T2`` |
@@ -202,6 +254,7 @@ quant-analysis/
 |   +-- cli.py                       # CLI entry point (Click subcommands)
 |   +-- data_fetcher.py              # Yahoo Finance data fetching with caching
 |   +-- config.py                    # Configuration settings
+|   +-- llm.py                       # LLM integration (chat, provider routing, context building)
 |   +-- analysis/
 |   |   +-- technical.py             # Technical indicators (finta)
 |   |   +-- fundamental.py           # Fundamental metrics

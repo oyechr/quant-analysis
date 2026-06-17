@@ -20,7 +20,7 @@ import logging
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 _USAGE_FILE = Path(__file__).parent.parent / "data" / ".llm_usage.json"
 
@@ -44,6 +44,15 @@ _GITHUB_FALLBACK_CHAIN = [
 ]
 
 logger = logging.getLogger(__name__)
+
+CHAT_SYSTEM_PROMPT = """You are a buy-side equity analyst assistant. You have been given a structured quantitative report for a specific stock.
+
+Report data:
+---
+{context}
+---
+
+Answer questions about this stock using the data above. Be specific and cite numbers from the report. When asked about hypothetical scenarios (e.g. "what if growth drops to 2%?"), reason through the implications clearly using the provided metrics. If asked for a full investment brief or summary, structure it as: company snapshot, score interpretation, key strengths, key risks, valuation, and buy/hold/avoid conclusion. Be direct and concise. No disclaimers."""
 
 SYSTEM_PROMPT = """You are a buy-side equity analyst reviewing a structured quantitative report.
 
@@ -465,8 +474,7 @@ def _stream_openai(
     except openai.RateLimitError as e:
         if base_url:
             raise ValueError(
-                f"GitHub Models rate limit hit ({_GITHUB_DAILY_LIMIT} RPD). "
-                "Resets at midnight UTC."
+                "GitHub Models rate limit hit. Resets at midnight UTC."
             ) from e
         raise ValueError(
             "OpenAI quota exceeded. Add billing credits at https://platform.openai.com/billing"
@@ -484,6 +492,172 @@ def _stream_openai(
                 tokens.append(text)
     except Exception as e:
         raise ValueError(f"OpenAI streaming error: {e}") from e
+
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+    return "".join(tokens)
+
+
+# ---------------------------------------------------------------------------
+# Interactive chat
+# ---------------------------------------------------------------------------
+
+def chat_turn(
+    context: str,
+    messages: List[Dict[str, str]],
+    model: Optional[str] = None,
+    anthropic_api_key: Optional[str] = None,
+    openai_api_key: Optional[str] = None,
+) -> str:
+    """
+    Send one conversational turn to the LLM and stream the response.
+
+    The stock context is embedded in the system prompt so every turn has
+    access to the full quantitative report data.
+
+    Args:
+        context: Compact context string from build_brief_context().
+        messages: Full conversation history as list of {role, content} dicts.
+                  The last entry should be the user's current message.
+        model: Model name override. Reads llm_model from config.json if omitted.
+        anthropic_api_key: Override for Anthropic key (else reads config).
+        openai_api_key: Override for OpenAI key (else reads config).
+
+    Returns:
+        The assistant's response as a plain string.
+    """
+    from .config import get_config
+
+    config = get_config()
+    resolved_model = model or config.llm_model
+    provider = _infer_provider(resolved_model)
+    system = CHAT_SYSTEM_PROMPT.format(context=context)
+
+    if provider == "anthropic":
+        key = anthropic_api_key or config.llm_anthropic_api_key
+        if not key:
+            raise ValueError(
+                "Anthropic API key not configured.\n"
+                "Add 'llm_anthropic_api_key' to config.json."
+            )
+        return _chat_anthropic(system, messages, resolved_model, key)
+
+    github_token = config.llm_github_token
+    if github_token:
+        return _chat_github(system, messages, resolved_model, github_token)
+
+    key = openai_api_key or config.llm_openai_api_key
+    if not key:
+        raise ValueError(
+            "No LLM credentials configured.\n"
+            "Add 'llm_github_token' (free, recommended) or 'llm_openai_api_key' to config.json.\n"
+            "GitHub token: https://github.com/settings/tokens (no special scopes needed)"
+        )
+    return _chat_openai_messages(system, messages, resolved_model, key)
+
+
+def _chat_anthropic(
+    system: str, messages: List[Dict[str, str]], model: str, api_key: str
+) -> str:
+    try:
+        import anthropic
+    except ImportError:
+        raise ImportError("anthropic package not installed. Run: pip install anthropic")
+
+    client = anthropic.Anthropic(api_key=api_key)
+    tokens = []
+
+    with client.messages.stream(
+        model=model,
+        max_tokens=1024,
+        system=system,
+        messages=messages,
+    ) as stream:
+        for text in stream.text_stream:
+            sys.stdout.write(text)
+            sys.stdout.flush()
+            tokens.append(text)
+
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+    return "".join(tokens)
+
+
+def _chat_github(
+    system: str, messages: List[Dict[str, str]], model: str, github_token: str
+) -> str:
+    try:
+        import openai  # noqa: F401
+    except ImportError:
+        raise ImportError("openai package not installed. Run: pip install openai")
+
+    actual_model, used, limit = _select_and_increment_github_model(model)
+    if actual_model != model:
+        sys.stdout.write(f"  [Note: {model} exhausted, falling back to {actual_model}]\n")
+        sys.stdout.flush()
+
+    result = _chat_openai_messages(
+        system, messages, actual_model,
+        api_key=github_token,
+        base_url="https://models.inference.ai.azure.com",
+    )
+    remaining = limit - used
+    sys.stdout.write(
+        f"  [GitHub Models: {actual_model} {used}/{limit} today, {remaining} remaining]\n"
+    )
+    sys.stdout.flush()
+    return result
+
+
+def _chat_openai_messages(
+    system: str,
+    messages: List[Dict[str, str]],
+    model: str,
+    api_key: str,
+    base_url: Optional[str] = None,
+) -> str:
+    try:
+        import openai
+    except ImportError:
+        raise ImportError("openai package not installed. Run: pip install openai")
+
+    client = openai.OpenAI(api_key=api_key, base_url=base_url)
+    full_messages = [{"role": "system", "content": system}] + list(messages)
+    tokens = []
+
+    try:
+        stream = client.chat.completions.create(
+            model=model,
+            max_tokens=1024,
+            messages=full_messages,
+            stream=True,
+        )
+    except openai.AuthenticationError as e:
+        if base_url:
+            raise ValueError(
+                "GitHub Models authentication failed - check your GitHub PAT in config.json."
+            ) from e
+        raise ValueError(f"OpenAI authentication failed - check your API key. ({e})") from e
+    except openai.RateLimitError as e:
+        if base_url:
+            raise ValueError("GitHub Models rate limit hit. Resets at midnight UTC.") from e
+        raise ValueError(
+            "OpenAI quota exceeded. Add billing credits at https://platform.openai.com/billing"
+        ) from e
+    except openai.APIError as e:
+        raise ValueError(f"API error: {e}") from e
+
+    try:
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            text = chunk.choices[0].delta.content or ""
+            if text:
+                sys.stdout.write(text)
+                sys.stdout.flush()
+                tokens.append(text)
+    except Exception as e:
+        raise ValueError(f"Streaming error: {e}") from e
 
     sys.stdout.write("\n")
     sys.stdout.flush()
