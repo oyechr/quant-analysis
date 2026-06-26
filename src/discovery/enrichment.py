@@ -13,7 +13,7 @@ from typing import Optional
 
 import yfinance as yf
 
-from ..models import Holding, TrackedPortfolio
+from .models import Holding, TrackedPortfolio
 
 logger = logging.getLogger(__name__)
 
@@ -122,30 +122,91 @@ class HoldingEnricher:
         return None
 
     def _search_ticker_by_name(self, name: str) -> Optional[str]:
-        """Search for a ticker symbol by company name using yfinance."""
+        """Search for a ticker symbol by company name using yfinance Search."""
         if not name:
             return None
 
-        # Clean up common suffixes in 13F filings
-        search_name = name.upper()
-        for suffix in [" INC", " CORP", " LTD", " PLC", " CO", " CL A", " CL B", " COM", " NEW"]:
-            search_name = search_name.replace(suffix, "")
+        # Clean up common suffixes in 13F filings (strip from end only)
+        search_name = name.upper().strip()
+        changed = True
+        while changed:
+            changed = False
+            for suffix in [
+                " INC",
+                " CORP",
+                " LTD",
+                " PLC",
+                " CO",
+                " CL A",
+                " CL B",
+                " COM",
+                " NEW",
+                " CLASS A",
+                " CLASS B",
+                " CLASS C",
+                " HOLDINGS",
+                " GROUP",
+                " TECHNOLOGIES",
+                " TECHNOLOGY",
+                " INTERNATIONAL",
+                " SYSTEMS",
+                " PLATFORMS",
+                " SOLUTIONS",
+                " INCORPORATED",
+                " DEL",
+            ]:
+                if search_name.endswith(suffix):
+                    search_name = search_name[: -len(suffix)]
+                    changed = True
+                    break
         search_name = search_name.strip()
+
+        # Expand common SEC filing abbreviations
+        abbreviations = {
+            "FINL": "FINANCIAL",
+            "INTL": "INTERNATIONAL",
+            "MGMT": "MANAGEMENT",
+            "SVCS": "SERVICES",
+            "HLDGS": "HOLDINGS",
+            "BANCORP": "BANK",
+            "SVC": "SERVICE",
+            "TECHNOLOGES": "TECHNOLOGIES",
+            "MTN BE": "",
+        }
+        for abbr, full in abbreviations.items():
+            search_name = search_name.replace(abbr, full)
+        search_name = " ".join(search_name.split())  # normalize whitespace
 
         if not search_name:
             return None
 
         try:
-            # yfinance doesn't have a great search API, but we can try
-            # using the Ticker object with common patterns
-            # First, try the name as-is (some names ARE tickers)
-            if len(search_name) <= 5 and search_name.isalpha():
-                ticker_obj = yf.Ticker(search_name)
-                info = ticker_obj.info
-                if info and len(info) > 5:
-                    return search_name
-        except Exception:
-            pass
+            from yfinance import Search
+
+            results = Search(search_name, max_results=5)
+            if results.quotes:
+                for quote in results.quotes:
+                    symbol = quote.get("symbol", "")
+                    quote_type = quote.get("quoteType", "")
+                    # Prefer US-listed equities without dots (no foreign tickers)
+                    if symbol and "." not in symbol and quote_type == "EQUITY":
+                        # Also cache sector/industry from search results
+                        sector = quote.get("sector")
+                        industry = quote.get("industry")
+                        if sector:
+                            self._sector_map[symbol] = {"sector": sector, "industry": industry}
+                        return symbol
+                # Fallback: first equity result even if foreign
+                for quote in results.quotes:
+                    symbol = quote.get("symbol", "")
+                    if symbol and quote.get("quoteType") == "EQUITY":
+                        sector = quote.get("sector")
+                        industry = quote.get("industry")
+                        if sector:
+                            self._sector_map[symbol] = {"sector": sector, "industry": industry}
+                        return symbol
+        except Exception as e:
+            logger.debug(f"Search failed for '{search_name}': {e}")
 
         return None
 
@@ -175,30 +236,71 @@ class HoldingEnricher:
         except Exception as e:
             logger.debug(f"Failed to get sector for {ticker}: {e}")
 
+    def _is_cusip(self, identifier: str) -> bool:
+        """Check if an identifier looks like a CUSIP (9 chars, has digits)."""
+        return (
+            len(identifier) == 9 and identifier.isalnum() and any(c.isdigit() for c in identifier)
+        )
+
     def enrich_tickers_in_portfolios(
         self, portfolios: list[TrackedPortfolio], tickers: set[str]
     ) -> None:
         """
         Enrich only specific tickers across all portfolios with sector/industry data.
 
-        This is much faster than enriching ALL holdings — typically used to
-        enrich just the top overlap results (20-50 tickers vs 800+).
+        For CUSIPs (from 13F filings), first resolves to real ticker symbols
+        using the issuer name, then fetches sector/industry from yfinance.
 
         Args:
             portfolios: List of portfolios to update in-place.
             tickers: Set of ticker identifiers to enrich.
         """
         enriched_count = 0
-        # Only fetch sector data for tickers we haven't cached yet
-        tickers_to_fetch = {t for t in tickers if t not in self._sector_map}
+
+        # Build a name lookup: CUSIP → issuer name (from holdings)
+        cusip_to_name: dict[str, str] = {}
+        for portfolio in portfolios:
+            for holding in portfolio.holdings:
+                if holding.ticker in tickers and holding.name:
+                    cusip_to_name[holding.ticker] = holding.name
+
+        # Step 1: Resolve CUSIPs to real tickers
+        resolved_map: dict[str, str] = {}  # CUSIP → real ticker
+        for identifier in tickers:
+            if self._is_cusip(identifier):
+                # Check CUSIP cache first
+                if identifier in self._cusip_map:
+                    resolved_map[identifier] = self._cusip_map[identifier]
+                else:
+                    # Try to resolve using issuer name
+                    name = cusip_to_name.get(identifier)
+                    if name:
+                        real_ticker = self._search_ticker_by_name(name)
+                        if real_ticker:
+                            self._cusip_map[identifier] = real_ticker
+                            resolved_map[identifier] = real_ticker
+                            logger.debug(f"Resolved {identifier} ({name}) → {real_ticker}")
+                        else:
+                            # Cache as unresolvable
+                            self._cusip_map[identifier] = identifier
+                            logger.debug(f"Could not resolve {identifier} ({name})")
+            else:
+                # Already a ticker symbol
+                resolved_map[identifier] = identifier
+
+        self._save_cusip_cache()
+
+        # Step 2: Fetch sector data for resolved tickers
+        real_tickers = set(resolved_map.values())
+        tickers_to_fetch = {
+            t for t in real_tickers if t not in self._sector_map and not self._is_cusip(t)
+        }
         logger.info(
-            f"Enriching {len(tickers)} tickers ({len(tickers_to_fetch)} uncached)"
+            f"Enriching {len(tickers)} identifiers → {len(real_tickers)} unique tickers "
+            f"({len(tickers_to_fetch)} need yfinance lookup)"
         )
 
         for ticker in tickers_to_fetch:
-            # Skip things that look like CUSIPs (9 chars, alphanumeric)
-            if len(ticker) == 9 and ticker[:6].isalpha():
-                continue
             try:
                 info = yf.Ticker(ticker).info
                 if info and len(info) > 5:
@@ -208,7 +310,6 @@ class HoldingEnricher:
                         self._sector_map[ticker] = {"sector": sector, "industry": industry}
                         enriched_count += 1
                     else:
-                        # Cache as unknown to avoid re-fetching
                         self._sector_map[ticker] = {"sector": None, "industry": None}
                 else:
                     self._sector_map[ticker] = {"sector": None, "industry": None}
@@ -216,13 +317,18 @@ class HoldingEnricher:
                 logger.debug(f"Failed to enrich {ticker}: {e}")
                 self._sector_map[ticker] = {"sector": None, "industry": None}
 
-        # Now apply cached sector data to all holdings with matching tickers
+        # Step 3: Apply sector data back to holdings (using CUSIP → ticker → sector)
         for portfolio in portfolios:
             for holding in portfolio.holdings:
-                if holding.ticker in tickers and holding.ticker in self._sector_map:
-                    cached = self._sector_map[holding.ticker]
-                    holding.sector = cached.get("sector")
-                    holding.industry = cached.get("industry")
+                if holding.ticker in tickers:
+                    real_ticker = resolved_map.get(holding.ticker, holding.ticker)
+                    if real_ticker in self._sector_map:
+                        cached = self._sector_map[real_ticker]
+                        holding.sector = cached.get("sector")
+                        holding.industry = cached.get("industry")
+                    # Also update the ticker to the real symbol for display
+                    if real_ticker != holding.ticker and not self._is_cusip(real_ticker):
+                        holding.ticker = real_ticker
 
         self._save_sector_cache()
         logger.info(f"Enriched {enriched_count} tickers with sector/industry data")

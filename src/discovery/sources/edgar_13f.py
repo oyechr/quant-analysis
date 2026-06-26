@@ -35,14 +35,46 @@ logger = logging.getLogger(__name__)
 
 # Default notable institutional investors to track
 NOTABLE_FILERS = [
-    {"name": "Berkshire Hathaway", "cik": "0001067983", "description": "Warren Buffett's conglomerate"},
-    {"name": "ARK Investment Management", "cik": "0001697748", "description": "Cathie Wood's innovation-focused fund"},
-    {"name": "Soros Fund Management", "cik": "0001029160", "description": "George Soros' family office"},
-    {"name": "Bridgewater Associates", "cik": "0001350694", "description": "Ray Dalio's macro hedge fund"},
-    {"name": "Renaissance Technologies", "cik": "0001037389", "description": "Jim Simons' quant fund"},
-    {"name": "Pershing Square Capital", "cik": "0001336528", "description": "Bill Ackman's activist fund"},
-    {"name": "Appaloosa Management", "cik": "0001656456", "description": "David Tepper's hedge fund"},
-    {"name": "Icahn Enterprises", "cik": "0000813762", "description": "Carl Icahn's investment vehicle"},
+    {
+        "name": "Berkshire Hathaway",
+        "cik": "0001067983",
+        "description": "Warren Buffett's conglomerate",
+    },
+    {
+        "name": "ARK Investment Management",
+        "cik": "0001697748",
+        "description": "Cathie Wood's innovation-focused fund",
+    },
+    {
+        "name": "Soros Fund Management",
+        "cik": "0001029160",
+        "description": "George Soros' family office",
+    },
+    {
+        "name": "Bridgewater Associates",
+        "cik": "0001350694",
+        "description": "Ray Dalio's macro hedge fund",
+    },
+    {
+        "name": "Renaissance Technologies",
+        "cik": "0001037389",
+        "description": "Jim Simons' quant fund",
+    },
+    {
+        "name": "Pershing Square Capital",
+        "cik": "0001336528",
+        "description": "Bill Ackman's activist fund",
+    },
+    {
+        "name": "Appaloosa Management",
+        "cik": "0001656456",
+        "description": "David Tepper's hedge fund",
+    },
+    {
+        "name": "Icahn Enterprises",
+        "cik": "0000813762",
+        "description": "Carl Icahn's investment vehicle",
+    },
 ]
 
 # EDGAR API constants
@@ -83,9 +115,7 @@ class Edgar13FSource(PortfolioSource):
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.user_agent = user_agent or get_config().edgar_user_agent
         self._session = requests.Session()
-        self._session.headers.update(
-            {"User-Agent": self.user_agent, "Accept": "application/json"}
-        )
+        self._session.headers.update({"User-Agent": self.user_agent, "Accept": "application/json"})
         self._last_request_time = 0.0
 
     @property
@@ -134,9 +164,7 @@ class Edgar13FSource(PortfolioSource):
                 )
                 if portfolio and portfolio.holdings:
                     portfolios.append(portfolio)
-                    logger.info(
-                        f"Fetched {len(portfolio.holdings)} holdings for {filer['name']}"
-                    )
+                    logger.info(f"Fetched {len(portfolio.holdings)} holdings for {filer['name']}")
                 else:
                     logger.warning(f"No holdings found for {filer['name']}")
             except Exception as e:
@@ -442,7 +470,11 @@ class Edgar13FSource(PortfolioSource):
             """Find text in nested element."""
             for ns_prefix in [f"ns:{parent}", f"{{*}}{parent}", parent]:
                 try:
-                    parent_el = element.find(ns_prefix, NS_13F) if "ns:" in ns_prefix else element.find(ns_prefix)
+                    parent_el = (
+                        element.find(ns_prefix, NS_13F)
+                        if "ns:" in ns_prefix
+                        else element.find(ns_prefix)
+                    )
                 except Exception:
                     parent_el = None
                 if parent_el is None:
@@ -457,7 +489,6 @@ class Edgar13FSource(PortfolioSource):
         cusip = _find_text(entry, "cusip")
         value_str = _find_text(entry, "value")  # In thousands of USD
         shares_str = _find_nested_text(entry, "shrsOrPrnAmt", "sshPrnamt")
-        title_of_class = _find_text(entry, "titleOfClass")
 
         if not name:
             return None

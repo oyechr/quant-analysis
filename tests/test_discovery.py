@@ -18,15 +18,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.discovery.analyzer import PortfolioAnalyzer
 from src.discovery.models import (
-    ContrarianSignal,
-    ConvergenceEvent,
     DiscoveryResult,
     DiscoverySignal,
     Holding,
     SectorCluster,
     TrackedPortfolio,
 )
-
 
 # ============================================================
 # Test Fixtures
@@ -77,8 +74,12 @@ def sample_portfolios():
         "Berkshire Hathaway",
         [
             _make_holding("AAPL", "Apple Inc", "Technology", "Consumer Electronics", 100000, 40.0),
-            _make_holding("BAC", "Bank of America", "Financial Services", "Banks—Diversified", 50000, 20.0),
-            _make_holding("KO", "Coca-Cola", "Consumer Defensive", "Beverages—Non-Alcoholic", 25000, 10.0),
+            _make_holding(
+                "BAC", "Bank of America", "Financial Services", "Banks—Diversified", 50000, 20.0
+            ),
+            _make_holding(
+                "KO", "Coca-Cola", "Consumer Defensive", "Beverages—Non-Alcoholic", 25000, 10.0
+            ),
             _make_holding("OXY", "Occidental Petroleum", "Energy", "Oil & Gas E&P", 20000, 8.0),
             _make_holding("AMZN", "Amazon", "Technology", "Internet Retail", 15000, 6.0),
         ],
@@ -99,9 +100,13 @@ def sample_portfolios():
         "Soros Fund",
         [
             _make_holding("AAPL", "Apple Inc", "Technology", "Consumer Electronics", 45000, 25.0),
-            _make_holding("MSFT", "Microsoft", "Technology", "Software—Infrastructure", 40000, 22.0),
+            _make_holding(
+                "MSFT", "Microsoft", "Technology", "Software—Infrastructure", 40000, 22.0
+            ),
             _make_holding("AMZN", "Amazon", "Technology", "Internet Retail", 30000, 17.0),
-            _make_holding("BAC", "Bank of America", "Financial Services", "Banks—Diversified", 20000, 11.0),
+            _make_holding(
+                "BAC", "Bank of America", "Financial Services", "Banks—Diversified", 20000, 11.0
+            ),
             _make_holding("NVDA", "NVIDIA", "Technology", "Semiconductors", 25000, 14.0),
         ],
     )
@@ -109,11 +114,15 @@ def sample_portfolios():
     portfolio_d = _make_portfolio(
         "Pershing Square",
         [
-            _make_holding("QSR", "Restaurant Brands", "Consumer Cyclical", "Restaurants", 60000, 30.0),
+            _make_holding(
+                "QSR", "Restaurant Brands", "Consumer Cyclical", "Restaurants", 60000, 30.0
+            ),
             _make_holding("HLT", "Hilton", "Consumer Cyclical", "Lodging", 40000, 20.0),
             _make_holding("AAPL", "Apple Inc", "Technology", "Consumer Electronics", 30000, 15.0),
             _make_holding("AMZN", "Amazon", "Technology", "Internet Retail", 20000, 10.0),
-            _make_holding("GOOGL", "Alphabet", "Technology", "Internet Content & Information", 25000, 12.5),
+            _make_holding(
+                "GOOGL", "Alphabet", "Technology", "Internet Content & Information", 25000, 12.5
+            ),
         ],
     )
 
@@ -190,9 +199,7 @@ class TestModels:
         assert p.total_value is None
 
     def test_discovery_signal_overlap_pct(self):
-        signal = DiscoverySignal(
-            ticker="AAPL", overlap_count=3, total_portfolios=10
-        )
+        signal = DiscoverySignal(ticker="AAPL", overlap_count=3, total_portfolios=10)
         assert signal.overlap_pct == 30.0
 
     def test_discovery_signal_overlap_pct_zero(self):
@@ -418,9 +425,7 @@ class TestConvergence:
         events = analyzer._detect_convergence(portfolios_with_actions)
 
         # META sold by Fund A and Fund C
-        meta_sell = next(
-            (e for e in events if e.ticker == "META" and e.action == "sell"), None
-        )
+        meta_sell = next((e for e in events if e.ticker == "META" and e.action == "sell"), None)
         assert meta_sell is not None
         assert len(meta_sell.portfolios) >= 2
 
@@ -764,9 +769,15 @@ class TestFilingDiff:
         """Convergence should detect 'new' and 'add' as buy signals."""
         now = datetime.now()
         portfolios = [
-            _make_portfolio("A", [_make_holding("NVDA", action="new", date=now - timedelta(days=10))]),
-            _make_portfolio("B", [_make_holding("NVDA", action="add", date=now - timedelta(days=20))]),
-            _make_portfolio("C", [_make_holding("NVDA", action="new", date=now - timedelta(days=30))]),
+            _make_portfolio(
+                "A", [_make_holding("NVDA", action="new", date=now - timedelta(days=10))]
+            ),
+            _make_portfolio(
+                "B", [_make_holding("NVDA", action="add", date=now - timedelta(days=20))]
+            ),
+            _make_portfolio(
+                "C", [_make_holding("NVDA", action="new", date=now - timedelta(days=30))]
+            ),
         ]
         analyzer = PortfolioAnalyzer(min_overlap=2, convergence_window_days=90)
         events = analyzer._detect_convergence(portfolios)
