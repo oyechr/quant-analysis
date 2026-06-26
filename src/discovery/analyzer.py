@@ -9,7 +9,7 @@ Detects patterns across multiple tracked portfolios:
 """
 
 import logging
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -62,9 +62,7 @@ class PortfolioAnalyzer:
             return DiscoveryResult()
 
         total_holdings = sum(len(p.holdings) for p in portfolios)
-        logger.info(
-            f"Analyzing {len(portfolios)} portfolios with {total_holdings} total holdings"
-        )
+        logger.info(f"Analyzing {len(portfolios)} portfolios with {total_holdings} total holdings")
 
         result = DiscoveryResult(
             portfolios_analyzed=len(portfolios),
@@ -156,9 +154,7 @@ class PortfolioAnalyzer:
         # Sort by strength descending
         return sorted(signals, key=lambda s: s.strength, reverse=True)
 
-    def _detect_sector_clusters(
-        self, portfolios: list[TrackedPortfolio]
-    ) -> list[SectorCluster]:
+    def _detect_sector_clusters(self, portfolios: list[TrackedPortfolio]) -> list[SectorCluster]:
         """
         Detect sector/industry concentration patterns across portfolios.
 
@@ -218,9 +214,7 @@ class PortfolioAnalyzer:
 
         return sorted(clusters, key=lambda c: c.strength, reverse=True)
 
-    def _detect_convergence(
-        self, portfolios: list[TrackedPortfolio]
-    ) -> list[ConvergenceEvent]:
+    def _detect_convergence(self, portfolios: list[TrackedPortfolio]) -> list[ConvergenceEvent]:
         """
         Detect multiple portfolios taking the same action on the same ticker
         within a configurable time window.
@@ -316,9 +310,7 @@ class PortfolioAnalyzer:
             strength=strength,
         )
 
-    def _detect_contrarian(
-        self, portfolios: list[TrackedPortfolio]
-    ) -> list[ContrarianSignal]:
+    def _detect_contrarian(self, portfolios: list[TrackedPortfolio]) -> list[ContrarianSignal]:
         """
         Detect tickers where some portfolios are buying while others are selling.
 

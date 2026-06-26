@@ -604,9 +604,11 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
         # Auto-enrich: run overlap detection first, then enrich only top tickers
         analyzer_pre = PortfolioAnalyzer(min_overlap=min_overlap)
         pre_signals = analyzer_pre._detect_overlap(portfolios)
-        top_tickers = {s.ticker for s in pre_signals[:top * 2]}  # Enrich a bit more than displayed
+        top_tickers = {s.ticker for s in pre_signals[: top * 2]}  # Enrich a bit more than displayed
         if top_tickers:
-            click.echo(f"  Auto-enriching top {len(top_tickers)} overlap tickers with sector data...")
+            click.echo(
+                f"  Auto-enriching top {len(top_tickers)} overlap tickers with sector data..."
+            )
             enricher.enrich_tickers_in_portfolios(portfolios, top_tickers)
 
     # Run analysis
@@ -617,17 +619,17 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
     if sector:
         sector_lower = sector.lower()
         result.overlap_signals = [
-            s for s in result.overlap_signals
-            if s.sector and sector_lower in s.sector.lower()
+            s for s in result.overlap_signals if s.sector and sector_lower in s.sector.lower()
         ]
         result.sector_clusters = [
-            c for c in result.sector_clusters
-            if sector_lower in c.sector.lower()
+            c for c in result.sector_clusters if sector_lower in c.sector.lower()
         ]
 
     # Display results
-    click.echo(f"\n  Analyzed {result.portfolios_analyzed} portfolios, "
-               f"{result.total_holdings} total holdings")
+    click.echo(
+        f"\n  Analyzed {result.portfolios_analyzed} portfolios, "
+        f"{result.total_holdings} total holdings"
+    )
     click.echo()
 
     # Overlap signals
@@ -663,7 +665,9 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
         click.echo("  SECTOR/INDUSTRY CLUSTERS")
         click.echo("  " + "=" * 66)
         click.echo()
-        click.echo(f"  {'Sector > Industry':<40} {'Holdings':>9} {'Portfolios':>11} {'Strength':>9}")
+        click.echo(
+            f"  {'Sector > Industry':<40} {'Holdings':>9} {'Portfolios':>11} {'Strength':>9}"
+        )
         click.echo("  " + "-" * 71)
 
         for cluster in result.sector_clusters[:top]:
