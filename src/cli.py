@@ -505,6 +505,238 @@ def chat(ctx, ticker, model, no_intro, debug_context):
 
 
 @cli.command()
+@click.option(
+    "--min-overlap",
+    default=2,
+    type=int,
+    help="Minimum portfolios a ticker must appear in (default: 2).",
+)
+@click.option(
+    "--top",
+    default=20,
+    type=int,
+    help="Number of top signals to display (default: 20).",
+)
+@click.option(
+    "--sector",
+    default=None,
+    type=str,
+    help="Filter results to a specific sector (e.g., 'Technology').",
+)
+@click.option(
+    "--enrich/--no-enrich",
+    default=False,
+    help="Enrich holdings with sector/industry data from yfinance (slow).",
+)
+@click.option(
+    "--list-sources",
+    is_flag=True,
+    default=False,
+    help="List available portfolio sources and configured filers.",
+)
+@click.pass_context
+def discover(ctx, min_overlap, top, sector, enrich, list_sources):
+    """Discover investment signals from notable portfolios.
+
+    Analyzes institutional 13F filings (Berkshire Hathaway, ARK, Soros, etc.)
+    for cross-portfolio patterns: ticker overlap, sector clustering,
+    activity convergence, and contrarian signals.
+
+    Examples:
+      quant discover                    # Show all cross-portfolio signals
+      quant discover --min-overlap 3    # Tickers in 3+ portfolios
+      quant discover --sector Technology  # Filter by sector
+      quant discover --enrich           # Add sector/industry data (slower)
+      quant discover --list-sources     # Show configured portfolio sources
+    """
+    from .discovery import PortfolioAnalyzer
+    from .discovery.sources import Edgar13FSource
+
+    output_dir = ctx.obj["output_dir"]
+    use_cache = ctx.obj["use_cache"]
+    output_format = ctx.obj["output_format"]
+
+    source = Edgar13FSource(cache_dir=output_dir)
+
+    if list_sources:
+        click.echo("\n  Available portfolio sources:")
+        click.echo("  " + "-" * 50)
+        for filer in source.list_available():
+            click.echo(f"  {filer['name']:<30} CIK: {filer['id']}")
+            if filer.get("description"):
+                click.echo(f"    {filer['description']}")
+        click.echo()
+        return
+
+    click.echo("=" * 70)
+    click.echo("  PORTFOLIO DISCOVERY")
+    click.echo("=" * 70)
+    click.echo("\n  Fetching notable portfolios from SEC EDGAR 13F filings...")
+
+    portfolios = source.fetch_portfolios(use_cache=use_cache)
+
+    if not portfolios:
+        click.echo("  No portfolios fetched. Check your internet connection.")
+        return
+
+    click.echo(f"  Loaded {len(portfolios)} portfolios")
+
+    # Show action stats from filing diff
+    actions = {}
+    for p in portfolios:
+        for h in p.holdings:
+            if h.action:
+                actions[h.action] = actions.get(h.action, 0) + 1
+    if actions:
+        action_str = ", ".join(f"{k}: {v}" for k, v in sorted(actions.items()))
+        click.echo(f"  Actions inferred from quarter-over-quarter diff: {action_str}")
+
+    # Enrichment: either full (--enrich) or auto (top overlap tickers only)
+    from .discovery.enrichment import HoldingEnricher
+
+    enricher = HoldingEnricher(cache_dir=output_dir)
+
+    if enrich:
+        click.echo("  Enriching ALL holdings with sector/industry data (slow)...")
+        for portfolio in portfolios:
+            enricher.enrich_portfolio(portfolio)
+    else:
+        # Auto-enrich: run overlap detection first, then enrich only top tickers
+        analyzer_pre = PortfolioAnalyzer(min_overlap=min_overlap)
+        pre_signals = analyzer_pre._detect_overlap(portfolios)
+        top_tickers = {s.ticker for s in pre_signals[:top * 2]}  # Enrich a bit more than displayed
+        if top_tickers:
+            click.echo(f"  Auto-enriching top {len(top_tickers)} overlap tickers with sector data...")
+            enricher.enrich_tickers_in_portfolios(portfolios, top_tickers)
+
+    # Run analysis
+    analyzer = PortfolioAnalyzer(min_overlap=min_overlap)
+    result = analyzer.analyze(portfolios)
+
+    # Apply sector filter
+    if sector:
+        sector_lower = sector.lower()
+        result.overlap_signals = [
+            s for s in result.overlap_signals
+            if s.sector and sector_lower in s.sector.lower()
+        ]
+        result.sector_clusters = [
+            c for c in result.sector_clusters
+            if sector_lower in c.sector.lower()
+        ]
+
+    # Display results
+    click.echo(f"\n  Analyzed {result.portfolios_analyzed} portfolios, "
+               f"{result.total_holdings} total holdings")
+    click.echo()
+
+    # Overlap signals
+    if result.overlap_signals:
+        click.echo("  " + "=" * 66)
+        click.echo("  TICKER OVERLAP (consensus picks)")
+        click.echo("  " + "=" * 66)
+        click.echo()
+        click.echo(f"  {'Ticker':<10} {'Name':<25} {'Overlap':>8} {'Strength':>9} {'Sector':<20}")
+        click.echo("  " + "-" * 74)
+
+        for signal in result.overlap_signals[:top]:
+            name = (signal.name or "")[:24]
+            sector_str = (signal.sector or "N/A")[:19]
+            click.echo(
+                f"  {signal.ticker:<10} {name:<25} "
+                f"{signal.overlap_count:>3}/{signal.total_portfolios:<4} "
+                f"{signal.strength:>6.1f}   {sector_str:<20}"
+            )
+            if signal.portfolios:
+                portfolios_str = ", ".join(signal.portfolios[:4])
+                if len(signal.portfolios) > 4:
+                    portfolios_str += f" +{len(signal.portfolios) - 4} more"
+                click.echo(f"             └─ {portfolios_str}")
+            if signal.recent_actions:
+                actions_str = ", ".join(signal.recent_actions[:4])
+                click.echo(f"             └─ Actions: {actions_str}")
+        click.echo()
+
+    # Sector clusters
+    if result.sector_clusters:
+        click.echo("  " + "=" * 66)
+        click.echo("  SECTOR/INDUSTRY CLUSTERS")
+        click.echo("  " + "=" * 66)
+        click.echo()
+        click.echo(f"  {'Sector > Industry':<40} {'Holdings':>9} {'Portfolios':>11} {'Strength':>9}")
+        click.echo("  " + "-" * 71)
+
+        for cluster in result.sector_clusters[:top]:
+            label = cluster.label[:39]
+            click.echo(
+                f"  {label:<40} {cluster.holding_count:>6}    "
+                f"{len(cluster.portfolios):>5}      {cluster.strength:>6.1f}"
+            )
+            if cluster.tickers:
+                tickers_str = ", ".join(cluster.tickers[:6])
+                if len(cluster.tickers) > 6:
+                    tickers_str += f" +{len(cluster.tickers) - 6} more"
+                click.echo(f"    └─ {tickers_str}")
+        click.echo()
+
+    # Convergence events
+    if result.convergence_events:
+        click.echo("  " + "=" * 66)
+        click.echo("  ACTIVITY CONVERGENCE")
+        click.echo("  " + "=" * 66)
+        click.echo()
+        for event in result.convergence_events[:top]:
+            name = event.name or event.ticker
+            click.echo(
+                f"  {event.ticker:<8} {name:<20} "
+                f"Action: {event.action.upper():<5} "
+                f"Window: {event.window_days}d  "
+                f"Strength: {event.strength:.1f}"
+            )
+            click.echo(f"    └─ Portfolios: {', '.join(event.portfolios)}")
+        click.echo()
+
+    # Contrarian signals
+    if result.contrarian_signals:
+        click.echo("  " + "=" * 66)
+        click.echo("  CONTRARIAN SIGNALS (disagreement)")
+        click.echo("  " + "=" * 66)
+        click.echo()
+        for signal in result.contrarian_signals[:top]:
+            name = signal.name or signal.ticker
+            click.echo(
+                f"  {signal.ticker:<8} {name:<20} "
+                f"Net: {signal.net_direction.upper():<8} "
+                f"Strength: {signal.strength:.1f}"
+            )
+            click.echo(f"    └─ Buyers:  {', '.join(signal.buyers)}")
+            click.echo(f"    └─ Sellers: {', '.join(signal.sellers)}")
+        click.echo()
+
+    # Save output if requested
+    if output_format in ("json", "all"):
+        import json as _json
+
+        out_path = Path(output_dir) / "_discovery" / "discovery_result.json"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(_json.dumps(result.to_dict(), indent=2), encoding="utf-8")
+        click.echo(f"  Results saved to: {out_path}")
+
+    if output_format in ("toon", "all"):
+        try:
+            import toon
+
+            out_path = Path(output_dir) / "_discovery" / "discovery_result.toon"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(toon.encode(result.to_dict()), encoding="utf-8")
+            click.echo(f"  TOON output:  {out_path}")
+        except ImportError:
+            pass
+
+    click.echo()
+
+
+@cli.command()
 @click.argument("tickers", nargs=-1, required=True)
 @click.option(
     "--interval", default=300, type=int, help="Refresh interval in seconds (default: 300)."

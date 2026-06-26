@@ -72,6 +72,9 @@ class AnalysisConfig:
     llm_openai_api_key: Optional[str] = None
     llm_github_token: Optional[str] = None  # GitHub PAT for GitHub Models (free gpt-4.1)
 
+    # ==================== Discovery / EDGAR ====================
+    edgar_user_agent: str = "PersonalResearch research@example.com"
+
     # Validation sets
     valid_periods: Optional[set] = None
     valid_intervals: Optional[set] = None

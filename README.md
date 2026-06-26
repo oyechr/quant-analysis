@@ -46,6 +46,19 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 - **Value at Risk (VaR):** 95% and 99% confidence levels (parametric and historical)
 - **Market Risk:** Beta calculation
 
+### Portfolio Discovery
+
+- **Cross-portfolio pattern detection** from SEC EDGAR 13F filings (free, no API key)
+- **Quarter-over-quarter diff:** Compares 2 consecutive filings to infer new/exit/add/trim/hold actions
+- **Ticker Overlap:** Find consensus picks held by multiple institutional investors
+- **Sector/Industry Clustering:** Granular concentration patterns (not just "Technology" but "Semiconductors", "Internet Retail", etc.)
+- **Activity Convergence:** Detect multiple portfolios buying/selling the same ticker within a time window
+- **Contrarian Signals:** Spot disagreement — some whales buying while others sell
+- **Auto-enrichment:** Top overlap tickers automatically enriched with sector/industry from yfinance
+- Pre-configured notable filers: Berkshire Hathaway, ARK, Soros, Bridgewater, Renaissance, Pershing Square, Appaloosa, Icahn
+- Pluggable source architecture for adding paid data sources later
+- TOON output for LLM-based reasoning about discovery signals
+
 ### Composite Scoring
 
 - 0-100 score across four dimensions: Technical, Fundamental, Risk, Valuation
@@ -166,6 +179,82 @@ Requires an API key in ``config.json``:
 ```
 Alternatively, use the free GitHub Models tier with ``"llm_github_token": "ghp_..."`` (no billing required — see [GitHub Models](https://github.com/marketplace/models)).
 
+### ``quant discover`` -- Portfolio signal discovery
+
+Analyzes institutional 13F filings for cross-portfolio patterns. Fetches the **two most recent quarterly filings** for each investor and diffs them to infer buy/sell actions, then detects four signal types across all portfolios.
+
+**How it works:**
+
+1. Fetches latest + previous 13F filings from SEC EDGAR (free, no API key)
+2. Diffs holdings quarter-over-quarter to infer actions:
+   - ``new`` = position didn't exist last quarter
+   - ``exit`` = position completely sold
+   - ``add`` = shares increased >5%
+   - ``trim`` = shares decreased >5%
+   - ``hold`` = shares unchanged (within ±5%)
+3. Auto-enriches top overlap tickers with sector/industry from yfinance
+4. Runs all 4 pattern detectors: overlap, sector clustering, convergence, contrarian
+
+**Optimal usage order (recommended workflow):**
+
+```bash
+# 1. First run — fetch fresh data from SEC EDGAR (takes ~30s)
+quant --no-cache discover
+
+# 2. High-conviction consensus picks only (strongest signal)
+quant discover --min-overlap 3
+
+# 3. Drill into a sector you're interested in
+quant discover --sector Technology
+quant discover --sector "Financial Services"
+
+# 4. Full enrichment if you want ALL sector clusters (slower, enriches 800+ tickers)
+quant discover --enrich
+
+# 5. See what's configured
+quant discover --list-sources
+```
+
+**Subsequent runs** use cached data (instant). Clear cache periodically or when new filings are expected:
+
+```bash
+# Refresh after mid-Feb / mid-May / mid-Aug / mid-Nov (when new 13F filings appear)
+quant --no-cache discover
+```
+
+**Tips:**
+- The first run without ``--no-cache`` returns cached results instantly
+- ``--min-overlap 3`` is the sweet spot — tickers held by 3+ of 8 whales is a strong consensus signal
+- Sector data appears automatically for top overlap tickers (auto-enriched via yfinance)
+- ``--enrich`` enriches ALL holdings (slow) — usually unnecessary since auto-enrich covers the top results
+- 13F data is quarterly, filed ~45 days after quarter-end. Data is 1-4 months stale
+- Save TOON output for LLM reasoning: ``quant --format toon discover``
+- Pipe discovery results into scoring: take the top tickers and run ``quant score``
+
+**Data freshness schedule:**
+
+| Quarter | Filings appear | Best time to ``--no-cache`` |
+|---------|----------------|---------------------------|
+| Q1 (Jan-Mar) | Mid-May | After May 15 |
+| Q2 (Apr-Jun) | Mid-August | After August 14 |
+| Q3 (Jul-Sep) | Mid-November | After November 14 |
+| Q4 (Oct-Dec) | Mid-February | After February 14 |
+
+Options:
+- ``--min-overlap`` -- minimum portfolios a ticker must appear in (default: 2)
+- ``--top`` -- number of top signals to display (default: 20)
+- ``--sector`` -- filter results to a specific sector
+- ``--enrich / --no-enrich`` -- enrich ALL holdings with sector/industry (slow; top overlap tickers are auto-enriched by default)
+- ``--list-sources`` -- list configured portfolio sources without fetching
+
+**Configuration** (``config.json``):
+```json
+{
+    "edgar_user_agent": "PersonalResearch you@email.com"
+}
+```
+SEC EDGAR requires a User-Agent with contact info. No API key needed — all data is free public records.
+
 ### ``quant watch`` -- Continuous refresh
 
 Re-scores tickers on a timer. Useful for monitoring during market hours.
@@ -205,11 +294,35 @@ quant --output-dir /tmp/data report AAPL
 
 | Goal | Command |
 |------|---------|
+| Discover new investment ideas | ``quant discover`` |
 | Deep dive on one stock | ``quant report TICKER`` |
 | Ask follow-up questions / interrogate a stock | ``quant chat TICKER`` |
 | Screen / rank a watchlist | ``quant score T1 T2 T3 ...`` |
 | Compare two candidates | ``quant compare T1 T2`` |
 | Monitor during market hours | ``quant watch T1 T2`` |
+
+### Recommended Workflow: Discovery → Analysis
+
+```bash
+# Step 1: What are the whales buying? (run after new 13F filings appear)
+quant --no-cache discover --min-overlap 3
+
+# Step 2: Note the top consensus tickers, score them
+quant score AAPL NVDA AMZN MSFT BAC --config growth
+
+# Step 3: Deep dive on the highest-scoring ticker
+quant report NVDA
+
+# Step 4: Compare your top 2-3 candidates
+quant compare NVDA AMD AVGO
+
+# Step 5: Ask the LLM about risks and thesis
+quant chat NVDA
+# > "What's the bear case? Is the valuation stretched?"
+
+# Step 6: Monitor your picks
+quant watch NVDA AAPL MSFT --interval 300
+```
 
 ## Output Files
 
@@ -238,6 +351,21 @@ data/TICKER/
     +-- valuation_analysis.md
 ```
 
+Discovery results are written to ``data/_discovery/``:
+
+```
+data/_discovery/
++-- edgar_13f/                 # Cached 13F filing data per CIK
+|   +-- 0001067983.json        # Berkshire Hathaway
+|   +-- 0001697748.json        # ARK Investment
+|   +-- ...
++-- enrichment/                # Ticker/sector resolution caches
+|   +-- cusip_map.json
+|   +-- sector_map.json
++-- discovery_result.json       # Latest analysis output
++-- discovery_result.toon       # LLM-optimized discovery output
+```
+
 ### TOON Format
 
 Reports are generated in [TOON (Token-Oriented Object Notation)](https://github.com/toon-format/spec) format alongside JSON and Markdown. TOON uses YAML-style indentation for objects and CSV-like tabular rows for uniform arrays, reducing token count while maintaining LLM readability.
@@ -263,6 +391,13 @@ quant-analysis/
 |   +-- comparison/
 |   |   +-- comparator.py            # TickerComparator & PortfolioView
 |   |   +-- formatters.py            # Table, Markdown, JSON, heatmap output
+|   +-- discovery/
+|   |   +-- models.py                # Data models (Holding, TrackedPortfolio, signals)
+|   |   +-- analyzer.py              # Cross-portfolio pattern detection
+|   |   +-- enrichment.py            # CUSIP→ticker + sector/industry enrichment
+|   |   +-- sources/
+|   |       +-- base.py              # PortfolioSource ABC (pluggable)
+|   |       +-- edgar_13f.py         # SEC EDGAR 13F source (free)
 |   +-- reporting/
 |   |   +-- generator.py             # Report aggregation
 |   |   +-- sections.py              # Modular section handlers
@@ -288,6 +423,7 @@ quant-analysis/
 +-- tests/
     +-- test_cli.py
     +-- test_comparator.py
+    +-- test_discovery.py
     +-- test_scorer.py
     +-- test_toon_serializer.py
 ```
