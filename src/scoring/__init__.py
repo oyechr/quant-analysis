@@ -8,6 +8,7 @@ from .dimensions import (
     ValuationScorer,
 )
 from .scorer import StockScorer
+from .trade_levels import TradeLevelsResult, compute_trade_levels_from_report
 
 __all__ = [
     "StockScorer",
@@ -16,4 +17,6 @@ __all__ = [
     "FundamentalScorer",
     "RiskScorer",
     "ValuationScorer",
+    "TradeLevelsResult",
+    "compute_trade_levels_from_report",
 ]

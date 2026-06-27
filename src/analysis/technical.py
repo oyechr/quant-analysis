@@ -484,11 +484,46 @@ class TechnicalAnalyzer:
             "statistics": self.calculate_statistics(),
             "latest_values": self.get_latest_values(),
             "signals": self.generate_signals(),
+            "support_resistance": self.calculate_support_resistance(),
             "data_points": len(self.df),
             "date_range": {
                 "start": format_date(self.df.index[0]) if not self.df.empty else None,
                 "end": format_date(self.df.index[-1]) if not self.df.empty else None,
             },
+        }
+
+    def calculate_support_resistance(self, window: int = 20, num_levels: int = 3) -> Dict[str, Any]:
+        """
+        Calculate support and resistance levels from price data.
+
+        Uses pivot point clustering to identify key levels where price
+        has historically reversed.
+
+        Args:
+            window: Window size for detecting local extrema
+            num_levels: Maximum number of levels per side
+
+        Returns:
+            Dictionary with support_levels, resistance_levels, and current_price
+        """
+        from ..scoring.trade_levels import calculate_support_resistance
+
+        if self.df.empty or len(self.df) < window * 2:
+            return {"support_levels": [], "resistance_levels": [], "current_price": None}
+
+        support_levels, resistance_levels = calculate_support_resistance(
+            self.df, window=window, num_levels=num_levels
+        )
+
+        current_price = float(self.df["Close"].iloc[-1])
+        if pd.isna(current_price):
+            valid = self.df["Close"].dropna()
+            current_price = float(valid.iloc[-1]) if not valid.empty else None
+
+        return {
+            "support_levels": [round(s, 2) for s in support_levels],
+            "resistance_levels": [round(r, 2) for r in resistance_levels],
+            "current_price": round(current_price, 2) if current_price else None,
         }
 
     def format_markdown(self) -> List[str]:

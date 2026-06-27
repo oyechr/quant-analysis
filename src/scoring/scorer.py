@@ -17,6 +17,7 @@ from .dimensions import (
     TechnicalScorer,
     ValuationScorer,
 )
+from .trade_levels import TradeLevelsResult
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ class ScoringResult:
     fundamental: Optional[DimensionResult] = None
     risk: Optional[DimensionResult] = None
     valuation: Optional[DimensionResult] = None
+
+    # Trade levels
+    trade_levels: Optional[TradeLevelsResult] = None
 
     # Aggregated insights
     strengths: List[str] = field(default_factory=list)
@@ -74,6 +78,9 @@ class ScoringResult:
             result["dimensions"]["risk"] = self.risk.to_dict()
         if self.valuation:
             result["dimensions"]["valuation"] = self.valuation.to_dict()
+
+        if self.trade_levels:
+            result["trade_levels"] = self.trade_levels.to_dict()
 
         return result
 
@@ -128,6 +135,10 @@ class ScoringResult:
             for c in self.concerns[:5]:
                 lines.append(f"  - {c}")
 
+        if self.trade_levels:
+            lines.append("")
+            lines.append(self.trade_levels.format_scorecard())
+
         lines.append("")
         lines.append("=" * 60)
         return "\n".join(lines)
@@ -162,6 +173,9 @@ class ScoringResult:
             result["strengths"] = self.strengths[:5]
         if self.concerns:
             result["concerns"] = self.concerns[:5]
+
+        if self.trade_levels:
+            result["trade_levels"] = self.trade_levels.to_dict()
 
         return result
 
@@ -198,6 +212,24 @@ class ScoringResult:
             lines.append(f"Strengths: {'; '.join(self.strengths[:3])}")
         if self.concerns:
             lines.append(f"Concerns: {'; '.join(self.concerns[:3])}")
+
+        if self.trade_levels:
+            from ..utils.report import get_currency_symbol
+
+            sym = get_currency_symbol(self.trade_levels.currency)
+            tl = self.trade_levels
+            if tl.bullish and tl.bullish.target and tl.bullish.stop_loss:
+                lines.append(
+                    f"Bullish: entry {sym}{tl.bullish.entry_low:.2f}, "
+                    f"target {sym}{tl.bullish.target:.2f}, "
+                    f"stop {sym}{tl.bullish.stop_loss:.2f}"
+                )
+            if tl.bearish and tl.bearish.target and tl.bearish.stop_loss:
+                lines.append(
+                    f"Bearish: entry {sym}{tl.bearish.entry_low:.2f}, "
+                    f"target {sym}{tl.bearish.target:.2f}, "
+                    f"stop {sym}{tl.bearish.stop_loss:.2f}"
+                )
 
         return "\n".join(lines)
 
@@ -262,7 +294,7 @@ class StockScorer:
         ticker = report_data.get("ticker", "UNKNOWN")
         ticker_info = report_data.get("info", {})
 
-        return self.score_from_analyses(
+        result = self.score_from_analyses(
             technical_data=report_data.get("technical_analysis"),
             fundamental_data=report_data.get("fundamental_analysis"),
             risk_data=report_data.get("risk_analysis"),
@@ -270,6 +302,18 @@ class StockScorer:
             ticker_info=ticker_info,
             ticker=ticker,
         )
+
+        # Compute trade levels from full report data
+        try:
+            from .trade_levels import compute_trade_levels_from_report
+
+            trade_levels = compute_trade_levels_from_report(report_data)
+            if trade_levels:
+                result.trade_levels = trade_levels
+        except Exception as e:
+            logger.warning(f"Error computing trade levels: {e}")
+
+        return result
 
     def score_from_analyses(
         self,

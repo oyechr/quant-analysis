@@ -408,6 +408,9 @@ class ReportGenerator:
                     md.append(f"- {c}")
                 md.append("")
 
+            if scoring_result.trade_levels:
+                md.extend(scoring_result.trade_levels.format_markdown())
+
         # ===== COMPANY OVERVIEW =====
         md.append("---")
         md.append("")
