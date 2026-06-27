@@ -3,7 +3,6 @@ Tests for new quant methods: Factor Ranking, Relative Strength, PEAD, Risk Parit
 Focused on logic correctness with minimal redundancy.
 """
 
-import json
 import sys
 from pathlib import Path
 
@@ -16,9 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.analysis.fundamental import calculate_pead_signal
 from src.analysis.technical import calculate_relative_strength
 from src.comparison.comparator import calculate_risk_parity_weights, identify_correlation_flags
-from src.discovery.factor_ranking import FactorRanker, FactorScore, FactorWeights
+from src.discovery.factor_ranking import FactorRanker, FactorWeights
 from src.utils.financial import calculate_kelly_criterion
-
 
 # ============================================================
 # Fixtures
@@ -49,10 +47,34 @@ def sample_benchmark():
 def sample_earnings():
     """Realistic earnings history"""
     return [
-        {"quarter": "2026-03-31", "epsActual": 1.52, "epsEstimate": 1.40, "epsDifference": 0.12, "surprisePercent": 0.0857},
-        {"quarter": "2025-12-31", "epsActual": 1.45, "epsEstimate": 1.38, "epsDifference": 0.07, "surprisePercent": 0.0507},
-        {"quarter": "2025-09-30", "epsActual": 1.30, "epsEstimate": 1.35, "epsDifference": -0.05, "surprisePercent": -0.037},
-        {"quarter": "2025-06-30", "epsActual": 1.25, "epsEstimate": 1.20, "epsDifference": 0.05, "surprisePercent": 0.0417},
+        {
+            "quarter": "2026-03-31",
+            "epsActual": 1.52,
+            "epsEstimate": 1.40,
+            "epsDifference": 0.12,
+            "surprisePercent": 0.0857,
+        },
+        {
+            "quarter": "2025-12-31",
+            "epsActual": 1.45,
+            "epsEstimate": 1.38,
+            "epsDifference": 0.07,
+            "surprisePercent": 0.0507,
+        },
+        {
+            "quarter": "2025-09-30",
+            "epsActual": 1.30,
+            "epsEstimate": 1.35,
+            "epsDifference": -0.05,
+            "surprisePercent": -0.037,
+        },
+        {
+            "quarter": "2025-06-30",
+            "epsActual": 1.25,
+            "epsEstimate": 1.20,
+            "epsDifference": 0.05,
+            "surprisePercent": 0.0417,
+        },
     ]
 
 
@@ -63,7 +85,9 @@ def sample_earnings():
 
 class TestRelativeStrength:
     def test_returns_none_for_short_data(self):
-        short = pd.DataFrame({"Close": [100, 101, 102]}, index=pd.date_range("2026-01-01", periods=3))
+        short = pd.DataFrame(
+            {"Close": [100, 101, 102]}, index=pd.date_range("2026-01-01", periods=3)
+        )
         assert calculate_relative_strength(short) is None
 
     def test_returns_valid_rating(self, sample_price_data, sample_benchmark):
@@ -92,7 +116,10 @@ class TestRelativeStrength:
 class TestPEAD:
     def test_returns_none_for_insufficient_data(self):
         assert calculate_pead_signal([]) is None
-        assert calculate_pead_signal([{"epsActual": 1.0, "epsEstimate": 0.9, "epsDifference": 0.1}]) is None
+        assert (
+            calculate_pead_signal([{"epsActual": 1.0, "epsEstimate": 0.9, "epsDifference": 0.1}])
+            is None
+        )
 
     def test_calculates_sue(self, sample_earnings):
         result = calculate_pead_signal(sample_earnings)
@@ -107,9 +134,27 @@ class TestPEAD:
 
     def test_negative_surprise_signal(self):
         earnings = [
-            {"quarter": "2026-03-31", "epsActual": 0.80, "epsEstimate": 1.10, "epsDifference": -0.30, "surprisePercent": -0.27},
-            {"quarter": "2025-12-31", "epsActual": 0.90, "epsEstimate": 1.05, "epsDifference": -0.15, "surprisePercent": -0.14},
-            {"quarter": "2025-09-30", "epsActual": 0.95, "epsEstimate": 1.00, "epsDifference": -0.05, "surprisePercent": -0.05},
+            {
+                "quarter": "2026-03-31",
+                "epsActual": 0.80,
+                "epsEstimate": 1.10,
+                "epsDifference": -0.30,
+                "surprisePercent": -0.27,
+            },
+            {
+                "quarter": "2025-12-31",
+                "epsActual": 0.90,
+                "epsEstimate": 1.05,
+                "epsDifference": -0.15,
+                "surprisePercent": -0.14,
+            },
+            {
+                "quarter": "2025-09-30",
+                "epsActual": 0.95,
+                "epsEstimate": 1.00,
+                "epsDifference": -0.05,
+                "surprisePercent": -0.05,
+            },
         ]
         result = calculate_pead_signal(earnings)
         assert result is not None
@@ -227,35 +272,23 @@ class TestCorrelationFlags:
 
     def test_detects_redundant_pair(self):
         # Perfect correlation
-        corr = pd.DataFrame(
-            [[1.0, 0.95], [0.95, 1.0]],
-            columns=["A", "B"], index=["A", "B"]
-        )
+        corr = pd.DataFrame([[1.0, 0.95], [0.95, 1.0]], columns=["A", "B"], index=["A", "B"])
         flags = identify_correlation_flags(corr)
         assert len(flags["redundant_pairs"]) == 1
         assert flags["redundant_pairs"][0]["correlation"] == 0.95
 
     def test_detects_hedge_opportunity(self):
-        corr = pd.DataFrame(
-            [[1.0, -0.5], [-0.5, 1.0]],
-            columns=["A", "B"], index=["A", "B"]
-        )
+        corr = pd.DataFrame([[1.0, -0.5], [-0.5, 1.0]], columns=["A", "B"], index=["A", "B"])
         flags = identify_correlation_flags(corr)
         assert len(flags["hedge_opportunities"]) == 1
 
     def test_diversification_score_range(self):
-        corr = pd.DataFrame(
-            [[1.0, 0.3], [0.3, 1.0]],
-            columns=["A", "B"], index=["A", "B"]
-        )
+        corr = pd.DataFrame([[1.0, 0.3], [0.3, 1.0]], columns=["A", "B"], index=["A", "B"])
         flags = identify_correlation_flags(corr)
         assert 0 <= flags["diversification_score"] <= 100
 
     def test_high_correlation_low_diversification(self):
-        corr = pd.DataFrame(
-            [[1.0, 0.9], [0.9, 1.0]],
-            columns=["A", "B"], index=["A", "B"]
-        )
+        corr = pd.DataFrame([[1.0, 0.9], [0.9, 1.0]], columns=["A", "B"], index=["A", "B"])
         flags = identify_correlation_flags(corr)
         assert flags["diversification_score"] < 30
 
@@ -267,7 +300,9 @@ class TestCorrelationFlags:
 
 class TestKellyCriterion:
     def test_returns_none_for_short_data(self):
-        short = pd.DataFrame({"Close": [100, 101, 102]}, index=pd.date_range("2026-01-01", periods=3))
+        short = pd.DataFrame(
+            {"Close": [100, 101, 102]}, index=pd.date_range("2026-01-01", periods=3)
+        )
         assert calculate_kelly_criterion(short) is None
 
     def test_returns_valid_result(self, sample_price_data):
