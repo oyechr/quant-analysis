@@ -519,6 +519,14 @@ class FundamentalScorer:
             roe = _safe_float(dupont.get("roe_reported") or dupont.get("roe_calculated"))
         sub_scores.append(self._score_roe(roe, strengths, concerns))
 
+        # 7. Beneish M-Score / Earnings Manipulation (weight: 0.05)
+        beneish = quality.get("beneish_m")
+        sub_scores.append(self._score_beneish(beneish, strengths, concerns))
+
+        # 8. Accruals Quality (weight: 0.05)
+        accruals = quality.get("accruals_quality")
+        sub_scores.append(self._score_accruals_quality(accruals, strengths, concerns))
+
         return self._build_result("Fundamental", sub_scores, strengths, concerns)
 
     def _score_piotroski(
@@ -575,6 +583,80 @@ class FundamentalScorer:
             score=_clamp(score),
             weight=0.20,
             raw_value=z_score,
+            label=label,
+        )
+
+    def _score_beneish(
+        self,
+        beneish_data: Optional[dict],
+        strengths: List[str],
+        concerns: List[str],
+    ) -> SubScore:
+        if beneish_data is None:
+            return SubScore(name="Beneish M-Score", score=50.0, weight=0.05, available=False)
+
+        m_score = beneish_data.get("m_score")
+        if m_score is None:
+            return SubScore(name="Beneish M-Score", score=50.0, weight=0.05, available=False)
+
+        # M-Score interpretation: lower (more negative) is better
+        # > -1.78: likely manipulator (bad)
+        # -1.78 to -2.22: grey zone
+        # < -2.22: unlikely manipulator (good)
+        if m_score > -1.78:
+            score = 15.0
+            label = "Likely manipulator"
+            concerns.append(f"Beneish M-Score {m_score:.2f}  -  earnings manipulation risk")
+        elif m_score > -2.22:
+            score = 50.0
+            label = "Grey zone"
+        else:
+            score = 80.0
+            label = "Unlikely manipulator"
+
+        return SubScore(
+            name="Beneish M-Score",
+            score=_clamp(score),
+            weight=0.05,
+            raw_value=m_score,
+            label=label,
+        )
+
+    def _score_accruals_quality(
+        self,
+        accruals_data: Optional[dict],
+        strengths: List[str],
+        concerns: List[str],
+    ) -> SubScore:
+        if accruals_data is None:
+            return SubScore(name="Accruals Quality", score=50.0, weight=0.05, available=False)
+
+        ratio = accruals_data.get("accrual_ratio_pct")
+        quality = accruals_data.get("quality")
+        if ratio is None:
+            return SubScore(name="Accruals Quality", score=50.0, weight=0.05, available=False)
+
+        # Negative accruals = very good (cash > reported earnings)
+        # Low positive = good, High positive = bad
+        if quality == "very_high":
+            score = 85.0
+            label = "Cash > Earnings"
+        elif quality == "high":
+            score = 70.0
+            label = "Good quality"
+        elif quality == "moderate":
+            score = 45.0
+            label = "Moderate quality"
+        else:
+            score = 20.0
+            label = "Low quality"
+            concerns.append(f"High accruals ({ratio:.1f}%)  -  earnings quality concern")
+
+        return SubScore(
+            name="Accruals Quality",
+            score=_clamp(score),
+            weight=0.05,
+            raw_value=ratio,
             label=label,
         )
 

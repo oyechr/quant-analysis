@@ -21,6 +21,7 @@ from ..utils.financial import (
     TRADING_DAYS_PER_YEAR,
     annualize_volatility,
     calculate_daily_returns,
+    calculate_kelly_criterion,
     convert_annual_to_daily_rate,
     to_float,
     validate_price_data,
@@ -636,6 +637,221 @@ class RiskMetrics:
             logger.error(f"Error calculating rolling ratios: {e}")
             return {}
 
+    def calculate_distribution_stats(self, price_data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Calculate return distribution statistics beyond normal distribution assumptions
+
+        Computes skewness, kurtosis, and Jarque-Bera normality test to characterize
+        the true shape of the return distribution. Most stock returns are NOT normally
+        distributed — they have fat tails and negative skew.
+
+        Metrics:
+        - Skewness: 0 = symmetric, negative = left tail (more crash risk),
+                    positive = right tail (more upside potential)
+        - Excess Kurtosis: 0 = normal, >0 = fat tails (more extreme events),
+                          <0 = thin tails (fewer extremes)
+        - Jarque-Bera: statistical test for normality (p < 0.05 = non-normal)
+
+        Returns:
+            Dictionary with distribution metrics and interpretation
+        """
+        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+            return {}
+
+        try:
+            daily_returns = price_data["Close"].pct_change().dropna()
+
+            if len(daily_returns) < 30:
+                logger.warning("Insufficient data for distribution stats (need 30+ days)")
+                return {}
+
+            n = len(daily_returns)
+            mean = float(daily_returns.mean())
+            std = float(daily_returns.std())
+
+            if std == 0:
+                return {}
+
+            # Skewness (Fisher's definition)
+            skewness = float(daily_returns.skew())
+
+            # Excess kurtosis (Fisher's: normal = 0, not Pearson where normal = 3)
+            kurtosis = float(daily_returns.kurtosis())
+
+            # Jarque-Bera test statistic: JB = (n/6) * (S^2 + (K^2)/4)
+            jb_stat = (n / 6.0) * (skewness**2 + (kurtosis**2) / 4.0)
+            # Under H0 (normality), JB ~ chi-squared(2)
+            # Critical values: 5.99 (5%), 9.21 (1%)
+            is_normal = jb_stat < 5.99
+
+            # Percentile analysis (empirical quantiles vs normal)
+            p1 = float(np.percentile(daily_returns, 1))
+            p5 = float(np.percentile(daily_returns, 5))
+            p95 = float(np.percentile(daily_returns, 95))
+            p99 = float(np.percentile(daily_returns, 99))
+
+            # Expected percentiles under normal distribution
+            from scipy.stats import norm  # type: ignore[import-not-found]
+
+            normal_p1 = mean + norm.ppf(0.01) * std
+            normal_p5 = mean + norm.ppf(0.05) * std
+            normal_p95 = mean + norm.ppf(0.95) * std
+            normal_p99 = mean + norm.ppf(0.99) * std
+
+            tail_risk_ratio = abs(p1) / abs(normal_p1) if normal_p1 != 0 else 1.0
+
+            # Interpretation
+            skew_interpretation = (
+                "negative (more crash risk)"
+                if skewness < -0.5
+                else "positive (more upside potential)"
+                if skewness > 0.5
+                else "approximately symmetric"
+            )
+
+            kurtosis_interpretation = (
+                "fat tails (more extreme events than normal)"
+                if kurtosis > 1.0
+                else "thin tails (fewer extremes)"
+                if kurtosis < -0.5
+                else "approximately normal tails"
+            )
+
+            return {
+                "skewness": skewness,
+                "skew_interpretation": skew_interpretation,
+                "excess_kurtosis": kurtosis,
+                "kurtosis_interpretation": kurtosis_interpretation,
+                "jarque_bera_statistic": jb_stat,
+                "is_normally_distributed": is_normal,
+                "tail_risk_ratio": tail_risk_ratio,
+                "percentiles": {
+                    "p1_actual": p1,
+                    "p1_normal": float(normal_p1),
+                    "p5_actual": p5,
+                    "p5_normal": float(normal_p5),
+                    "p95_actual": p95,
+                    "p95_normal": float(normal_p95),
+                    "p99_actual": p99,
+                    "p99_normal": float(normal_p99),
+                },
+                "sample_size": n,
+            }
+
+        except ImportError:
+            # scipy not available - compute without normal comparison
+            daily_returns = price_data["Close"].pct_change().dropna()
+            skewness = float(daily_returns.skew())
+            kurtosis = float(daily_returns.kurtosis())
+            n = len(daily_returns)
+            jb_stat = (n / 6.0) * (skewness**2 + (kurtosis**2) / 4.0)
+
+            skew_interpretation = (
+                "negative (more crash risk)"
+                if skewness < -0.5
+                else "positive (more upside potential)"
+                if skewness > 0.5
+                else "approximately symmetric"
+            )
+            kurtosis_interpretation = (
+                "fat tails (more extreme events than normal)"
+                if kurtosis > 1.0
+                else "thin tails (fewer extremes)"
+                if kurtosis < -0.5
+                else "approximately normal tails"
+            )
+
+            return {
+                "skewness": skewness,
+                "skew_interpretation": skew_interpretation,
+                "excess_kurtosis": kurtosis,
+                "kurtosis_interpretation": kurtosis_interpretation,
+                "jarque_bera_statistic": jb_stat,
+                "is_normally_distributed": jb_stat < 5.99,
+                "sample_size": n,
+            }
+        except Exception as e:
+            logger.error(f"Error calculating distribution stats: {e}")
+            return {}
+
+    def calculate_regime(self, price_data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Detect current market regime using volatility and trend signals
+
+        Classifies into 4 regimes:
+        - Bull: Low volatility + Uptrend (SMA200 rising, price above)
+        - Recovery: High volatility + Uptrend (volatile but trending up)
+        - Distribution: Low volatility + Downtrend (quiet decline)
+        - Bear: High volatility + Downtrend (panic selling)
+
+        Uses 60-day rolling volatility percentile and 200-day MA slope.
+
+        Returns:
+            Dictionary with regime classification and supporting metrics
+        """
+        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+            return {}
+
+        try:
+            prices = price_data["Close"]
+
+            if len(prices) < 60:
+                return {}
+
+            daily_returns = prices.pct_change().dropna()
+
+            # Current 20-day rolling volatility (annualized)
+            rolling_vol = daily_returns.rolling(window=20).std() * np.sqrt(TRADING_DAYS_PER_YEAR)
+            current_vol = to_float(rolling_vol.iloc[-1])
+
+            # Volatility percentile (where does current vol rank in last 252 days?)
+            lookback = min(252, len(rolling_vol))
+            vol_window = rolling_vol.iloc[-lookback:]
+            vol_percentile = float((vol_window < current_vol).sum() / len(vol_window) * 100)
+
+            # Trend: price vs SMA50 and slope of SMA50
+            sma_period = min(50, len(prices) - 1)
+            sma = prices.rolling(window=sma_period).mean()
+            price_above_sma = float(prices.iloc[-1]) > float(sma.iloc[-1])
+
+            # SMA slope (annualized % change over last 20 days)
+            if len(sma.dropna()) >= 20:
+                sma_slope = (float(sma.iloc[-1]) - float(sma.iloc[-20])) / float(sma.iloc[-20])
+            else:
+                sma_slope = 0.0
+
+            uptrend = price_above_sma and sma_slope > 0
+            high_vol = vol_percentile > 60  # Above 60th percentile = high vol
+
+            # Regime classification
+            if uptrend and not high_vol:
+                regime = "bull"
+                description = "Low volatility uptrend - favorable conditions"
+            elif uptrend and high_vol:
+                regime = "recovery"
+                description = "High volatility uptrend - volatile but improving"
+            elif not uptrend and not high_vol:
+                regime = "distribution"
+                description = "Low volatility downtrend - quiet deterioration"
+            else:
+                regime = "bear"
+                description = "High volatility downtrend - elevated risk"
+
+            return {
+                "regime": regime,
+                "description": description,
+                "volatility_percentile": vol_percentile,
+                "current_annualized_vol": current_vol,
+                "price_above_sma50": price_above_sma,
+                "sma50_slope_pct": sma_slope * 100,
+                "is_uptrend": uptrend,
+                "is_high_volatility": high_vol,
+            }
+
+        except Exception as e:
+            logger.error(f"Error calculating regime: {e}")
+            return {}
+
     def calculate_all_metrics(
         self,
         price_data: Optional[pd.DataFrame] = None,
@@ -676,6 +892,9 @@ class RiskMetrics:
                 "var_95": self.calculate_var(price_data, confidence_level=0.95),
                 "var_99": self.calculate_var(price_data, confidence_level=0.99),
                 "rolling_ratios": self.calculate_rolling_ratios(price_data),
+                "distribution": self.calculate_distribution_stats(price_data),
+                "regime": self.calculate_regime(price_data),
+                "kelly_criterion": calculate_kelly_criterion(price_data),
             }
 
             self._cached_metrics = metrics
@@ -690,7 +909,9 @@ class RiskMetrics:
         self, ticker: str = "", metrics: Optional[Dict[str, Any]] = None
     ) -> List[str]:
         """
-        Format risk analysis as detailed markdown report
+        Format risk analysis as detailed markdown report.
+
+        Written for an intelligent reader who may not have finance background.
 
         Args:
             ticker: Stock ticker symbol for the report header
@@ -707,175 +928,243 @@ class RiskMetrics:
 
         md: List[str] = []
 
-        # Returns Analysis
-        md.append("## Returns Analysis")
+        # Market Regime (context-setting — put first)
+        if "regime" in metrics and metrics["regime"]:
+            regime = metrics["regime"]
+            regime_name = regime.get("regime", "unknown").upper()
+            md.append(f"## Current Market Regime: {regime_name}")
+            md.append("")
+            md.append(f"> {regime.get('description', '')}")
+            md.append("")
+            md.append(
+                f"- Volatility is in the **{regime.get('volatility_percentile', 0):.0f}th percentile** of the past year"
+            )
+            md.append(
+                f"- Price is **{'above' if regime.get('price_above_sma50') else 'below'}** its 50-day average"
+            )
+            md.append("")
+
+        # Performance Summary
+        md.append("## Performance")
         md.append("")
         if "returns" in metrics and metrics["returns"]:
             returns = metrics["returns"]
-            md.append("### Daily Returns")
+            cum_ret = returns.get("cumulative_return", 0)
+            ann_ret = returns.get("annualized_return", 0)
+            win_rate = returns.get("win_rate", 0)
+            md.append(
+                f"Over the analyzed period, this stock returned **{cum_ret:.1%}** total "
+                f"(**{ann_ret:.1%}** annualized)."
+            )
             md.append("")
-            md.append(f"- **Mean:** {returns.get('daily_mean', 0):.4%}")
-            md.append(f"- **Std Dev:** {returns.get('daily_std', 0):.4%}")
-            md.append(f"- **Min (worst day):** {returns.get('daily_min', 0):.4%}")
-            md.append(f"- **Max (best day):** {returns.get('daily_max', 0):.4%}")
-            md.append("")
-            md.append("### Period Performance")
-            md.append("")
-            md.append(f"- **Cumulative Return:** {returns.get('cumulative_return', 0):.2%}")
-            md.append(f"- **Annualized Return:** {returns.get('annualized_return', 0):.2%}")
-            md.append("")
-            md.append("### Trading Statistics")
-            md.append("")
-            md.append(f"- **Total Days:** {returns.get('total_trading_days', 0)}")
-            md.append(f"- **Positive Days:** {returns.get('positive_days', 0)}")
-            md.append(f"- **Negative Days:** {returns.get('negative_days', 0)}")
-            md.append(f"- **Win Rate:** {returns.get('win_rate', 0):.2%}")
+            md.append(f"- **Win rate:** {win_rate:.0%} of trading days were positive")
+            md.append(f"- **Best day:** {returns.get('daily_max', 0):.1%}")
+            md.append(f"- **Worst day:** {returns.get('daily_min', 0):.1%}")
             md.append("")
 
-        # Volatility Analysis
-        md.append("## Volatility Analysis")
+        # Volatility & Risk (simplified)
+        md.append("## Volatility")
+        md.append("")
+        md.append(
+            "> *Volatility measures how much the price swings day-to-day. "
+            "Higher volatility = bigger potential gains AND losses.*"
+        )
         md.append("")
         if "volatility" in metrics and metrics["volatility"]:
             vol = metrics["volatility"]
-            md.append(f"- **Daily Volatility:** {vol.get('daily_volatility', 0):.4%}")
-            md.append(f"- **Annualized Volatility:** {vol.get('annualized_volatility', 0):.2%}")
-            md.append(f"- **Downside Deviation:** {vol.get('downside_deviation', 0):.2%}")
+            ann_vol = vol.get("annualized_volatility", 0)
+            md.append(f"- **Annualized volatility:** {ann_vol:.0%}")
+            if ann_vol > 0.50:
+                md.append("  - Very high — expect large daily swings")
+            elif ann_vol > 0.30:
+                md.append("  - Elevated — noticeably more volatile than most stocks")
+            elif ann_vol > 0.15:
+                md.append("  - Moderate — typical for growth stocks")
+            else:
+                md.append("  - Low — relatively stable price movement")
+            md.append(f"- **Downside deviation:** {vol.get('downside_deviation', 0):.0%}")
+            md.append("  - *(Focuses only on negative moves — more relevant for risk)*")
             md.append("")
 
-        # Risk-Adjusted Returns
+        # Risk-Adjusted Returns (explain what they mean)
         md.append("## Risk-Adjusted Returns")
         md.append("")
+        md.append(
+            '> *These ratios answer: "How much return did I get per unit of risk taken?" '
+            "Higher is better.*"
+        )
+        md.append("")
+
         sharpe = metrics.get("sharpe_ratio", 0)
         sortino = metrics.get("sortino_ratio", 0)
-        information = metrics.get("information_ratio", 0)
         calmar = metrics.get("calmar_ratio", 0)
 
-        md.append(f"- **Sharpe Ratio:** {sharpe:.2f}")
-        if sharpe > 1:
-            md.append("  - Good risk-adjusted performance")
-        elif sharpe > 0:
-            md.append("  - Positive but modest risk-adjusted return")
-        else:
-            md.append("  - Underperforming risk-free rate")
+        md.append("| Metric | Value | What it means |")
+        md.append("|--------|-------|---------------|")
+
+        sharpe_comment = (
+            "Excellent"
+            if sharpe > 2
+            else "Good"
+            if sharpe > 1
+            else "Acceptable"
+            if sharpe > 0.5
+            else "Poor"
+            if sharpe > 0
+            else "Negative — losing vs. cash"
+        )
+        md.append(f"| Sharpe Ratio | {sharpe:.2f} | {sharpe_comment} |")
+
+        sortino_comment = (
+            "Excellent"
+            if sortino > 3
+            else "Good"
+            if sortino > 1.5
+            else "Acceptable"
+            if sortino > 0.5
+            else "Poor"
+        )
+        md.append(
+            f"| Sortino Ratio | {sortino:.2f} | {sortino_comment} (focuses on downside only) |"
+        )
+
+        calmar_comment = (
+            "Excellent"
+            if calmar > 3
+            else "Good"
+            if calmar > 1
+            else "Concerning"
+            if calmar > 0
+            else "Negative return"
+        )
+        md.append(f"| Calmar Ratio | {calmar:.2f} | {calmar_comment} (return ÷ max loss) |")
         md.append("")
 
-        md.append(f"- **Sortino Ratio:** {sortino:.2f}")
-        if sortino > sharpe:
-            md.append("  - Better downside risk profile than overall volatility suggests")
-        md.append("  - (Higher is better - focuses on downside risk)")
+        # Drawdown (the big one for non-pros)
+        md.append("## Drawdown (Peak-to-Trough Loss)")
         md.append("")
-
-        md.append(f"- **Information Ratio:** {information:.2f}")
-        if information > 1.0:
-            md.append("  - Excellent active management (outperforming benchmark)")
-        elif information > 0.5:
-            md.append("  - Good active management")
-        elif information > 0:
-            md.append("  - Positive excess return vs benchmark")
-        else:
-            md.append("  - Underperforming benchmark")
-        md.append("  - (Measures skill vs benchmark - accounts for tracking error)")
-        md.append("")
-
-        md.append(f"- **Calmar Ratio:** {calmar:.2f}")
-        if calmar > 3.0:
-            md.append("  - Excellent return relative to maximum drawdown")
-        elif calmar > 1.0:
-            md.append("  - Good return-to-drawdown ratio")
-        else:
-            md.append("  - High drawdown risk relative to return")
-        md.append("  - (Return per unit of maximum loss)")
-        md.append("")
-
-        # Drawdown Analysis
-        md.append("## Drawdown Analysis")
+        md.append(
+            "> *The maximum drawdown is the worst peak-to-valley decline. "
+            "If you bought at the worst time, this is how much you would have lost.*"
+        )
         md.append("")
         if "drawdown" in metrics and metrics["drawdown"]:
             dd = metrics["drawdown"]
-            md.append(f"- **Maximum Drawdown:** {dd.get('max_drawdown', 0):.2%}")
-            md.append(f"- **Max DD Date:** {dd.get('max_drawdown_date', 'N/A')}")
-            md.append(f"- **Current Drawdown:** {dd.get('current_drawdown', 0):.2%}")
-            md.append(f"- **Days Since Peak:** {dd.get('days_since_peak', 0)}")
+            max_dd = dd.get("max_drawdown", 0)
+            curr_dd = dd.get("current_drawdown", 0)
+            md.append(f"- **Maximum drawdown:** {max_dd:.1%}")
+            if dd.get("max_drawdown_date"):
+                md.append(f"  - Occurred on {dd['max_drawdown_date']}")
+            md.append(f"- **Current drawdown:** {curr_dd:.1%}")
+            if dd.get("is_recovered"):
+                md.append("  - Price has recovered to its peak")
+            else:
+                md.append(f"  - {dd.get('days_since_peak', 0)} days below peak and counting")
             if dd.get("recovery_days"):
-                md.append(f"- **Recovery Time:** {dd.get('recovery_days')} days")
-            md.append(f"- **At Peak:** {'Yes' if dd.get('is_recovered') else 'No'}")
+                md.append(f"  - Previous recovery took {dd['recovery_days']} days")
             md.append("")
 
         # Market Risk
-        md.append("## Market Risk (vs Benchmark)")
+        md.append("## Market Risk (vs. S&P 500)")
         md.append("")
         if "market_risk" in metrics and metrics["market_risk"]:
             mr = metrics["market_risk"]
-            md.append(f"**Benchmark:** {mr.get('benchmark', 'N/A')}")
-            md.append("")
-            md.append(f"- **Beta:** {mr.get('beta', 0):.2f}")
-            if mr.get("beta", 0) > 1:
-                md.append("  - More volatile than market")
-            elif mr.get("beta", 0) < 1:
-                md.append("  - Less volatile than market")
+            beta = mr.get("beta", 0)
+            alpha = mr.get("alpha", 0)
+            corr = mr.get("correlation", 0)
+
+            md.append(f"- **Beta: {beta:.2f}**")
+            if beta > 2:
+                md.append(f"  - Moves ~{beta:.1f}x as much as the market (very aggressive)")
+            elif beta > 1:
+                md.append(f"  - Moves ~{beta:.1f}x as much as the market (above average risk)")
+            elif beta > 0.5:
+                md.append("  - Moves roughly with the market")
             else:
-                md.append("  - Moves with market")
-            md.append(f"- **Alpha:** {mr.get('alpha', 0):.2%}")
-            if mr.get("alpha", 0) > 0:
-                md.append("  - Outperforming benchmark (risk-adjusted)")
-            md.append(f"- **Correlation:** {mr.get('correlation', 0):.2f}")
-            md.append(f"- **R-squared:** {mr.get('r_squared', 0):.2%}")
+                md.append("  - Low sensitivity to market moves")
+
+            md.append(f"- **Alpha: {alpha:.1%}**")
+            if alpha > 0:
+                md.append("  - Outperforming what its risk level would predict")
+            else:
+                md.append("  - Underperforming what its risk level would predict")
+
+            md.append(f"- **Correlation to market:** {corr:.0%}")
+            if corr < 0.3:
+                md.append("  - Low correlation — moves independently of the market")
+            elif corr < 0.7:
+                md.append("  - Moderate correlation — somewhat follows market direction")
+            else:
+                md.append("  - High correlation — closely tracks the market")
             md.append("")
 
-        # Tail Risk (VaR)
-        md.append("## Tail Risk (Value at Risk)")
+        # Value at Risk (plain English)
+        md.append("## Tail Risk (Extreme Scenarios)")
+        md.append("")
+        md.append('> *VaR answers: "What\'s my worst-case loss on a bad day?"*')
         md.append("")
         if "var_95" in metrics and metrics["var_95"]:
             var95 = metrics["var_95"]
-            md.append("### 95% Confidence Level")
-            md.append("")
-            md.append(f"- **VaR (Historical):** {var95.get('var_historical', 0):.2%}")
-            md.append(f"- **CVaR (Expected):** {var95.get('cvar_historical', 0):.2%}")
-            md.append(f"- **VaR (Parametric):** {var95.get('var_parametric', 0):.2%}")
-            md.append("- *5% chance of losing more than VaR in a day*")
-            md.append("")
-
-        if "var_99" in metrics and metrics["var_99"]:
-            var99 = metrics["var_99"]
-            md.append("### 99% Confidence Level")
-            md.append("")
-            md.append(f"- **VaR (Historical):** {var99.get('var_historical', 0):.2%}")
-            md.append(f"- **CVaR (Expected):** {var99.get('cvar_historical', 0):.2%}")
-            md.append("- *1% chance of losing more than VaR in a day*")
-            md.append("")
-            md.append(f"**Worst Historical Day:** {var99.get('worst_day', 0):.2%}")
+            md.append(
+                f"- **On a bad day (5% chance):** could lose **{abs(var95.get('var_historical', 0)):.1%}** or more"
+            )
+            md.append(
+                f"- **On a very bad day (1% chance):** could lose **{abs(metrics.get('var_99', {}).get('var_historical', 0)):.1%}** or more"
+            )
+            md.append(
+                f"- **Worst actual day:** {metrics.get('var_99', {}).get('worst_day', 0):.1%}"
+            )
             md.append("")
 
-        # Rolling Risk-Adjusted Ratios
-        md.append("## Rolling Risk-Adjusted Ratios")
-        md.append("")
-        if "rolling_ratios" in metrics and metrics["rolling_ratios"]:
-            rolling = metrics["rolling_ratios"]
-            md.append("*Performance consistency over different time windows*")
+        # Distribution Stats
+        if "distribution" in metrics and metrics["distribution"]:
+            dist = metrics["distribution"]
+            md.append("## Return Distribution Shape")
+            md.append("")
+            md.append(
+                '> *Stock returns often don\'t follow a "normal" bell curve. '
+                "Understanding the actual shape helps assess true risk.*"
+            )
             md.append("")
 
-            for window_key in ["sharpe_30d", "sharpe_60d", "sharpe_90d"]:
-                if window_key in rolling:
-                    window_days = window_key.split("_")[1]
-                    data = rolling[window_key]
-                    md.append(f"### {window_days.upper()} Rolling Sharpe Ratio")
-                    md.append("")
-                    md.append(f"- **Current:** {data.get('current', 0):.2f}")
-                    md.append(f"- **Mean:** {data.get('mean', 0):.2f}")
-                    md.append(f"- **Range:** {data.get('min', 0):.2f} to {data.get('max', 0):.2f}")
-                    md.append(f"- **Std Dev:** {data.get('std', 0):.2f}")
-                    md.append("")
+            skew = dist.get("skewness", 0)
+            kurt = dist.get("excess_kurtosis", 0)
+            is_normal = dist.get("is_normally_distributed", True)
 
-            for window_key in ["sortino_30d", "sortino_60d", "sortino_90d"]:
-                if window_key in rolling:
-                    window_days = window_key.split("_")[1]
-                    data = rolling[window_key]
-                    md.append(f"### {window_days.upper()} Rolling Sortino Ratio")
-                    md.append("")
-                    md.append(f"- **Current:** {data.get('current', 0):.2f}")
-                    md.append(f"- **Mean:** {data.get('mean', 0):.2f}")
-                    md.append(f"- **Range:** {data.get('min', 0):.2f} to {data.get('max', 0):.2f}")
-                    md.append(f"- **Std Dev:** {data.get('std', 0):.2f}")
-                    md.append("")
+            md.append(f"- **Skewness:** {skew:.2f} — {dist.get('skew_interpretation', '')}")
+            md.append(f"- **Kurtosis:** {kurt:.2f} — {dist.get('kurtosis_interpretation', '')}")
+            md.append(f"- **Normal distribution?** {'Yes' if is_normal else 'No'}")
+            if not is_normal:
+                md.append(
+                    "  - Standard risk models (that assume normality) may understate true risk"
+                )
+            tail_ratio = dist.get("tail_risk_ratio")
+            if tail_ratio and tail_ratio > 1.5:
+                md.append(
+                    f"  - Actual extreme losses are **{tail_ratio:.1f}x worse** than a normal model predicts"
+                )
+            md.append("")
+
+        # Kelly Criterion (Position Sizing)
+        if "kelly_criterion" in metrics and metrics["kelly_criterion"]:
+            kelly = metrics["kelly_criterion"]
+            md.append("## Position Sizing (Kelly Criterion)")
+            md.append("")
+            md.append(
+                "> *The Kelly Criterion calculates the mathematically optimal position size "
+                "based on your historical win rate and payoff ratio. Half-Kelly is the "
+                "practical recommendation (less aggressive).*"
+            )
+            md.append("")
+            md.append(f"- **Win rate:** {kelly.get('win_rate', 0):.0%} of days are positive")
+            md.append(
+                f"- **Payoff ratio:** {kelly.get('payoff_ratio', 0):.2f}x (avg win ÷ avg loss)"
+            )
+            md.append(f"- **Full Kelly:** {kelly.get('kelly_pct', 0):.1f}% of portfolio")
+            md.append(
+                f"- **Half-Kelly (recommended):** {kelly.get('half_kelly_pct', 0):.1f}% of portfolio"
+            )
+            md.append(f"- **Assessment:** {kelly.get('description', '')}")
+            md.append("")
 
         return md

@@ -723,3 +723,106 @@ class TechnicalAnalyzer:
         md.append("")
 
         return md
+
+
+# ==================== Standalone Functions ====================
+
+
+def calculate_relative_strength(
+    price_data: pd.DataFrame,
+    benchmark_data: Optional[pd.DataFrame] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Calculate IBD-style Relative Strength Rating (1-99).
+
+    Weighted price performance vs. benchmark over multiple timeframes:
+    - 40% weight on 3-month performance
+    - 20% weight on 6-month performance
+    - 20% weight on 9-month performance
+    - 20% weight on 12-month performance
+
+    An RS rating of 80 means the stock outperformed 80% of the benchmark
+    over these combined timeframes.
+
+    Args:
+        price_data: DataFrame with 'Close' prices (needs 252+ days ideally)
+        benchmark_data: Optional benchmark DataFrame. If None, returns raw RS score.
+
+    Returns:
+        Dictionary with RS rating components, or None if insufficient data
+    """
+    if price_data is None or price_data.empty or "Close" not in price_data.columns:
+        return None
+
+    prices = price_data["Close"]
+    if len(prices) < 63:  # Need at least 3 months
+        return None
+
+    current_price = float(prices.iloc[-1])
+
+    # Calculate returns over each timeframe
+    components = {}
+    weights = {"3mo": 0.40, "6mo": 0.20, "9mo": 0.20, "12mo": 0.20}
+    periods = {"3mo": 63, "6mo": 126, "9mo": 189, "12mo": 252}
+
+    stock_weighted_return = 0.0
+    benchmark_weighted_return = 0.0
+    total_weight = 0.0
+
+    for label, days in periods.items():
+        if len(prices) >= days:
+            past_price = float(prices.iloc[-days])
+            if past_price > 0:
+                stock_return = (current_price - past_price) / past_price
+                components[f"return_{label}"] = stock_return * 100
+
+                weight = weights[label]
+                stock_weighted_return += stock_return * weight
+                total_weight += weight
+
+                # Benchmark comparison if available
+                if benchmark_data is not None and not benchmark_data.empty:
+                    bm_prices = benchmark_data["Close"]
+                    if len(bm_prices) >= days:
+                        bm_current = float(bm_prices.iloc[-1])
+                        bm_past = float(bm_prices.iloc[-days])
+                        if bm_past > 0:
+                            bm_return = (bm_current - bm_past) / bm_past
+                            benchmark_weighted_return += bm_return * weight
+
+    if total_weight == 0:
+        return None
+
+    # Normalize weighted return
+    stock_weighted_return /= total_weight
+    benchmark_weighted_return /= total_weight
+
+    # Relative strength vs benchmark
+    relative_return = stock_weighted_return - benchmark_weighted_return
+
+    # Convert to a 1-99 scale (roughly)
+    # A relative return of 0% = 50, +100% = ~99, -100% = ~1
+    # Using sigmoid-like mapping
+    import math
+
+    rs_raw = 50 + 50 * math.tanh(relative_return * 2)
+    rs_rating = max(1, min(99, int(rs_raw)))
+
+    return {
+        "rs_rating": rs_rating,
+        "weighted_return_pct": stock_weighted_return * 100,
+        "benchmark_weighted_return_pct": benchmark_weighted_return * 100,
+        "relative_return_pct": relative_return * 100,
+        "components": components,
+        "interpretation": (
+            "Very strong momentum (top 20%)"
+            if rs_rating >= 80
+            else "Strong momentum"
+            if rs_rating >= 60
+            else "Average momentum"
+            if rs_rating >= 40
+            else "Weak momentum"
+            if rs_rating >= 20
+            else "Very weak momentum (bottom 20%)"
+        ),
+    }
