@@ -145,3 +145,81 @@ def safe_divide(numerator: Optional[float], denominator: Optional[float]) -> Opt
     if numerator is None or denominator is None or denominator == 0:
         return None
     return numerator / denominator
+
+
+def calculate_kelly_criterion(price_data: pd.DataFrame) -> Optional[dict]:
+    """
+    Calculate Kelly Criterion for optimal position sizing
+
+    Kelly% = (Win_Rate × Avg_Win/Avg_Loss - (1 - Win_Rate)) / (Avg_Win/Avg_Loss)
+
+    Or equivalently: Kelly% = W - (1-W)/R
+    where W = win rate, R = win/loss ratio (average win / average loss)
+
+    Returns full Kelly and practical half-Kelly (less aggressive, recommended).
+    Based on daily returns — represents theoretical optimal daily allocation.
+
+    Args:
+        price_data: DataFrame with 'Close' prices and DatetimeIndex
+
+    Returns:
+        Dictionary with Kelly sizing metrics, or None if insufficient data
+    """
+    if price_data is None or price_data.empty or "Close" not in price_data.columns:
+        return None
+
+    daily_returns = price_data["Close"].pct_change().dropna()
+
+    if len(daily_returns) < 30:
+        return None
+
+    wins = daily_returns[daily_returns > 0]
+    losses = daily_returns[daily_returns < 0]
+
+    if len(wins) == 0 or len(losses) == 0:
+        return None
+
+    win_rate = len(wins) / len(daily_returns)
+    avg_win = float(wins.mean())
+    avg_loss = float(abs(losses.mean()))
+
+    if avg_loss == 0:
+        return None
+
+    # Win/loss ratio
+    payoff_ratio = avg_win / avg_loss
+
+    # Kelly formula: f* = W - (1-W)/R
+    kelly_pct = win_rate - (1 - win_rate) / payoff_ratio
+
+    # Half-Kelly (recommended practical sizing)
+    half_kelly = kelly_pct / 2
+
+    # Interpretation
+    if kelly_pct <= 0:
+        recommendation = "no_position"
+        description = "Negative edge - do not allocate"
+    elif half_kelly < 0.05:
+        recommendation = "minimal"
+        description = "Very small edge - minimal position"
+    elif half_kelly < 0.15:
+        recommendation = "moderate"
+        description = "Moderate edge - standard position"
+    elif half_kelly < 0.25:
+        recommendation = "significant"
+        description = "Strong edge - can size up"
+    else:
+        recommendation = "large"
+        description = "Very strong edge (verify not overfitting)"
+
+    return {
+        "kelly_pct": kelly_pct * 100,
+        "half_kelly_pct": half_kelly * 100,
+        "win_rate": win_rate,
+        "avg_win_pct": avg_win * 100,
+        "avg_loss_pct": avg_loss * 100,
+        "payoff_ratio": payoff_ratio,
+        "recommendation": recommendation,
+        "description": description,
+        "total_trades": len(daily_returns),
+    }

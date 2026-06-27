@@ -381,6 +381,181 @@ class ValuationAnalyzer:
         # More sophisticated: weight by debt-to-equity ratio
         return cost_of_equity
 
+    # ==================== Monte Carlo Valuation ====================
+
+    def calculate_monte_carlo_valuation(
+        self,
+        n_simulations: int = 10000,
+        growth_rate_mean: Optional[float] = None,
+        growth_rate_std: Optional[float] = None,
+        wacc_mean: Optional[float] = None,
+        wacc_std: float = 2.0,
+        terminal_growth_mean: float = 2.5,
+        terminal_growth_std: float = 0.5,
+        projection_years: int = 5,
+    ) -> Dict[str, Any]:
+        """
+        Monte Carlo DCF Valuation - probabilistic intrinsic value estimation
+
+        Instead of a single-point DCF estimate, runs N simulations varying:
+        - FCF growth rate (normal distribution around estimate)
+        - WACC / discount rate (normal distribution around CAPM estimate)
+        - Terminal growth rate (normal distribution around long-term GDP growth)
+
+        Produces a distribution of intrinsic values with confidence intervals,
+        giving a probability that the stock is undervalued.
+
+        Args:
+            n_simulations: Number of Monte Carlo iterations (default 10,000)
+            growth_rate_mean: Center of growth rate distribution (%). Auto-estimated if None.
+            growth_rate_std: Std dev of growth rate (%). Auto-estimated if None.
+            wacc_mean: Center of WACC distribution (%). Auto-estimated if None.
+            wacc_std: Std dev of WACC distribution (%). Default 2%.
+            terminal_growth_mean: Center of terminal growth (%). Default 2.5%.
+            terminal_growth_std: Std dev of terminal growth (%). Default 0.5%.
+            projection_years: FCF projection horizon. Default 5 years.
+
+        Returns:
+            Dictionary with probability distribution of intrinsic values
+        """
+        result: Dict[str, Any] = {
+            "current_price": self.current_price,
+            "currency": self.currency,
+            "n_simulations": n_simulations,
+            "intrinsic_value_median": None,
+            "intrinsic_value_mean": None,
+            "probability_undervalued": None,
+            "confidence_intervals": {},
+            "assumptions": {},
+            "error": None,
+        }
+
+        try:
+            # Get current FCF
+            fcf_current = self._get_value(
+                self.fundamentals.get("cash_flow_annual"), "Free Cash Flow", 0
+            )
+
+            if fcf_current is None or fcf_current <= 0:
+                result["error"] = "Positive FCF required for Monte Carlo DCF"
+                return result
+
+            # Estimate parameters if not provided
+            if growth_rate_mean is None:
+                growth_rate_mean = self._estimate_fcf_growth_rate() or 5.0
+            if growth_rate_std is None:
+                # Use half the mean as std dev (wider uncertainty for higher growth)
+                growth_rate_std = max(abs(growth_rate_mean) * 0.5, 3.0)
+            if wacc_mean is None:
+                wacc_mean = self._estimate_wacc()
+
+            result["assumptions"] = {
+                "fcf_current": fcf_current,
+                "growth_rate_mean_pct": growth_rate_mean,
+                "growth_rate_std_pct": growth_rate_std,
+                "wacc_mean_pct": wacc_mean,
+                "wacc_std_pct": wacc_std,
+                "terminal_growth_mean_pct": terminal_growth_mean,
+                "terminal_growth_std_pct": terminal_growth_std,
+                "projection_years": projection_years,
+            }
+
+            # Get shares outstanding and net debt
+            shares_outstanding = to_float(self.info.get("sharesOutstanding")) or to_float(
+                self.info.get("impliedSharesOutstanding")
+            )
+            if not shares_outstanding or shares_outstanding <= 0:
+                market_cap = self._get_info_value("marketCap")
+                if market_cap and self.current_price and self.current_price > 0:
+                    shares_outstanding = market_cap / self.current_price
+                else:
+                    result["error"] = "Shares outstanding not available"
+                    return result
+
+            cash = self._get_info_value("totalCash") or 0.0
+            debt = self._get_info_value("totalDebt") or 0.0
+            net_debt = debt - cash
+
+            # Run simulations
+            rng = np.random.default_rng(seed=42)  # Reproducible results
+            intrinsic_values = np.zeros(n_simulations)
+
+            for i in range(n_simulations):
+                # Sample parameters from distributions
+                sim_growth = rng.normal(growth_rate_mean, growth_rate_std)
+                sim_wacc = rng.normal(wacc_mean, wacc_std)
+                sim_terminal = rng.normal(terminal_growth_mean, terminal_growth_std)
+
+                # Enforce constraints: WACC > terminal growth, WACC > 0
+                sim_wacc = max(sim_wacc, sim_terminal + 1.0, 3.0)
+                # Cap growth at reasonable bounds
+                sim_growth = np.clip(sim_growth, -20.0, 50.0)
+                sim_terminal = np.clip(sim_terminal, 0.0, 5.0)
+
+                # Project FCF
+                pv_fcf_sum = 0.0
+                for year in range(1, projection_years + 1):
+                    fcf_year = fcf_current * pow(1 + sim_growth / 100, year)
+                    pv_fcf = fcf_year / pow(1 + sim_wacc / 100, year)
+                    pv_fcf_sum += pv_fcf
+
+                # Terminal value
+                fcf_terminal = (
+                    fcf_current
+                    * pow(1 + sim_growth / 100, projection_years)
+                    * (1 + sim_terminal / 100)
+                )
+                terminal_value = fcf_terminal / ((sim_wacc - sim_terminal) / 100)
+                pv_terminal = terminal_value / pow(1 + sim_wacc / 100, projection_years)
+
+                # Enterprise to equity value
+                enterprise_value = pv_fcf_sum + pv_terminal
+                equity_value = enterprise_value - net_debt
+                intrinsic_per_share = equity_value / shares_outstanding
+
+                intrinsic_values[i] = max(intrinsic_per_share, 0.0)
+
+            # Compute statistics from simulation results
+            result["intrinsic_value_median"] = float(np.median(intrinsic_values))
+            result["intrinsic_value_mean"] = float(np.mean(intrinsic_values))
+            result["intrinsic_value_std"] = float(np.std(intrinsic_values))
+
+            # Probability stock is undervalued (price < intrinsic value)
+            if self.current_price and self.current_price > 0:
+                prob_undervalued = float(
+                    (intrinsic_values > self.current_price).sum() / n_simulations
+                )
+                result["probability_undervalued"] = prob_undervalued
+
+                # Discount/premium vs median
+                median_val = result["intrinsic_value_median"]
+                if median_val and median_val > 0:
+                    result["median_discount_premium_pct"] = (
+                        (self.current_price - median_val) / median_val
+                    ) * 100
+
+            # Confidence intervals
+            result["confidence_intervals"] = {
+                "ci_10": float(np.percentile(intrinsic_values, 10)),
+                "ci_25": float(np.percentile(intrinsic_values, 25)),
+                "ci_50": float(np.percentile(intrinsic_values, 50)),
+                "ci_75": float(np.percentile(intrinsic_values, 75)),
+                "ci_90": float(np.percentile(intrinsic_values, 90)),
+            }
+
+            # Scenario summary
+            result["scenarios"] = {
+                "bear_case": float(np.percentile(intrinsic_values, 10)),
+                "base_case": float(np.median(intrinsic_values)),
+                "bull_case": float(np.percentile(intrinsic_values, 90)),
+            }
+
+        except Exception as e:
+            logger.error(f"Monte Carlo DCF error for {self.ticker}: {e}")
+            result["error"] = str(e)
+
+        return result
+
     # ==================== Dividend Discount Model ====================
 
     def calculate_ddm_valuation(
@@ -861,6 +1036,7 @@ class ValuationAnalyzer:
         return {
             "ticker": self.ticker,
             "dcf_valuation": self.calculate_dcf_valuation(),
+            "monte_carlo_valuation": self.calculate_monte_carlo_valuation(),
             "ddm_valuation": self.calculate_ddm_valuation(),
             "dividend_analysis": self.analyze_dividends(),
             "earnings_analysis": self.analyze_earnings(),
@@ -916,6 +1092,52 @@ class ValuationAnalyzer:
             md.append("")
         else:
             md.append("*Insufficient data for DCF valuation*")
+            md.append("")
+
+        # Monte Carlo Valuation (new)
+        mc = results.get("monte_carlo_valuation", {})
+        if mc and not mc.get("error"):
+            md.append("### Monte Carlo Valuation (Probabilistic)")
+            md.append("")
+            md.append(
+                "> *Instead of one estimate, this runs 10,000 simulations with varying assumptions "
+                "to show the range of possible fair values and the probability of being undervalued.*"
+            )
+            md.append("")
+
+            prob = mc.get("probability_undervalued")
+            median_val = mc.get("intrinsic_value_median")
+            scenarios = mc.get("scenarios", {})
+
+            if prob is not None and median_val:
+                md.append(f"**Probability stock is undervalued: {prob:.0%}**")
+                md.append("")
+                md.append("| Scenario | Fair Value | vs. Current Price |")
+                md.append("|----------|-----------|-------------------|")
+
+                current = mc.get("current_price", 0)
+                for label, val in [
+                    ("Bear case (10th pctile)", scenarios.get("bear_case")),
+                    ("Base case (median)", scenarios.get("base_case")),
+                    ("Bull case (90th pctile)", scenarios.get("bull_case")),
+                ]:
+                    if val is not None and current:
+                        diff_pct = ((val - current) / current) * 100
+                        direction = "+" if diff_pct > 0 else ""
+                        md.append(f"| {label} | {symbol}{val:,.2f} | {direction}{diff_pct:.0f}% |")
+                md.append("")
+
+                ci = mc.get("confidence_intervals", {})
+                if ci:
+                    md.append(
+                        f"*50% confidence range: {symbol}{ci.get('ci_25', 0):,.2f} – "
+                        f"{symbol}{ci.get('ci_75', 0):,.2f}*"
+                    )
+                    md.append("")
+        elif mc and mc.get("error"):
+            md.append("### Monte Carlo Valuation")
+            md.append("")
+            md.append(f"*{mc['error']}*")
             md.append("")
 
         # DDM Valuation
@@ -1032,13 +1254,13 @@ class ValuationAnalyzer:
                 md.append("|---------|--------|----------|------------|")
                 for surprise in surprises[:4]:  # Last 4 quarters
                     quarter = surprise.get("quarter", "N/A")
-                    actual = surprise.get("actual", 0)
-                    estimate = surprise.get("estimate", 0)
-                    surprise_pct = surprise.get("surprise_pct", 0)
+                    actual = surprise.get("eps_actual", 0) or surprise.get("actual", 0)
+                    estimate = surprise.get("eps_estimate", 0) or surprise.get("estimate", 0)
+                    surprise_pct = surprise.get("surprise_pct", 0)  # Already in % form
                     surprise_dir = "+" if surprise_pct >= 0 else ""
                     md.append(
-                        f"| {quarter} | {symbol}{actual:.2f} | {symbol}{estimate:.2f} | "
-                        f"{surprise_dir}{surprise_pct * 100:.1f}% |"
+                        f"| {quarter} | {symbol}{actual:.4f} | {symbol}{estimate:.4f} | "
+                        f"{surprise_dir}{surprise_pct:.1f}% |"
                     )
                 md.append("")
         else:

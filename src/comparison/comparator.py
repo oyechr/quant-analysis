@@ -364,6 +364,146 @@ class PortfolioView:
         return weighted_avg_vol / np.sqrt(port_var)
 
 
+# ==================== Risk Parity & Portfolio Construction ====================
+
+
+def calculate_risk_parity_weights(
+    price_data_map: Dict[str, pd.DataFrame],
+) -> Optional[Dict[str, Any]]:
+    """
+    Calculate inverse-volatility (risk parity) portfolio weights.
+
+    Risk parity weights each position inversely proportional to its volatility,
+    so each position contributes roughly equal risk to the portfolio.
+    This produces more stable portfolios than equal-weight without requiring
+    full covariance matrix optimization.
+
+    Formula: w_i = (1/σ_i) / Σ(1/σ_j)
+
+    Args:
+        price_data_map: Dict mapping ticker -> DataFrame with 'Close' prices
+
+    Returns:
+        Dictionary with risk parity weights and supporting metrics, or None
+    """
+    if len(price_data_map) < 2:
+        return None
+
+    volatilities: Dict[str, float] = {}
+
+    for ticker, price_data in price_data_map.items():
+        if price_data is None or price_data.empty or "Close" not in price_data.columns:
+            continue
+        daily_returns = price_data["Close"].pct_change().dropna()
+        if len(daily_returns) < 20:
+            continue
+        ann_vol = float(daily_returns.std()) * np.sqrt(252)
+        if ann_vol > 0:
+            volatilities[ticker] = ann_vol
+
+    if len(volatilities) < 2:
+        return None
+
+    # Inverse-volatility weights
+    inv_vols = {t: 1.0 / v for t, v in volatilities.items()}
+    total_inv_vol = sum(inv_vols.values())
+    weights = {t: iv / total_inv_vol for t, iv in inv_vols.items()}
+
+    # Equal-weight comparison
+    n = len(weights)
+    equal_weight = 1.0 / n
+
+    return {
+        "weights": weights,
+        "volatilities": volatilities,
+        "method": "inverse_volatility",
+        "description": "Weights each position inversely to its volatility (lower vol = higher weight)",
+        "comparison_vs_equal_weight": {
+            ticker: {
+                "risk_parity": round(w, 4),
+                "equal_weight": round(equal_weight, 4),
+                "difference": round(w - equal_weight, 4),
+            }
+            for ticker, w in weights.items()
+        },
+    }
+
+
+def identify_correlation_flags(
+    correlation_matrix: pd.DataFrame,
+    high_threshold: float = 0.80,
+    hedge_threshold: float = -0.30,
+) -> Dict[str, Any]:
+    """
+    Identify portfolio diversification issues from a correlation matrix.
+
+    Flags:
+    - Highly correlated pairs (>0.80): redundant positions
+    - Negatively correlated pairs (<-0.30): potential hedging opportunities
+    - Overall diversification score
+
+    Args:
+        correlation_matrix: Ticker-by-ticker correlation DataFrame
+        high_threshold: Correlation above this is flagged as redundant
+        hedge_threshold: Correlation below this is flagged as hedge opportunity
+
+    Returns:
+        Dictionary with correlation flags and diversification assessment
+    """
+    if correlation_matrix.empty or len(correlation_matrix) < 2:
+        return {}
+
+    tickers = list(correlation_matrix.columns)
+    n = len(tickers)
+
+    redundant_pairs = []
+    hedge_pairs = []
+    all_correlations = []
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            corr = float(correlation_matrix.iloc[i, j])
+            all_correlations.append(corr)
+            pair = (tickers[i], tickers[j])
+
+            if corr >= high_threshold:
+                redundant_pairs.append(
+                    {
+                        "pair": pair,
+                        "correlation": round(corr, 3),
+                        "warning": f"{pair[0]} and {pair[1]} move together — consider reducing one",
+                    }
+                )
+            elif corr <= hedge_threshold:
+                hedge_pairs.append(
+                    {
+                        "pair": pair,
+                        "correlation": round(corr, 3),
+                        "opportunity": f"{pair[0]} and {pair[1]} offset each other — good for hedging",
+                    }
+                )
+
+    # Diversification score: lower average correlation = better diversification
+    avg_corr = float(np.mean(all_correlations)) if all_correlations else 0.0
+    # Scale: avg_corr 0 = perfect (100), avg_corr 1 = worst (0)
+    diversification_score = max(0, min(100, int((1 - avg_corr) * 100)))
+
+    return {
+        "diversification_score": diversification_score,
+        "average_correlation": round(avg_corr, 3),
+        "redundant_pairs": redundant_pairs,
+        "hedge_opportunities": hedge_pairs,
+        "total_pairs_analyzed": len(all_correlations),
+        "assessment": (
+            "Well diversified"
+            if diversification_score >= 70
+            else "Moderately diversified"
+            if diversification_score >= 40
+            else "Poorly diversified — high correlation between holdings"
+        ),
+    }
+
+
 def _safe_metric(
     data: Dict[str, Any],
     key: str,

@@ -624,6 +624,320 @@ class FundamentalAnalyzer:
 
         return score
 
+    # ==================== Forensic / Earnings Quality ====================
+
+    def calculate_beneish_m_score(self) -> Optional[Dict[str, Any]]:
+        """
+        Calculate Beneish M-Score for earnings manipulation detection
+
+        M-Score = -4.84 + 0.920*DSRI + 0.528*GMI + 0.404*AQI + 0.892*SGI
+                  + 0.115*DEPI - 0.172*SGAI + 4.679*TATA - 0.327*LVGI
+
+        Variables:
+        - DSRI: Days Sales in Receivables Index
+        - GMI: Gross Margin Index
+        - AQI: Asset Quality Index
+        - SGI: Sales Growth Index
+        - DEPI: Depreciation Index
+        - SGAI: SG&A Index (Selling, General & Administrative)
+        - TATA: Total Accruals to Total Assets
+        - LVGI: Leverage Index
+
+        Interpretation:
+        > -1.78: Likely manipulator (high probability of earnings manipulation)
+        <= -1.78: Unlikely manipulator
+
+        Returns:
+            Dictionary with M-Score value, components, and interpretation, or None
+        """
+        if self.balance_sheet_a is None or self.income_stmt_a is None or self.cash_flow_a is None:
+            logger.warning("Cannot calculate Beneish M-Score: Missing financial statements")
+            return None
+
+        # Current period (index 0) and prior period (index 1)
+        revenue_t = self._get_value(self.income_stmt_a, "Total Revenue", 0)
+        revenue_t1 = self._get_value(self.income_stmt_a, "Total Revenue", 1)
+        cogs_t = self._get_value(self.income_stmt_a, "Cost Of Revenue", 0)
+        cogs_t1 = self._get_value(self.income_stmt_a, "Cost Of Revenue", 1)
+        net_income_t = self._get_value(self.income_stmt_a, "Net Income", 0)
+        sga_t = self._get_value(self.income_stmt_a, "Selling General And Administration", 0)
+        sga_t1 = self._get_value(self.income_stmt_a, "Selling General And Administration", 1)
+        depreciation_t = self._get_value(self.income_stmt_a, "Reconciled Depreciation", 0)
+        depreciation_t1 = self._get_value(self.income_stmt_a, "Reconciled Depreciation", 1)
+
+        receivables_t = self._get_value(self.balance_sheet_a, "Accounts Receivable", 0)
+        receivables_t1 = self._get_value(self.balance_sheet_a, "Accounts Receivable", 1)
+        total_assets_t = self._get_value(self.balance_sheet_a, "Total Assets", 0)
+        total_assets_t1 = self._get_value(self.balance_sheet_a, "Total Assets", 1)
+        current_assets_t = self._get_value(self.balance_sheet_a, "Current Assets", 0)
+        current_assets_t1 = self._get_value(self.balance_sheet_a, "Current Assets", 1)
+        ppe_t = self._get_value(self.balance_sheet_a, "Net PPE", 0)
+        ppe_t1 = self._get_value(self.balance_sheet_a, "Net PPE", 1)
+        current_liabilities_t = self._get_value(self.balance_sheet_a, "Current Liabilities", 0)
+        current_liabilities_t1 = self._get_value(self.balance_sheet_a, "Current Liabilities", 1)
+        long_term_debt_t = self._get_value(self.balance_sheet_a, "Long Term Debt", 0)
+        long_term_debt_t1 = self._get_value(self.balance_sheet_a, "Long Term Debt", 1)
+
+        ocf_t = self._get_value(self.cash_flow_a, "Operating Cash Flow", 0)
+
+        # Validate minimum required data
+        if not all([revenue_t, revenue_t1, total_assets_t, total_assets_t1]):
+            logger.warning("Beneish M-Score: Insufficient data (missing revenue or total assets)")
+            return None
+
+        assert revenue_t is not None and revenue_t1 is not None
+        assert total_assets_t is not None and total_assets_t1 is not None
+
+        if revenue_t1 == 0 or total_assets_t1 == 0:
+            return None
+
+        components = {}
+        available_count = 0
+
+        # DSRI: Days Sales in Receivables Index
+        # (Receivables_t / Revenue_t) / (Receivables_t-1 / Revenue_t-1)
+        dsri = None
+        if receivables_t and receivables_t1 and revenue_t1 != 0:
+            ratio_t = receivables_t / revenue_t
+            ratio_t1 = receivables_t1 / revenue_t1
+            if ratio_t1 != 0:
+                dsri = ratio_t / ratio_t1
+                components["dsri"] = dsri
+                available_count += 1
+
+        # GMI: Gross Margin Index
+        # ((Revenue_t-1 - COGS_t-1) / Revenue_t-1) / ((Revenue_t - COGS_t) / Revenue_t)
+        gmi = None
+        if cogs_t and cogs_t1:
+            gm_t = (revenue_t - cogs_t) / revenue_t
+            gm_t1 = (revenue_t1 - cogs_t1) / revenue_t1
+            if gm_t != 0:
+                gmi = gm_t1 / gm_t
+                components["gmi"] = gmi
+                available_count += 1
+
+        # AQI: Asset Quality Index
+        # (1 - (CA_t + PPE_t) / TA_t) / (1 - (CA_t-1 + PPE_t-1) / TA_t-1)
+        aqi = None
+        if current_assets_t and ppe_t and current_assets_t1 and ppe_t1:
+            aq_t = 1 - (current_assets_t + ppe_t) / total_assets_t
+            aq_t1 = 1 - (current_assets_t1 + ppe_t1) / total_assets_t1
+            if aq_t1 != 0:
+                aqi = aq_t / aq_t1
+                components["aqi"] = aqi
+                available_count += 1
+
+        # SGI: Sales Growth Index
+        # Revenue_t / Revenue_t-1
+        sgi = revenue_t / revenue_t1
+        components["sgi"] = sgi
+        available_count += 1
+
+        # DEPI: Depreciation Index
+        # (Dep_t-1 / (Dep_t-1 + PPE_t-1)) / (Dep_t / (Dep_t + PPE_t))
+        depi = None
+        if depreciation_t and depreciation_t1 and ppe_t and ppe_t1:
+            dep_rate_t = depreciation_t / (depreciation_t + ppe_t)
+            dep_rate_t1 = depreciation_t1 / (depreciation_t1 + ppe_t1)
+            if dep_rate_t != 0:
+                depi = dep_rate_t1 / dep_rate_t
+                components["depi"] = depi
+                available_count += 1
+
+        # SGAI: SG&A Index
+        # (SGA_t / Revenue_t) / (SGA_t-1 / Revenue_t-1)
+        sgai = None
+        if sga_t and sga_t1:
+            sga_ratio_t = sga_t / revenue_t
+            sga_ratio_t1 = sga_t1 / revenue_t1
+            if sga_ratio_t1 != 0:
+                sgai = sga_ratio_t / sga_ratio_t1
+                components["sgai"] = sgai
+                available_count += 1
+
+        # TATA: Total Accruals to Total Assets
+        # (Net Income - OCF) / Total Assets
+        tata = None
+        if net_income_t is not None and ocf_t is not None:
+            tata = (net_income_t - ocf_t) / total_assets_t
+            components["tata"] = tata
+            available_count += 1
+
+        # LVGI: Leverage Index
+        # ((CL_t + LTD_t) / TA_t) / ((CL_t-1 + LTD_t-1) / TA_t-1)
+        lvgi = None
+        if (
+            current_liabilities_t is not None
+            and long_term_debt_t is not None
+            and current_liabilities_t1 is not None
+            and long_term_debt_t1 is not None
+        ):
+            lev_t = (current_liabilities_t + long_term_debt_t) / total_assets_t
+            lev_t1 = (current_liabilities_t1 + long_term_debt_t1) / total_assets_t1
+            if lev_t1 != 0:
+                lvgi = lev_t / lev_t1
+                components["lvgi"] = lvgi
+                available_count += 1
+
+        # Need at least 5 of 8 components for a meaningful score
+        if available_count < 5:
+            logger.warning(f"Beneish M-Score: Only {available_count}/8 components available")
+            return None
+
+        # Calculate M-Score using available components (use 1.0 for missing indices)
+        m_score = (
+            -4.84
+            + 0.920 * (dsri if dsri is not None else 1.0)
+            + 0.528 * (gmi if gmi is not None else 1.0)
+            + 0.404 * (aqi if aqi is not None else 1.0)
+            + 0.892 * sgi
+            + 0.115 * (depi if depi is not None else 1.0)
+            - 0.172 * (sgai if sgai is not None else 1.0)
+            + 4.679 * (tata if tata is not None else 0.0)
+            - 0.327 * (lvgi if lvgi is not None else 1.0)
+        )
+
+        # Interpretation
+        if m_score > -1.78:
+            interpretation = "likely_manipulator"
+            risk_level = "high"
+        elif m_score > -2.22:
+            interpretation = "grey_zone"
+            risk_level = "moderate"
+        else:
+            interpretation = "unlikely_manipulator"
+            risk_level = "low"
+
+        return {
+            "m_score": m_score,
+            "interpretation": interpretation,
+            "risk_level": risk_level,
+            "threshold": -1.78,
+            "components": components,
+            "components_available": available_count,
+        }
+
+    def calculate_accruals_quality(self) -> Optional[Dict[str, Any]]:
+        """
+        Calculate Sloan Accrual Ratio for earnings quality assessment
+
+        Accrual Ratio = (Net Income - Operating Cash Flow) / Total Assets
+
+        High accruals (>10%) indicate lower earnings quality and predict
+        future underperformance. One of the most robust anomalies in
+        academic finance (Sloan, 1996).
+
+        Interpretation:
+        < 5%: High quality (cash-backed earnings)
+        5-10%: Moderate quality
+        > 10%: Low quality (accrual-heavy earnings)
+        Negative: Very high quality (cash earnings exceed reported)
+
+        Returns:
+            Dictionary with accrual ratio and interpretation, or None
+        """
+        if self.income_stmt_a is None or self.cash_flow_a is None or self.balance_sheet_a is None:
+            return None
+
+        net_income = self._get_value(self.income_stmt_a, "Net Income", 0)
+        ocf = self._get_value(self.cash_flow_a, "Operating Cash Flow", 0)
+        total_assets = self._get_value(self.balance_sheet_a, "Total Assets", 0)
+
+        # Try average total assets for more accuracy
+        total_assets_prev = self._get_value(self.balance_sheet_a, "Total Assets", 1)
+        if total_assets and total_assets_prev:
+            avg_total_assets = (total_assets + total_assets_prev) / 2
+        else:
+            avg_total_assets = total_assets
+
+        if net_income is None or ocf is None or not avg_total_assets:
+            return None
+
+        # Sloan accrual ratio
+        accruals = net_income - ocf
+        accrual_ratio = (accruals / avg_total_assets) * 100  # As percentage
+
+        # Interpretation
+        abs_ratio = abs(accrual_ratio)
+        if accrual_ratio < 0:
+            quality = "very_high"
+            interpretation = "Cash earnings exceed reported income"
+        elif abs_ratio <= 5:
+            quality = "high"
+            interpretation = "Earnings well-supported by cash flows"
+        elif abs_ratio <= 10:
+            quality = "moderate"
+            interpretation = "Some earnings not backed by cash"
+        else:
+            quality = "low"
+            interpretation = "High accruals - earnings quality concern"
+
+        return {
+            "accrual_ratio_pct": accrual_ratio,
+            "net_income": net_income,
+            "operating_cash_flow": ocf,
+            "total_accruals": accruals,
+            "quality": quality,
+            "interpretation": interpretation,
+        }
+
+    def calculate_cash_conversion(self) -> Optional[Dict[str, Any]]:
+        """
+        Calculate Cash Conversion Score (CFO / EBITDA)
+
+        Measures how much of reported EBITDA converts to actual operating cash.
+        Persistent low conversion is a red flag for earnings quality.
+
+        Interpretation:
+        > 100%: Excellent (more cash than EBITDA - working capital benefit)
+        80-100%: Good (normal conversion)
+        60-80%: Fair (some cash leakage)
+        < 60%: Poor (significant gap between earnings and cash)
+
+        Returns:
+            Dictionary with conversion metrics, or None
+        """
+        if self.cash_flow_a is None or self.income_stmt_a is None:
+            return None
+
+        ocf = self._get_value(self.cash_flow_a, "Operating Cash Flow", 0)
+        ebitda = self._get_value(self.income_stmt_a, "EBITDA", 0)
+
+        if ocf is None or ebitda is None or ebitda == 0:
+            return None
+
+        conversion_ratio = (ocf / ebitda) * 100
+
+        # Historical trend (3 years)
+        trend = []
+        for i in range(3):
+            ocf_i = self._get_value(self.cash_flow_a, "Operating Cash Flow", i)
+            ebitda_i = self._get_value(self.income_stmt_a, "EBITDA", i)
+            if ocf_i is not None and ebitda_i is not None and ebitda_i != 0:
+                trend.append((ocf_i / ebitda_i) * 100)
+
+        # Interpretation
+        if conversion_ratio > 100:
+            quality = "excellent"
+        elif conversion_ratio >= 80:
+            quality = "good"
+        elif conversion_ratio >= 60:
+            quality = "fair"
+        else:
+            quality = "poor"
+
+        # Check for persistent poor conversion
+        persistent_poor = len(trend) >= 2 and all(r < 60 for r in trend)
+
+        return {
+            "conversion_ratio_pct": conversion_ratio,
+            "operating_cash_flow": ocf,
+            "ebitda": ebitda,
+            "quality": quality,
+            "trend": trend,
+            "persistent_poor_conversion": persistent_poor,
+        }
+
     # ==================== Aggregation Methods ====================
 
     def calculate_all(self) -> Dict[str, Any]:
@@ -644,6 +958,9 @@ class FundamentalAnalyzer:
             "quality_scores": {
                 "altman_z": self.calculate_altman_z_score(),
                 "piotroski_f": self.calculate_piotroski_f_score(),
+                "beneish_m": self.calculate_beneish_m_score(),
+                "accruals_quality": self.calculate_accruals_quality(),
+                "cash_conversion": self.calculate_cash_conversion(),
             },
         }
 
@@ -825,40 +1142,94 @@ class FundamentalAnalyzer:
             md.append("")
 
         # Quality Scores
-        md.append("### Quality Scores")
+        md.append("### Quality & Integrity Scores")
+        md.append("")
+        md.append(
+            "> *These scores detect financial health problems and earnings manipulation "
+            "that standard metrics might miss.*"
+        )
         md.append("")
         quality = results["quality_scores"]
-
-        md.append("| Score | Value | Interpretation |")
-        md.append("|-------|-------|----------------|")
 
         # Altman Z-Score
         z_score = quality.get("altman_z")
         if z_score:
             if z_score > self.config.z_score_safe:
-                z_interp = "Safe Zone"
+                z_interp = "Safe — low bankruptcy risk"
             elif z_score > self.config.z_score_distress:
-                z_interp = "Grey Zone"
+                z_interp = "Grey zone — some financial stress"
             else:
-                z_interp = "Distress Zone"
-            md.append(f"| Altman Z-Score | {z_score:.2f} | {z_interp} |")
-        else:
-            md.append("| Altman Z-Score | N/A | Insufficient data |")
+                z_interp = "Distress — elevated bankruptcy risk"
+            md.append(f"**Altman Z-Score: {z_score:.2f}** — {z_interp}")
+            md.append("")
+            md.append("> *Predicts bankruptcy risk. Above 2.99 = safe, below 1.81 = danger.*")
+            md.append("")
 
         # Piotroski F-Score
         f_score = quality.get("piotroski_f")
         if f_score is not None:
             if f_score >= self.config.min_f_score_strong:
-                f_interp = "Strong"
+                f_interp = "Strong fundamentals"
             elif f_score >= self.config.min_f_score_average:
-                f_interp = "Average"
+                f_interp = "Average fundamentals"
             else:
-                f_interp = "Weak"
-            md.append(f"| Piotroski F-Score | {f_score}/9 | {f_interp} |")
-        else:
-            md.append("| Piotroski F-Score | N/A | Insufficient data |")
+                f_interp = "Weak fundamentals"
+            md.append(f"**Piotroski F-Score: {f_score}/9** — {f_interp}")
+            md.append("")
+            md.append("> *Scores 9 yes/no financial health checks. 8-9 = strong, 0-4 = weak.*")
+            md.append("")
 
-        md.append("")
+        # Beneish M-Score (new)
+        beneish = quality.get("beneish_m")
+        if beneish and isinstance(beneish, dict):
+            m_score = beneish.get("m_score")
+            risk = beneish.get("risk_level", "unknown")
+            if m_score is not None:
+                if risk == "low":
+                    m_interp = "Low manipulation risk"
+                elif risk == "moderate":
+                    m_interp = "Grey zone — inconclusive"
+                else:
+                    m_interp = "HIGH manipulation risk — earnings may be artificially inflated"
+                md.append(f"**Beneish M-Score: {m_score:.2f}** — {m_interp}")
+                md.append("")
+                md.append(
+                    "> *Detects earnings manipulation (like Enron). "
+                    "Above -1.78 = likely manipulator. Lower is safer.*"
+                )
+                md.append("")
+
+        # Accruals Quality (new)
+        accruals = quality.get("accruals_quality")
+        if accruals and isinstance(accruals, dict):
+            ratio = accruals.get("accrual_ratio_pct")
+            if ratio is not None:
+                md.append(
+                    f"**Earnings Quality (Accruals): {ratio:.1f}%** — {accruals.get('interpretation', '')}"
+                )
+                md.append("")
+                md.append(
+                    "> *Measures how much of reported earnings is real cash vs. accounting entries. "
+                    "Negative = great (cash exceeds reported). High positive = concern.*"
+                )
+                md.append("")
+
+        # Cash Conversion (new)
+        cash_conv = quality.get("cash_conversion")
+        if cash_conv and isinstance(cash_conv, dict):
+            conv_ratio = cash_conv.get("conversion_ratio_pct")
+            conv_qual = cash_conv.get("quality", "unknown")
+            if conv_ratio is not None:
+                md.append(f"**Cash Conversion: {conv_ratio:.0f}%** — {conv_qual.title()}")
+                md.append("")
+                md.append(
+                    "> *What percentage of reported EBITDA actually becomes cash? "
+                    "80%+ is healthy. Below 60% persistently is a red flag.*"
+                )
+                if cash_conv.get("persistent_poor_conversion"):
+                    md.append("")
+                    md.append("**Warning:** Persistently poor cash conversion over multiple years")
+                md.append("")
 
         return md
 
@@ -867,3 +1238,158 @@ class FundamentalAnalyzer:
         if value is None:
             return "N/A"
         return f"{value:+.2f}%"
+
+
+# ==================== Standalone Functions ====================
+
+
+def calculate_pead_signal(
+    earnings_history: List[Dict[str, Any]],
+    price_data: Optional[pd.DataFrame] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Calculate Post-Earnings Announcement Drift (PEAD) signal.
+
+    PEAD is one of the most well-documented market anomalies: stocks that
+    beat earnings estimates tend to drift UP for 60-90 days after the
+    announcement, and stocks that miss tend to drift DOWN.
+
+    Computes Standardized Unexpected Earnings (SUE):
+        SUE = (Actual EPS - Estimate EPS) / Std(Surprise)
+
+    A positive SUE > 1.0 is a buy signal; negative SUE < -1.0 is bearish.
+
+    Args:
+        earnings_history: List of dicts with 'quarter', 'epsActual',
+                         'epsEstimate', 'epsDifference', 'surprisePercent'
+        price_data: Optional DataFrame with 'Close' prices to check
+                   post-announcement price drift confirmation
+
+    Returns:
+        Dictionary with PEAD signal analysis, or None if insufficient data
+    """
+    if not earnings_history or len(earnings_history) < 2:
+        return None
+
+    # Filter to entries with valid surprise data
+    valid = [
+        e
+        for e in earnings_history
+        if e.get("epsActual") is not None
+        and e.get("epsEstimate") is not None
+        and e.get("epsDifference") is not None
+    ]
+
+    if len(valid) < 2:
+        return None
+
+    # Calculate surprise statistics
+    surprises = [e["epsDifference"] for e in valid]
+
+    import numpy as np
+
+    surprise_std = float(np.std(surprises)) if len(surprises) >= 2 else None
+
+    # Most recent earnings
+    latest = valid[0]  # Assuming sorted most-recent-first
+    latest_surprise = latest["epsDifference"]
+    latest_surprise_pct = latest.get("surprisePercent", 0)
+
+    # SUE (Standardized Unexpected Earnings)
+    sue = None
+    if surprise_std and surprise_std > 0:
+        sue = latest_surprise / surprise_std
+
+    # Streak analysis (consecutive beats/misses)
+    streak = 0
+    streak_direction = None
+    for e in valid:
+        diff = e.get("epsDifference", 0)
+        if diff is None:
+            break
+        if diff > 0:
+            if streak_direction is None or streak_direction == "beat":
+                streak += 1
+                streak_direction = "beat"
+            else:
+                break
+        elif diff < 0:
+            if streak_direction is None or streak_direction == "miss":
+                streak += 1
+                streak_direction = "miss"
+            else:
+                break
+        else:
+            break
+
+    # Drift confirmation from price data (if available)
+    drift_confirmed = None
+    days_since_earnings = None
+    post_earnings_return = None
+
+    if price_data is not None and not price_data.empty and latest.get("quarter"):
+        try:
+            earnings_date = pd.Timestamp(latest["quarter"])
+            # Find the closest trading day after earnings
+            prices_after = price_data[price_data.index >= earnings_date]
+            if len(prices_after) >= 2:
+                days_since_earnings = len(prices_after)
+                price_at_earnings = float(prices_after["Close"].iloc[0])
+                price_now = float(prices_after["Close"].iloc[-1])
+                if price_at_earnings > 0:
+                    post_earnings_return = (price_now - price_at_earnings) / price_at_earnings
+
+                    # Drift confirmed if price moved in same direction as surprise
+                    if latest_surprise > 0 and post_earnings_return > 0:
+                        drift_confirmed = True
+                    elif latest_surprise < 0 and post_earnings_return < 0:
+                        drift_confirmed = True
+                    else:
+                        drift_confirmed = False
+        except Exception:
+            pass
+
+    # Signal interpretation
+    if sue is not None:
+        if sue > 2.0:
+            signal = "strong_buy"
+            interpretation = "Large positive surprise — strong drift expected"
+        elif sue > 1.0:
+            signal = "buy"
+            interpretation = "Meaningful beat — positive drift likely"
+        elif sue > 0:
+            signal = "slight_positive"
+            interpretation = "Small beat — mild positive drift possible"
+        elif sue > -1.0:
+            signal = "slight_negative"
+            interpretation = "Small miss — mild negative drift possible"
+        elif sue > -2.0:
+            signal = "sell"
+            interpretation = "Meaningful miss — negative drift likely"
+        else:
+            signal = "strong_sell"
+            interpretation = "Large negative surprise — strong downward drift expected"
+    else:
+        signal = "neutral"
+        interpretation = "Insufficient data for SUE calculation"
+
+    return {
+        "sue": sue,
+        "signal": signal,
+        "interpretation": interpretation,
+        "latest_surprise_pct": latest_surprise_pct * 100
+        if latest_surprise_pct and abs(latest_surprise_pct) < 10
+        else latest_surprise_pct,
+        "latest_eps_actual": latest.get("epsActual"),
+        "latest_eps_estimate": latest.get("epsEstimate"),
+        "earnings_date": latest.get("quarter"),
+        "surprise_std": surprise_std,
+        "streak": streak,
+        "streak_direction": streak_direction,
+        "drift_confirmed": drift_confirmed,
+        "days_since_earnings": days_since_earnings,
+        "post_earnings_return_pct": post_earnings_return * 100
+        if post_earnings_return is not None
+        else None,
+        "sample_size": len(valid),
+    }
