@@ -10,22 +10,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..data_fetcher import DataFetcher
-from ..scoring import StockScorer
+from ..markets import benchmark_name
+from ..pipeline import AnalysisBundle, AnalysisOptions, analyze_ticker
+from ..scoring import ScoringConfig
 from ..utils.toon_serializer import report_to_toon
-from .sections import (
-    AnalystRatingsSection,
-    DividendsSection,
-    EarningsSection,
-    FundamentalAnalysisSection,
-    FundamentalsSection,
-    HoldersSection,
-    InfoSection,
-    NewsSection,
-    PriceDataSection,
-    ReportSection,
-    RiskAnalysisSection,
-    TechnicalAnalysisSection,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -41,21 +29,9 @@ class ReportGenerator:
             data_fetcher: DataFetcher instance
             output_dir: Directory to save reports
         """
-        self.fetcher = data_fetcher or DataFetcher()
+        self.fetcher = data_fetcher or DataFetcher(cache_dir=output_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
-
-        # Initialize all report sections
-        self.sections: Dict[str, ReportSection] = {
-            "info": InfoSection(),
-            "price_data": PriceDataSection(),
-            "fundamentals": FundamentalsSection(),
-            "earnings": EarningsSection(),
-            "holders": HoldersSection(),
-            "dividends": DividendsSection(),
-            "analyst_ratings": AnalystRatingsSection(),
-            "news": NewsSection(),
-        }
 
     def generate_full_report(
         self,
@@ -67,6 +43,7 @@ class ReportGenerator:
         include_fundamental: bool = True,
         include_risk: bool = True,
         include_valuation: bool = True,
+        scoring_config: Optional[ScoringConfig] = None,
     ) -> Dict[str, Any]:
         """
         Generate comprehensive report with all available data
@@ -77,146 +54,48 @@ class ReportGenerator:
         Args:
             ticker: Stock ticker symbol
             period: Period for price data (1mo, 3mo, 6mo, 1y, 2y, 5y, etc.)
-            output_format: "json", "markdown", "toon", or "all" (json+markdown+toon)
+            output_format: "json", "markdown", "toon", "all" (json+markdown+toon),
+                or "none" (compute only, write nothing)
             use_cache: Whether to use cached data
             include_technical: Whether to include technical analysis (default: True)
             include_fundamental: Whether to include fundamental analysis (default: True)
             include_risk: Whether to include risk metrics and performance analysis (default: True)
             include_valuation: Whether to include valuation analysis - DCF, DDM, dividends, earnings (default: True)
+            scoring_config: Scoring preset (default weights if None)
 
         Returns:
             Dictionary with all fetched data and metadata
         """
-        ticker = ticker.upper()
-        logger.info(f"Generating full report for {ticker}")
+        return self.generate(
+            ticker,
+            AnalysisOptions(
+                period=period,
+                use_cache=use_cache,
+                include_technical=include_technical,
+                include_fundamental=include_fundamental,
+                include_risk=include_risk,
+                include_valuation=include_valuation,
+                scoring_config=scoring_config,
+            ),
+            output_format=output_format,
+        ).report
 
-        # Initialize report with metadata
-        report_data: Dict[str, Any] = {
-            "ticker": ticker,
-            "generated_at": datetime.now().isoformat(),
-            "period": period,
-        }
+    def generate(
+        self,
+        ticker: str,
+        options: Optional[AnalysisOptions] = None,
+        output_format: str = "all",
+    ) -> AnalysisBundle:
+        """
+        Run the analysis pipeline for a ticker and save report files.
 
-        # Fetch data from all sections
-        for section_name, section in self.sections.items():
-            try:
-                raw_data = section.fetch_data(
-                    self.fetcher,
-                    ticker,
-                    use_cache=use_cache,
-                    period=period,  # Pass through for price data
-                )
-                report_data[section_name] = section.format_for_json(raw_data)
-            except Exception as e:
-                logger.error(f"Error processing {section_name} section: {e}")
-                report_data[section_name] = None
+        Returns:
+            AnalysisBundle with the report dict, scoring result, and analyzers
+        """
+        bundle = analyze_ticker(ticker, fetcher=self.fetcher, options=options)
+        ticker = bundle.ticker
+        report_data = bundle.report
 
-        # Add technical analysis if requested
-        technical_analyzer = None
-        if include_technical:
-            try:
-                tech_section = TechnicalAnalysisSection()
-                technical_analyzer = tech_section.fetch_data(
-                    self.fetcher,
-                    ticker,
-                    use_cache=use_cache,
-                    period="1y",  # Force 1y for technical analysis
-                )
-                report_data["technical_analysis"] = tech_section.format_for_json(technical_analyzer)
-            except Exception as e:
-                logger.error(f"Error processing technical analysis: {e}")
-                report_data["technical_analysis"] = None
-
-        # Add fundamental analysis if requested
-        fundamental_analyzer = None
-        if include_fundamental:
-            try:
-                fund_section = FundamentalAnalysisSection()
-                # Pass price data if available for market-based calculations
-                price_data = self.fetcher.fetch_ticker(ticker, period="1y", use_cache=use_cache)
-                fundamental_analyzer = fund_section.fetch_data(
-                    self.fetcher, ticker, use_cache=use_cache, price_data=price_data
-                )
-                report_data["fundamental_analysis"] = fund_section.format_for_json(
-                    fundamental_analyzer
-                )
-            except Exception as e:
-                logger.error(f"Error processing fundamental analysis: {e}")
-                report_data["fundamental_analysis"] = None
-
-        # Add risk analysis if requested
-        risk_analyzer_tuple = None
-        if include_risk:
-            try:
-                risk_section = RiskAnalysisSection()
-                # Reuse price data from fundamental analysis if available
-                price_data = self.fetcher.fetch_ticker(ticker, period=period, use_cache=use_cache)
-                risk_analyzer_tuple = risk_section.fetch_data(
-                    self.fetcher, ticker, use_cache=use_cache, price_data=price_data, period=period
-                )
-                report_data["risk_analysis"] = risk_section.format_for_json(risk_analyzer_tuple)
-            except Exception as e:
-                logger.error(f"Error processing risk analysis: {e}")
-                report_data["risk_analysis"] = None
-
-        # Add valuation analysis if requested
-        valuation_analyzer = None
-        if include_valuation:
-            try:
-                from ..analysis import ValuationAnalyzer
-
-                # Fetch required data
-                price_data = self.fetcher.fetch_ticker(ticker, period="1y", use_cache=use_cache)
-                fundamentals = self.fetcher.fetch_fundamentals(ticker, use_cache=use_cache)
-                earnings_data = self.fetcher.fetch_earnings(ticker, use_cache=use_cache)
-
-                # Fetch dividends and convert to Series
-                div_data = self.fetcher.fetch_dividends(ticker, use_cache=use_cache)
-                dividends_series = None
-                if div_data and div_data.get("dividends") is not None:
-                    dividends_df = div_data["dividends"]
-                    if not dividends_df.empty:
-                        # Check if Date is already the index or a column
-                        if "Date" in dividends_df.columns:
-                            dividends_series = dividends_df.set_index("Date")["Dividends"]
-                        elif dividends_df.index.name == "Date":
-                            dividends_series = dividends_df["Dividends"]
-                        else:
-                            logger.warning("Dividends DataFrame has unexpected structure")
-                            dividends_series = dividends_df.iloc[:, 0]  # Fallback to first column
-
-                # Create analyzer
-                valuation_analyzer = ValuationAnalyzer(
-                    ticker=ticker,
-                    ticker_info=report_data.get("info", {}),
-                    price_data=price_data,
-                    fundamentals=fundamentals,
-                    earnings_data=earnings_data,
-                    dividends_data=dividends_series,
-                )
-
-                # Run analysis
-                valuation_results = valuation_analyzer.analyze()
-                report_data["valuation_analysis"] = valuation_results
-            except Exception as e:
-                logger.error(f"Error processing valuation analysis: {e}")
-                report_data["valuation_analysis"] = None
-
-        # Run Composite Scoring Engine
-        scoring_result = None
-        try:
-            scorer = StockScorer()
-            scoring_result = scorer.score(report_data)
-            report_data["scoring"] = scoring_result.to_dict()
-            logger.info(
-                f"Scoring complete: {scoring_result.composite_score:.1f}/100 "
-                f"({scoring_result.signal})"
-            )
-        except Exception as e:
-            logger.error(f"Error running scoring engine: {e}")
-            report_data["scoring"] = None
-
-        # Save outputs
         if output_format in ["json", "all"]:
             self._save_json_report(ticker, report_data)
 
@@ -224,23 +103,23 @@ class ReportGenerator:
             self._save_markdown_report(
                 ticker,
                 report_data,
-                technical_analyzer,
-                fundamental_analyzer,
-                risk_analyzer_tuple,
-                valuation_analyzer,
-                scoring_result,
+                bundle.technical,
+                bundle.fundamental,
+                bundle.risk,
+                bundle.valuation,
+                bundle.scoring,
             )
 
         if output_format in ["toon", "all"]:
             self._save_toon_report(ticker, report_data)
 
         # Save separate scoring report
-        if scoring_result:
-            self._save_scoring_json(ticker, scoring_result)
-            self._save_scoring_markdown(ticker, scoring_result)
+        if bundle.scoring and output_format != "none":
+            self._save_scoring_json(ticker, bundle.scoring)
+            self._save_scoring_markdown(ticker, bundle.scoring)
 
         logger.info(f"Report generation complete for {ticker}")
-        return report_data
+        return bundle
 
     def _get_reports_dir(self, ticker: str) -> Path:
         """Get (and create) reports directory for a ticker"""
@@ -984,7 +863,8 @@ class ReportGenerator:
                     md.append(
                         f"- **Alpha: {alpha_val:.1%}** — underperforming what its risk level predicts"
                     )
-                md.append(f"- **Correlation to S&P 500:** {corr_val:.0%}")
+                bench = benchmark_name(mr.get("benchmark"))
+                md.append(f"- **Correlation to {bench}:** {corr_val:.0%}")
                 md.append(
                     f"- **R-squared:** {mr.get('r_squared', 0):.0%} (how much of movement is explained by market)"
                 )
@@ -1249,8 +1129,7 @@ class ReportGenerator:
         # Save detailed valuation analysis markdown if available
         if valuation_analyzer:
             self._save_valuation_markdown(ticker, valuation_analyzer)
-            valuation_results = valuation_analyzer.analyze()
-            self._save_valuation_json(ticker, valuation_results)
+            self._save_valuation_json(ticker, valuation_analyzer.analyze())
 
     def _save_technical_json(self, ticker: str, technical_analyzer):
         """Save detailed technical analysis as separate JSON file"""

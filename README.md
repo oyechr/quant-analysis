@@ -11,7 +11,9 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 - Earnings data and institutional holdings
 - Dividend history and analyst ratings
 - Recent news articles
-- Intelligent caching system (cache vs reports separation)
+- Caching with per-resource expiry (prices 12h, company info 24h, statements 7d, ...)
+- Falls back to the last cached copy when Yahoo is unreachable or rate-limiting, and says so
+- Reports flag stale data (e.g. last price bar is 9 days old)
 
 ### Technical Analysis
 
@@ -44,7 +46,15 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 - **Risk-Adjusted Returns:** Sharpe ratio, Sortino ratio, Calmar ratio
 - **Drawdown Analysis:** Maximum drawdown, current drawdown
 - **Value at Risk (VaR):** 95% and 99% confidence levels (parametric and historical)
-- **Market Risk:** Beta calculation
+- **Market Risk:** Beta and alpha against the stock's home market (OSEBX for `.OL`, FTSE 100 for `.L`, DAX for `.DE`, ...; S&P 500 for US listings)
+
+### Screening
+
+- **Two-stage screen** over an index or ticker list: a cheap multi-factor ranking of every ticker, then the full composite score for the top N
+- **Built-in universes:** S&P 500, S&P 100, Nasdaq-100, OBX (Nasdaq-100 from Nasdaq's official constituent list, others from Wikipedia; cached for 30 days), plus the latest `discover` consensus picks
+- **Factors:** Value (earnings yield, book/price), Quality (ROE, leverage), Momentum (12-minus-1 month), Low Volatility; each ranked cross-sectionally
+- **Filters:** sector/industry include/exclude, market cap range, minimum volume
+- Results saved as CSV (spreadsheet-friendly), JSON, and TOON
 
 ### Portfolio Discovery
 
@@ -94,7 +104,7 @@ pip install -e ".[all]"
 
 Optional extras (combine as needed, e.g. `".[llm,dev]"`):
 
-- `llm` -- anthropic, openai (required for `quant explain`)
+- `llm` -- anthropic, openai (required for `quant chat`)
 - `viz` -- matplotlib, seaborn (correlation heatmap in `quant compare`)
 - `all` -- `llm` + `viz`
 - `dev` -- pytest, ruff, mypy
@@ -110,10 +120,12 @@ quant report AAPL
 quant report EQNR --period 2y
 quant report MSFT --exclude-technical --no-cache
 quant report AAPL --format toon
+quant report EQNR.OL --config income
 ```
 
 Options:
 - ``--exclude-technical / --exclude-fundamental / --exclude-risk / --exclude-valuation``
+- ``--config [default|value|growth|income]`` -- scoring weight preset (recorded in the saved scoring files)
 
 ### ``quant score`` -- Multi-ticker screening table
 
@@ -127,6 +139,44 @@ quant score EQNR BP --config value
 
 Options:
 - ``--config [default|value|growth|income]`` -- scoring weight preset
+- ``--workers N`` -- tickers analyzed in parallel (default 4)
+
+### ``quant screen`` -- Find candidates across an index
+
+Ranks every ticker in a universe with a multi-factor model, then runs the full analysis and composite score on the best ``--top`` candidates.
+
+```bash
+quant screen sp500 --top 25 --config value
+quant screen obx --exclude-sector Energy
+quant screen nasdaq100 --sector Technology --min-mcap 50B
+quant screen discover                         # score the whales' consensus picks
+quant screen my_tickers.txt EQNR.OL DNB.OL    # ticker file + literal tickers
+quant screen --list                           # show built-in universes
+```
+
+UNIVERSE can be any mix of:
+- a built-in index: ``sp500``, ``sp100``, ``nasdaq100``, ``obx``
+- ``discover``: overlap tickers from the last ``quant discover`` run
+- a ticker file: one or more per line (comma/space separated, ``#`` comments) or a CSV with a ``ticker``/``symbol`` column
+- literal tickers
+
+**How it works:**
+
+1. **Rank (whole universe):** fetches company info and one year of prices per ticker, applies filters, and ranks each ticker against the others on Value, Quality, Momentum, and Low Volatility (percentiles, 100 = best).
+2. **Score (top N):** runs the full technical/fundamental/risk/valuation analysis on the ``--top`` factor-ranked tickers. Stage-1 data is reused from the cache.
+
+The table lists the scored candidates by composite score with their factor rank and factor percentiles. Results are saved to ``data/_screens/`` (a timestamped file plus ``latest.csv``/``latest.json``).
+
+Options:
+- ``--top N`` -- candidates to fully score (default 20)
+- ``--config [default|value|growth|income]`` -- scoring preset
+- ``--sector TEXT`` / ``--exclude-sector TEXT`` -- sector or industry substring, repeatable
+- ``--min-mcap`` / ``--max-mcap`` -- market cap, e.g. ``500M``, ``10B``, ``1T`` (in the listing's own currency)
+- ``--min-volume`` -- average daily volume in shares, e.g. ``500K``
+- ``--workers N`` -- parallel downloads (default 4; Yahoo rate-limits aggressive clients)
+- ``--no-save`` -- print only
+
+**Performance:** the first ``sp500`` screen downloads info and prices for about 500 tickers, which takes a few minutes. Later runs within the cache TTL take seconds.
 
 ### ``quant compare`` -- Side-by-side comparison
 
@@ -235,7 +285,7 @@ quant --no-cache discover
 - ``--enrich`` enriches ALL holdings (slow) — usually unnecessary since auto-enrich covers the top results
 - 13F data is quarterly, filed ~45 days after quarter-end. Data is 1-4 months stale
 - Save TOON output for LLM reasoning: ``quant --format toon discover``
-- Pipe discovery results into scoring: take the top tickers and run ``quant score``
+- Rank and score the consensus picks: ``quant screen discover``
 
 **Data freshness schedule:**
 
@@ -263,7 +313,7 @@ SEC EDGAR requires a User-Agent with contact info. No API key needed — all dat
 
 ### ``quant watch`` -- Continuous refresh
 
-Re-scores tickers on a timer. Useful for monitoring during market hours.
+Re-scores tickers on a timer with fresh data. Useful for monitoring during market hours. Nothing is written to disk.
 
 ```bash
 quant watch AAPL MSFT --interval 60
@@ -293,13 +343,35 @@ quant --output-dir /tmp/data report AAPL
 | ``--format`` | ``all`` | Output format: ``json``, ``markdown``, ``toon``, ``all`` |
 | ``--no-cache`` | off | Bypass cache and fetch fresh data |
 | ``--output-dir`` | ``data`` | Root directory for cache and reports |
-| ``-v / --verbose`` | off | Enable debug logging |
-| ``-q / --quiet`` | off | Suppress INFO logging |
+| ``-v / --verbose`` | off | Show debug logging (default shows warnings only) |
+| ``-q / --quiet`` | off | Show errors only |
+
+## Configuration
+
+Optional ``config.json`` in the working directory (gitignored). All keys are optional:
+
+```json
+{
+    "risk_free_rate": 0.04,
+    "benchmark_ticker": "^GSPC",
+    "benchmark_by_suffix": {".OL": "OBX.OL"},
+    "cache_ttl_hours": {"fundamentals": 336, "prices": 6},
+    "llm_model": "gpt-4.1",
+    "llm_github_token": "ghp_...",
+    "edgar_user_agent": "PersonalResearch you@email.com"
+}
+```
+
+- ``risk_free_rate`` -- annual rate as a decimal (0.04 = 4%), used for Sharpe, Sortino, and alpha
+- ``benchmark_ticker`` -- benchmark for US and unmapped listings
+- ``benchmark_by_suffix`` -- override the built-in exchange-to-index map in ``src/markets.py``
+- ``cache_ttl_hours`` -- max cache age per resource (``prices``, ``info``, ``earnings``, ``analyst_ratings``, ``dividends``, ``fundamentals``, ``holders``, ``universe``). Only keys you set are overridden; ``0`` means never expire.
 
 ## When to Use Which Command
 
 | Goal | Command |
 |------|---------|
+| Find candidates in an index | ``quant screen sp500`` |
 | Discover new investment ideas | ``quant discover`` |
 | Deep dive on one stock | ``quant report TICKER`` |
 | Ask follow-up questions / interrogate a stock | ``quant chat TICKER`` |
@@ -310,10 +382,12 @@ quant --output-dir /tmp/data report AAPL
 ### Recommended Workflow: Discovery → Analysis
 
 ```bash
-# Step 1: What are the whales buying? (run after new 13F filings appear)
-quant --no-cache discover --min-overlap 3
+# Step 1: Find candidates: screen an index, and/or see what the whales are buying
+quant screen sp500 --top 25 --config growth
+quant --no-cache discover --min-overlap 3     # after new 13F filings appear
+quant screen discover --config growth         # rank + score the consensus picks
 
-# Step 2: Note the top consensus tickers, score them
+# Step 2: Score any extra names you're curious about
 quant score AAPL NVDA AMZN MSFT BAC --config growth
 
 # Step 3: Deep dive on the highest-scoring ticker
@@ -357,6 +431,8 @@ data/TICKER/
     +-- valuation_analysis.md
 ```
 
+Screen results are written to ``data/_screens/`` (``screen_<universe>_<timestamp>.csv/json/toon`` plus ``latest.*``). Index constituent lists are cached in ``data/_universes/``.
+
 Discovery results are written to ``data/_discovery/``:
 
 ```
@@ -386,7 +462,9 @@ TOON is generated by default (``--format all``). Use ``--format toon`` for TOON-
 quant-analysis/
 +-- src/
 |   +-- cli.py                       # CLI entry point (Click subcommands)
-|   +-- data_fetcher.py              # Yahoo Finance data fetching with caching
+|   +-- data_fetcher.py              # Yahoo Finance data fetching with caching + expiry
+|   +-- pipeline.py                  # Fetch -> analyze -> score for one ticker (no file I/O)
+|   +-- markets.py                   # Exchange suffix -> benchmark index mapping
 |   +-- config.py                    # Configuration settings
 |   +-- llm.py                       # LLM integration (chat, provider routing, context building)
 |   +-- analysis/
@@ -401,17 +479,22 @@ quant-analysis/
 |   |   +-- models.py                # Data models (Holding, TrackedPortfolio, signals)
 |   |   +-- analyzer.py              # Cross-portfolio pattern detection
 |   |   +-- enrichment.py            # CUSIP→ticker + sector/industry enrichment
+|   |   +-- factor_ranking.py        # Multi-factor cross-sectional ranking
 |   |   +-- sources/
 |   |       +-- base.py              # PortfolioSource ABC (pluggable)
 |   |       +-- edgar_13f.py         # SEC EDGAR 13F source (free)
 |   +-- reporting/
-|   |   +-- generator.py             # Report aggregation
+|   |   +-- generator.py             # Report file writing (runs the pipeline)
 |   |   +-- sections.py              # Modular section handlers
+|   +-- screening/
+|   |   +-- universe.py              # Index lists, ticker files, discover picks
+|   |   +-- screener.py              # Two-stage factor rank -> full score
 |   +-- scoring/
 |   |   +-- config.py                # Scoring configuration & presets
 |   |   +-- dimensions.py            # Dimension scorers
 |   |   +-- scorer.py                # StockScorer orchestrator
 |   +-- utils/
+|       +-- concurrency.py           # Thread-pool helper for multi-ticker commands
 |       +-- financial.py             # Financial calculations
 |       +-- dataframe_utils.py       # DataFrame helpers
 |       +-- report.py                # Report formatting
@@ -427,10 +510,14 @@ quant-analysis/
 |   +-- 07_test_risk_metrics.py
 |   +-- 08_test_valuation.py
 +-- tests/
+    +-- conftest.py                  # Offline fake Yahoo market fixture
     +-- test_cli.py
     +-- test_comparator.py
     +-- test_discovery.py
+    +-- test_pipeline.py
+    +-- test_quant_methods.py
     +-- test_scorer.py
+    +-- test_screening.py
     +-- test_toon_serializer.py
 ```
 
@@ -439,15 +526,24 @@ quant-analysis/
 The CLI is the primary interface. For direct library use:
 
 ```python
+from src.pipeline import AnalysisOptions, analyze_ticker
+from src.scoring import ScoringConfig
+
+# Compute only (no files written)
+bundle = analyze_ticker("AAPL", options=AnalysisOptions(scoring_config=ScoringConfig.value_investor()))
+print(f"{bundle.scoring.composite_score:.0f}/100  ({bundle.scoring.signal})")
+print(bundle.freshness_warnings)
+
+# Compute and write report files
 from src.reporting import ReportGenerator
-from src.scoring import StockScorer
+report_data = ReportGenerator(output_dir="data").generate_full_report("AAPL", period="1y")
 
-generator = ReportGenerator(output_dir="data")
-report_data = generator.generate_full_report(ticker="AAPL", period="1y")
-
-scorer = StockScorer()
-result = scorer.score(report_data)
-print(f"{result.composite_score:.0f}/100  ({result.signal})")
+# Screen a universe
+from src.screening import Screener, ScreenFilters, resolve_universe
+universe = resolve_universe(["sp100"])
+result = Screener().run(universe.tickers, ScreenFilters(min_market_cap=100e9), top_n=10)
+for c in result.scored:
+    print(c.ticker, c.scoring.composite_score, c.factor_rank)
 ```
 
 ## Data Organization

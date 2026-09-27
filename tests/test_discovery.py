@@ -246,7 +246,7 @@ class TestOverlapDetection:
 
     def test_detects_overlap(self, sample_portfolios):
         analyzer = PortfolioAnalyzer(min_overlap=2)
-        signals = analyzer._detect_overlap(sample_portfolios)
+        signals = analyzer.detect_overlap(sample_portfolios)
 
         # AAPL appears in all 4 portfolios
         aapl = next((s for s in signals if s.ticker == "AAPL"), None)
@@ -257,7 +257,7 @@ class TestOverlapDetection:
 
     def test_amzn_overlap(self, sample_portfolios):
         analyzer = PortfolioAnalyzer(min_overlap=2)
-        signals = analyzer._detect_overlap(sample_portfolios)
+        signals = analyzer.detect_overlap(sample_portfolios)
 
         # AMZN appears in all 4 portfolios
         amzn = next((s for s in signals if s.ticker == "AMZN"), None)
@@ -266,7 +266,7 @@ class TestOverlapDetection:
 
     def test_bac_overlap(self, sample_portfolios):
         analyzer = PortfolioAnalyzer(min_overlap=2)
-        signals = analyzer._detect_overlap(sample_portfolios)
+        signals = analyzer.detect_overlap(sample_portfolios)
 
         # BAC appears in 2 portfolios
         bac = next((s for s in signals if s.ticker == "BAC"), None)
@@ -276,7 +276,7 @@ class TestOverlapDetection:
     def test_min_overlap_filters(self, sample_portfolios):
         # With min_overlap=3, BAC (only 2) should be excluded
         analyzer = PortfolioAnalyzer(min_overlap=3)
-        signals = analyzer._detect_overlap(sample_portfolios)
+        signals = analyzer.detect_overlap(sample_portfolios)
 
         bac = next((s for s in signals if s.ticker == "BAC"), None)
         assert bac is None
@@ -287,7 +287,7 @@ class TestOverlapDetection:
 
     def test_unique_tickers_excluded(self, sample_portfolios):
         analyzer = PortfolioAnalyzer(min_overlap=2)
-        signals = analyzer._detect_overlap(sample_portfolios)
+        signals = analyzer.detect_overlap(sample_portfolios)
 
         # KO only appears in 1 portfolio
         ko = next((s for s in signals if s.ticker == "KO"), None)
@@ -295,7 +295,7 @@ class TestOverlapDetection:
 
     def test_strength_ordering(self, sample_portfolios):
         analyzer = PortfolioAnalyzer(min_overlap=2)
-        signals = analyzer._detect_overlap(sample_portfolios)
+        signals = analyzer.detect_overlap(sample_portfolios)
 
         # AAPL (4/4 overlap, high weights) should have highest strength
         assert signals[0].ticker in ("AAPL", "AMZN")  # Both appear in all 4
@@ -305,7 +305,7 @@ class TestOverlapDetection:
 
     def test_signal_has_sector_info(self, sample_portfolios):
         analyzer = PortfolioAnalyzer(min_overlap=2)
-        signals = analyzer._detect_overlap(sample_portfolios)
+        signals = analyzer.detect_overlap(sample_portfolios)
 
         aapl = next((s for s in signals if s.ticker == "AAPL"), None)
         assert aapl.sector == "Technology"
@@ -313,13 +313,13 @@ class TestOverlapDetection:
 
     def test_empty_portfolios(self):
         analyzer = PortfolioAnalyzer(min_overlap=2)
-        signals = analyzer._detect_overlap([])
+        signals = analyzer.detect_overlap([])
         assert signals == []
 
     def test_single_portfolio(self):
         p = _make_portfolio("Solo", [_make_holding("AAPL")])
         analyzer = PortfolioAnalyzer(min_overlap=2)
-        signals = analyzer._detect_overlap([p])
+        signals = analyzer.detect_overlap([p])
         assert signals == []
 
 
@@ -605,7 +605,7 @@ class TestEdgeCases:
             _make_portfolio("B", [_make_holding("AAPL", value=200)]),
         ]
         analyzer = PortfolioAnalyzer(min_overlap=2)
-        signals = analyzer._detect_overlap(portfolios)
+        signals = analyzer.detect_overlap(portfolios)
 
         aapl = next((s for s in signals if s.ticker == "AAPL"), None)
         assert aapl is not None
@@ -620,7 +620,7 @@ class TestEdgeCases:
             portfolios.append(_make_portfolio(f"Fund {i}", holdings))
 
         analyzer = PortfolioAnalyzer(min_overlap=2)
-        signals = analyzer._detect_overlap(portfolios)
+        signals = analyzer.detect_overlap(portfolios)
 
         for signal in signals:
             assert signal.strength <= 100.0

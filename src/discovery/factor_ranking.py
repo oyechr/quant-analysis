@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -83,33 +84,46 @@ class FactorRanker:
             logger.warning("Need at least 2 tickers for cross-sectional ranking")
             return []
 
-        # Step 1: Calculate raw factor values for each ticker
-        raw_factors: Dict[str, Dict[str, Optional[float]]] = {}
-
-        for ticker, data in ticker_data.items():
-            raw_factors[ticker] = {
+        # Step 1: Raw factor components per ticker. Value and quality blend several
+        # metrics on different scales (earnings yield ~0.05 vs book/price ~0.5), so
+        # each component is ranked on its own before averaging.
+        components: Dict[str, Dict[str, Dict[str, float]]] = {
+            t: {
+                "value": self._value_components(data),
+                "quality": self._quality_components(data),
+                "momentum": _single("momentum_12_1", self._calc_momentum_factor(data)),
+                "low_vol": _single("inverse_vol", self._calc_low_vol_factor(data)),
+            }
+            for t, data in ticker_data.items()
+        }
+        raw_factors: Dict[str, Dict[str, Optional[float]]] = {
+            t: {
                 "value": self._calc_value_factor(data),
                 "quality": self._calc_quality_factor(data),
-                "momentum": self._calc_momentum_factor(data),
-                "low_vol": self._calc_low_vol_factor(data),
+                "momentum": components[t]["momentum"].get("momentum_12_1"),
+                "low_vol": components[t]["low_vol"].get("inverse_vol"),
             }
+            for t, data in ticker_data.items()
+        }
 
-        # Step 2: Cross-sectional percentile ranking (0-100) for each factor
+        # Step 2: Cross-sectional percentile (0-100) per component, averaged per factor
         factor_names = ["value", "quality", "momentum", "low_vol"]
         percentile_scores: Dict[str, Dict[str, float]] = {t: {} for t in ticker_data}
 
         for factor in factor_names:
-            values = {
-                t: raw_factors[t][factor] for t in ticker_data if raw_factors[t][factor] is not None
-            }
-            if len(values) < 2:
-                continue
-
-            # Rank and convert to percentile
-            sorted_tickers = sorted(values.keys(), key=lambda t: values[t])
-            n = len(sorted_tickers)
-            for rank, t in enumerate(sorted_tickers):
-                percentile_scores[t][factor] = (rank / (n - 1)) * 100 if n > 1 else 50.0
+            component_names = {name for t in ticker_data for name in components[t][factor]}
+            component_pcts: Dict[str, List[float]] = {t: [] for t in ticker_data}
+            for name in component_names:
+                values = {
+                    t: components[t][factor][name]
+                    for t in ticker_data
+                    if name in components[t][factor]
+                }
+                for t, pct in _percentiles(values).items():
+                    component_pcts[t].append(pct)
+            for t, pcts in component_pcts.items():
+                if pcts:
+                    percentile_scores[t][factor] = float(np.mean(pcts))
 
         # Step 3: Weighted composite score
         results: List[FactorScore] = []
@@ -171,84 +185,81 @@ class FactorRanker:
         results.sort(key=lambda r: r.composite_score or 0, reverse=True)
         return results
 
+    def _value_components(self, data: Dict[str, Any]) -> Dict[str, float]:
+        """Value metrics (higher = cheaper): earnings yield, FCF yield, book/price."""
+        info = data.get("info", {})
+        components: Dict[str, float] = {}
+
+        pe = info.get("pe_ratio") or info.get("trailingPE")
+        if pe and pe > 0:
+            components["earnings_yield"] = 1.0 / pe
+
+        report = data.get("report") or {}
+        fcf_metrics = (
+            (report.get("fundamental_analysis") or {}).get("analysis", {}).get("fcf_metrics", {})
+        )
+        fcf_yield = fcf_metrics.get("fcf_yield")
+        if fcf_yield is not None:
+            components["fcf_yield"] = fcf_yield / 100.0
+
+        pb = info.get("price_to_book") or info.get("priceToBook")
+        if pb and pb > 0:
+            components["book_to_price"] = 1.0 / pb
+
+        return components
+
     def _calc_value_factor(self, data: Dict[str, Any]) -> Optional[float]:
         """
         Value factor: composite of earnings yield, FCF yield, book/price.
         Higher = cheaper = better value.
         """
+        components = self._value_components(data)
+        return float(np.mean(list(components.values()))) if components else None
+
+    def _quality_components(self, data: Dict[str, Any]) -> Dict[str, float]:
+        """
+        Quality metrics, each oriented so higher = better, normalized to 0-1:
+        ROE, low accruals, low leverage, Piotroski F-Score.
+        """
         info = data.get("info", {})
-        scores = []
+        report = data.get("report") or {}
+        components: Dict[str, float] = {}
 
-        # Earnings yield (inverse of P/E)
-        pe = info.get("pe_ratio") or info.get("trailingPE")
-        if pe and pe > 0:
-            earnings_yield = 1.0 / pe
-            scores.append(earnings_yield)
+        # ROE: -50% to +50% -> 0 to 1 (caps outliers from tiny equity bases)
+        roe = info.get("roe") or info.get("returnOnEquity")
+        if roe is not None:
+            components["roe"] = max(min((roe + 0.5) / 1.0, 1.0), 0.0)
 
-        # FCF yield
-        report = data.get("report", {})
-        fcf_metrics = (
-            report.get("fundamental_analysis", {}).get("analysis", {}).get("fcf_metrics", {})
+        quality_scores = (
+            (report.get("fundamental_analysis") or {}).get("analysis", {}).get("quality_scores", {})
         )
-        fcf_yield = fcf_metrics.get("fcf_yield")
-        if fcf_yield is not None:
-            scores.append(fcf_yield / 100.0)
+        # Accruals: -50% to +20% -> 1.0 to 0.0 (lower accruals = earnings backed by cash)
+        accrual_ratio = (quality_scores.get("accruals_quality") or {}).get("accrual_ratio_pct")
+        if accrual_ratio is not None:
+            components["low_accruals"] = max(min((20.0 - accrual_ratio) / 70.0, 1.0), 0.0)
 
-        # Book/Price (inverse of P/B)
-        pb = info.get("price_to_book") or info.get("priceToBook")
-        if pb and pb > 0:
-            book_to_price = 1.0 / pb
-            scores.append(book_to_price)
+        # Leverage: Yahoo reports debt/equity as a percentage (150 = 1.5x).
+        # D/E 0x = 1.0, 3x+ = 0.0
+        de_pct = info.get("debt_to_equity")
+        if de_pct is None:
+            de_pct = info.get("debtToEquity")
+        if de_pct is not None and de_pct >= 0:
+            components["low_leverage"] = max(1.0 - (de_pct / 100.0) / 3.0, 0.0)
 
-        if not scores:
-            return None
+        # Piotroski F-Score (0-9 -> 0-1)
+        f_score = quality_scores.get("piotroski_f")
+        if f_score is not None:
+            components["piotroski"] = f_score / 9.0
 
-        return float(np.mean(scores))
+        return components
 
     def _calc_quality_factor(self, data: Dict[str, Any]) -> Optional[float]:
         """
-        Quality factor: composite of ROE, low accruals, low leverage.
+        Quality factor: composite of ROE, low accruals, low leverage, F-Score.
         Higher = better quality.
         """
-        info = data.get("info", {})
-        report = data.get("report", {})
-        scores = []
-
-        # ROE (higher is better, but cap at reasonable levels)
-        roe = info.get("roe") or info.get("returnOnEquity")
-        if roe is not None:
-            # Normalize: -50% to +50% ROE → 0 to 1
-            roe_normalized = max(min((roe + 0.5) / 1.0, 1.0), 0.0)
-            scores.append(roe_normalized)
-
-        # Accruals quality (lower accrual ratio = higher quality)
-        quality_scores = (
-            report.get("fundamental_analysis", {}).get("analysis", {}).get("quality_scores", {})
-        )
-        accruals = quality_scores.get("accruals_quality", {})
-        accrual_ratio = accruals.get("accrual_ratio_pct")
-        if accrual_ratio is not None:
-            # Lower (more negative) accruals = better quality
-            # Range: -50% to +20% → 1.0 to 0.0
-            accrual_normalized = max(min((20.0 - accrual_ratio) / 70.0, 1.0), 0.0)
-            scores.append(accrual_normalized)
-
-        # Low leverage (lower debt/equity = better)
-        de = info.get("debt_to_equity") or info.get("debtToEquity")
-        if de is not None and de >= 0:
-            # D/E 0 = best (1.0), D/E 3+ = worst (0.0)
-            leverage_score = max(1.0 - de / 3.0, 0.0)
-            scores.append(leverage_score)
-
-        # Piotroski F-Score (0-9 → 0-1)
-        f_score = quality_scores.get("piotroski_f")
-        if f_score is not None:
-            scores.append(f_score / 9.0)
-
-        if not scores:
-            return None
-
-        return float(np.mean(scores))
+        components = self._quality_components(data)
+        return float(np.mean(list(components.values()))) if components else None
 
     def _calc_momentum_factor(self, data: Dict[str, Any]) -> Optional[float]:
         """
@@ -339,8 +350,12 @@ class FactorRanker:
             )
 
         lines.append("")
+        w = self.weights
         lines.append("  Scores are percentile ranks (0-100, higher = better)")
-        lines.append("  Weights: Value 25%, Quality 25%, Momentum 30%, Low Vol 20%")
+        lines.append(
+            f"  Weights: Value {w.value:.0%}, Quality {w.quality:.0%}, "
+            f"Momentum {w.momentum:.0%}, Low Vol {w.low_volatility:.0%}"
+        )
         lines.append("")
         return "\n".join(lines)
 
@@ -363,3 +378,19 @@ class FactorRanker:
             }
             for i, r in enumerate(results)
         ]
+
+
+def _single(name: str, value: Optional[float]) -> Dict[str, float]:
+    return {name: value} if value is not None else {}
+
+
+def _percentiles(values: Dict[str, float]) -> Dict[str, float]:
+    """
+    Cross-sectional percentile rank (0-100) of each value; ties share a rank.
+    Needs at least 2 values to be meaningful.
+    """
+    if len(values) < 2:
+        return {}
+    ranks = pd.Series(values, dtype=float).rank(method="average")
+    n = len(ranks)
+    return {t: float((r - 1) / (n - 1) * 100) for t, r in ranks.items()}

@@ -17,8 +17,10 @@ import numpy as np
 import pandas as pd
 
 from ..config import get_config
+from ..markets import benchmark_name
 from ..utils.financial import (
     TRADING_DAYS_PER_YEAR,
+    align_daily_returns,
     annualize_volatility,
     calculate_daily_returns,
     calculate_kelly_criterion,
@@ -44,6 +46,7 @@ class RiskMetrics:
         self,
         price_data: Optional[pd.DataFrame] = None,
         benchmark_data: Optional[pd.DataFrame] = None,
+        benchmark_ticker: Optional[str] = None,
     ):
         """
         Initialize risk metrics calculator
@@ -51,10 +54,12 @@ class RiskMetrics:
         Args:
             price_data: DataFrame with 'Close' prices and DatetimeIndex (optional)
             benchmark_data: Optional benchmark data for beta/alpha
+            benchmark_ticker: Symbol of the benchmark (defaults to config.benchmark_ticker)
         """
         self.config = get_config()
         self.price_data = price_data
         self.benchmark_data = benchmark_data
+        self.benchmark_ticker = benchmark_ticker or self.config.benchmark_ticker
         self._cached_metrics: Optional[Dict[str, Any]] = None
 
     def calculate_returns(self, price_data: pd.DataFrame) -> Dict[str, Any]:
@@ -337,7 +342,7 @@ class RiskMetrics:
                 from ..data_fetcher import DataFetcher
 
                 fetcher = DataFetcher()
-                benchmark_ticker = self.config.benchmark_ticker
+                benchmark_ticker = self.benchmark_ticker
 
                 # Infer approximate period from price_data length and use period=
                 # so the cache filename stays stable (start/end shifts daily).
@@ -357,10 +362,8 @@ class RiskMetrics:
             stock_returns = price_data["Close"].pct_change().dropna()
             benchmark_returns = benchmark_data["Close"].pct_change().dropna()
 
-            # Align dates
-            aligned = pd.DataFrame(
-                {"stock": stock_returns, "benchmark": benchmark_returns}
-            ).dropna()
+            # Align on trading date (exchanges stamp bars in their own timezone)
+            aligned = align_daily_returns(stock_returns, benchmark_returns)
 
             if aligned.empty or len(aligned) < 2:
                 logger.warning("Insufficient overlapping data for beta/alpha")
@@ -377,7 +380,7 @@ class RiskMetrics:
             # Alpha (annualized)
             stock_mean_return = float(aligned["stock"].mean()) * TRADING_DAYS_PER_YEAR
             benchmark_mean_return = float(aligned["benchmark"].mean()) * TRADING_DAYS_PER_YEAR
-            rf_rate = self.config.risk_free_rate / 100
+            rf_rate = self.config.risk_free_rate
 
             alpha = stock_mean_return - (rf_rate + beta * (benchmark_mean_return - rf_rate))
 
@@ -392,7 +395,7 @@ class RiskMetrics:
                 "alpha": float(alpha),
                 "correlation": correlation,
                 "r_squared": r_squared,
-                "benchmark": self.config.benchmark_ticker,
+                "benchmark": self.benchmark_ticker,
             }
 
         except Exception as e:
@@ -472,13 +475,13 @@ class RiskMetrics:
         try:
             # Fetch benchmark if not provided
             if benchmark_data is None or benchmark_data.empty:
-                from .data_fetcher import DataFetcher
+                from ..data_fetcher import DataFetcher
 
                 fetcher = DataFetcher()
                 start_date = price_data.index.min()
                 end_date = price_data.index.max()
                 benchmark_data = fetcher.fetch_ticker(
-                    self.config.benchmark_ticker,
+                    self.benchmark_ticker,
                     start=start_date.strftime("%Y-%m-%d"),
                     end=end_date.strftime("%Y-%m-%d"),
                 )
@@ -491,10 +494,8 @@ class RiskMetrics:
             stock_returns = price_data["Close"].pct_change().dropna()
             benchmark_returns = benchmark_data["Close"].pct_change().dropna()
 
-            # Align data
-            aligned = pd.DataFrame(
-                {"stock": stock_returns, "benchmark": benchmark_returns}
-            ).dropna()
+            # Align on trading date (exchanges stamp bars in their own timezone)
+            aligned = align_daily_returns(stock_returns, benchmark_returns)
 
             if aligned.empty or len(aligned) < 2:
                 return 0.0
@@ -578,7 +579,7 @@ class RiskMetrics:
             daily_returns = price_data["Close"].pct_change().dropna()
 
             if len(daily_returns) < max(windows):
-                logger.warning(f"Insufficient data for rolling ratios (need {max(windows)} days)")
+                logger.info(f"Insufficient data for rolling ratios (need {max(windows)} days)")
                 return {}
 
             # Daily risk-free rate
@@ -1065,7 +1066,8 @@ class RiskMetrics:
             md.append("")
 
         # Market Risk
-        md.append("## Market Risk (vs. S&P 500)")
+        bench_symbol = (metrics.get("market_risk") or {}).get("benchmark", self.benchmark_ticker)
+        md.append(f"## Market Risk (vs. {benchmark_name(bench_symbol)})")
         md.append("")
         if "market_risk" in metrics and metrics["market_risk"]:
             mr = metrics["market_risk"]

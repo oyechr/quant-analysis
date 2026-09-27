@@ -12,6 +12,8 @@ from click.testing import CliRunner
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.cli import cli
+from src.pipeline import AnalysisBundle
+from src.scoring import ScoringConfig
 from src.scoring.scorer import ScoringResult
 
 
@@ -44,6 +46,15 @@ def _mock_report_data(ticker: str = "AAPL") -> dict:
     }
 
 
+def _mock_bundle(ticker: str = "AAPL") -> AnalysisBundle:
+    """Create a minimal AnalysisBundle as returned by ReportGenerator.generate()."""
+    return AnalysisBundle(
+        ticker=ticker,
+        report=_mock_report_data(ticker),
+        scoring=_mock_scoring_result(ticker),
+    )
+
+
 class TestCLIGroup:
     """Test the root CLI group."""
 
@@ -66,30 +77,23 @@ class TestCLIGroup:
 class TestReportCommand:
     """Test the 'report' subcommand."""
 
-    @patch("src.cli.StockScorer")
     @patch("src.cli.ReportGenerator")
-    def test_report_basic(self, mock_gen_cls, mock_scorer_cls):
+    def test_report_basic(self, mock_gen_cls):
         mock_gen = MagicMock()
-        mock_gen.generate_full_report.return_value = _mock_report_data()
+        mock_gen.generate.return_value = _mock_bundle()
         mock_gen_cls.return_value = mock_gen
-
-        mock_scorer = MagicMock()
-        mock_scorer.score.return_value = _mock_scoring_result()
-        mock_scorer_cls.return_value = mock_scorer
 
         runner = CliRunner()
         result = runner.invoke(cli, ["report", "AAPL"])
         assert result.exit_code == 0
         assert "AAPL" in result.output
-        mock_gen.generate_full_report.assert_called_once()
+        mock_gen.generate.assert_called_once()
 
-    @patch("src.cli.StockScorer")
     @patch("src.cli.ReportGenerator")
-    def test_report_with_options(self, mock_gen_cls, mock_scorer_cls):
+    def test_report_with_options(self, mock_gen_cls):
         mock_gen = MagicMock()
-        mock_gen.generate_full_report.return_value = _mock_report_data()
+        mock_gen.generate.return_value = _mock_bundle("TSLA")
         mock_gen_cls.return_value = mock_gen
-        mock_scorer_cls.return_value = MagicMock()
 
         runner = CliRunner()
         result = runner.invoke(
@@ -103,14 +107,27 @@ class TestReportCommand:
                 "report",
                 "TSLA",
                 "--exclude-technical",
+                "--config",
+                "value",
             ],
         )
         assert result.exit_code == 0
-        call_kwargs = mock_gen.generate_full_report.call_args[1]
-        assert call_kwargs["period"] == "2y"
-        assert call_kwargs["use_cache"] is False
-        assert call_kwargs["output_format"] == "json"
-        assert call_kwargs["include_technical"] is False
+        options = mock_gen.generate.call_args[0][1]
+        assert options.period == "2y"
+        assert options.use_cache is False
+        assert options.include_technical is False
+        assert options.scoring_config.weights == ScoringConfig.value_investor().weights
+        assert mock_gen.generate.call_args[1]["output_format"] == "json"
+
+    @patch("src.cli.ReportGenerator")
+    def test_report_prints_freshness_warnings(self, mock_gen_cls):
+        bundle = _mock_bundle()
+        bundle.report["data_freshness"] = {"warnings": ["Latest price bar is 9 days old"]}
+        mock_gen_cls.return_value = MagicMock(generate=MagicMock(return_value=bundle))
+
+        result = CliRunner().invoke(cli, ["report", "AAPL"])
+
+        assert "Latest price bar is 9 days old" in result.output
 
     def test_report_missing_ticker(self):
         runner = CliRunner()
@@ -121,16 +138,11 @@ class TestReportCommand:
 class TestScoreCommand:
     """Test the 'score' subcommand."""
 
-    @patch("src.cli.StockScorer")
     @patch("src.cli.ReportGenerator")
-    def test_score_single(self, mock_gen_cls, mock_scorer_cls):
+    def test_score_single(self, mock_gen_cls):
         mock_gen = MagicMock()
-        mock_gen.generate_full_report.return_value = _mock_report_data()
+        mock_gen.generate.return_value = _mock_bundle()
         mock_gen_cls.return_value = mock_gen
-
-        mock_scorer = MagicMock()
-        mock_scorer.score.return_value = _mock_scoring_result()
-        mock_scorer_cls.return_value = mock_scorer
 
         runner = CliRunner()
         result = runner.invoke(cli, ["score", "AAPL"])
@@ -138,42 +150,44 @@ class TestScoreCommand:
         assert "AAPL" in result.output
         assert "STOCK SCORES" in result.output
 
-    @patch("src.cli.StockScorer")
     @patch("src.cli.ReportGenerator")
-    def test_score_multiple(self, mock_gen_cls, mock_scorer_cls):
+    def test_score_multiple_keeps_input_order(self, mock_gen_cls):
         mock_gen = MagicMock()
-        mock_gen.generate_full_report.side_effect = [
-            _mock_report_data("AAPL"),
-            _mock_report_data("MSFT"),
-        ]
+        mock_gen.generate.side_effect = lambda ticker, *a, **kw: _mock_bundle(ticker)
         mock_gen_cls.return_value = mock_gen
 
-        mock_scorer = MagicMock()
-        mock_scorer.score.side_effect = [
-            _mock_scoring_result("AAPL"),
-            _mock_scoring_result("MSFT"),
-        ]
-        mock_scorer_cls.return_value = mock_scorer
+        result = CliRunner().invoke(cli, ["score", "MSFT", "AAPL", "--workers", "2"])
 
-        runner = CliRunner()
-        result = runner.invoke(cli, ["score", "AAPL", "MSFT"])
         assert result.exit_code == 0
-        assert "AAPL" in result.output
-        assert "MSFT" in result.output
+        table = result.output.split("STOCK SCORES")[1]
+        assert table.index("MSFT") < table.index("AAPL")
 
-    @patch("src.cli.StockScorer")
     @patch("src.cli.ReportGenerator")
-    def test_score_with_config(self, mock_gen_cls, mock_scorer_cls):
+    def test_score_reports_errors_per_ticker(self, mock_gen_cls):
+        def _generate(ticker, *args, **kwargs):
+            if ticker == "BAD":
+                raise ValueError("No data returned for ticker BAD")
+            return _mock_bundle(ticker)
+
+        mock_gen_cls.return_value = MagicMock(generate=MagicMock(side_effect=_generate))
+
+        result = CliRunner().invoke(cli, ["score", "AAPL", "BAD"])
+
+        assert result.exit_code == 0
+        assert "BAD" in result.output
+        assert "ERROR" in result.output
+
+    @patch("src.cli.ReportGenerator")
+    def test_score_with_config(self, mock_gen_cls):
         mock_gen = MagicMock()
-        mock_gen.generate_full_report.return_value = _mock_report_data()
+        mock_gen.generate.return_value = _mock_bundle()
         mock_gen_cls.return_value = mock_gen
-        mock_scorer_cls.return_value = MagicMock(
-            score=MagicMock(return_value=_mock_scoring_result())
-        )
 
         runner = CliRunner()
         result = runner.invoke(cli, ["score", "AAPL", "--config", "value"])
         assert result.exit_code == 0
+        options = mock_gen.generate.call_args[0][1]
+        assert options.scoring_config.weights == ScoringConfig.value_investor().weights
 
     def test_score_missing_tickers(self):
         runner = CliRunner()
@@ -211,21 +225,17 @@ class TestCompareCommand:
 class TestWatchCommand:
     """Test the 'watch' subcommand."""
 
-    @patch("src.cli.StockScorer")
     @patch("src.cli.ReportGenerator")
-    def test_watch_single_iteration(self, mock_gen_cls, mock_scorer_cls):
+    def test_watch_single_iteration(self, mock_gen_cls):
         mock_gen = MagicMock()
-        mock_gen.generate_full_report.return_value = _mock_report_data()
+        mock_gen.generate.return_value = _mock_bundle()
         mock_gen_cls.return_value = mock_gen
-
-        mock_scorer = MagicMock()
-        mock_scorer.score.return_value = _mock_scoring_result()
-        mock_scorer_cls.return_value = mock_scorer
 
         runner = CliRunner()
         result = runner.invoke(cli, ["watch", "AAPL", "--count", "1", "--interval", "1"])
         assert result.exit_code == 0
         assert "WATCH MODE" in result.output
+        assert mock_gen.generate.call_args[1]["output_format"] == "none"
 
     def test_watch_missing_tickers(self):
         runner = CliRunner()

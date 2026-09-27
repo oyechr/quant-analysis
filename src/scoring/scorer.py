@@ -406,6 +406,7 @@ class StockScorer:
             strengths=all_strengths,
             concerns=all_concerns,
             generated_at=datetime.now().isoformat(),
+            config_name=self.config.name,
             dimensions_available=len(dimensions),
             dimensions_total=4,
         )
