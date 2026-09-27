@@ -470,7 +470,7 @@ class FundamentalAnalyzer:
             if not market_cap:
                 missing.append("Market Cap")
 
-            logger.warning(f"Altman Z-Score incomplete: Missing {', '.join(missing)}")
+            logger.info(f"Altman Z-Score incomplete: Missing {', '.join(missing)}")
             return None
 
         # Type assertions for narrowing Optional[float] -> float
@@ -529,7 +529,7 @@ class FundamentalAnalyzer:
             if self.cash_flow_a is None:
                 missing.append("cash flow")
 
-            logger.warning(f"Cannot calculate Piotroski F-Score: Missing {', '.join(missing)}")
+            logger.info(f"Cannot calculate Piotroski F-Score: Missing {', '.join(missing)}")
             return None
 
         score = 0
@@ -651,7 +651,7 @@ class FundamentalAnalyzer:
             Dictionary with M-Score value, components, and interpretation, or None
         """
         if self.balance_sheet_a is None or self.income_stmt_a is None or self.cash_flow_a is None:
-            logger.warning("Cannot calculate Beneish M-Score: Missing financial statements")
+            logger.info("Cannot calculate Beneish M-Score: Missing financial statements")
             return None
 
         # Current period (index 0) and prior period (index 1)
@@ -682,7 +682,7 @@ class FundamentalAnalyzer:
 
         # Validate minimum required data
         if not all([revenue_t, revenue_t1, total_assets_t, total_assets_t1]):
-            logger.warning("Beneish M-Score: Insufficient data (missing revenue or total assets)")
+            logger.info("Beneish M-Score: Insufficient data (missing revenue or total assets)")
             return None
 
         assert revenue_t is not None and revenue_t1 is not None

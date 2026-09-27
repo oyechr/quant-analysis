@@ -591,27 +591,38 @@ class RiskAnalysisSection(ReportSection):
         """
         from ..analysis.risk import RiskMetrics
         from ..config import get_config
+        from ..markets import benchmark_for
 
         period = kwargs.get("period", "1y")
         price_data = kwargs.get("price_data")
         if price_data is None or price_data.empty:
             price_data = fetcher.fetch_ticker(ticker, period=period, use_cache=use_cache)
 
-        # Fetch benchmark data once (cache-aware)
-        config = get_config()
-        benchmark_ticker = config.benchmark_ticker
+        # Benchmark against the ticker's home market (e.g. OSEBX for .OL listings)
+        benchmark_ticker = kwargs.get("benchmark_ticker") or benchmark_for(ticker)
         benchmark_data = kwargs.get("benchmark_data")
         if not isinstance(benchmark_data, pd.DataFrame) or benchmark_data.empty:
             # Use period= (not start=/end=) so the cache filename is stable across days.
             # start/end shift daily, causing a fresh fetch every run.
-            benchmark_data = fetcher.fetch_ticker(
-                benchmark_ticker,
-                period=period,
-                use_cache=use_cache,
-            )
+            try:
+                benchmark_data = fetcher.fetch_ticker(
+                    benchmark_ticker, period=period, use_cache=use_cache
+                )
+            except Exception as e:
+                default_benchmark = get_config().benchmark_ticker
+                if benchmark_ticker == default_benchmark:
+                    raise
+                logger.warning(
+                    f"Benchmark {benchmark_ticker} unavailable ({e}); "
+                    f"falling back to {default_benchmark}"
+                )
+                benchmark_ticker = default_benchmark
+                benchmark_data = fetcher.fetch_ticker(
+                    benchmark_ticker, period=period, use_cache=use_cache
+                )
 
         # Calculate all metrics (pass benchmark to avoid re-fetch)
-        risk_analyzer = RiskMetrics()
+        risk_analyzer = RiskMetrics(benchmark_ticker=benchmark_ticker)
         metrics = risk_analyzer.calculate_all_metrics(price_data, benchmark_data=benchmark_data)
 
         # Return tuple: (analyzer, metrics, benchmark) for dual formatting

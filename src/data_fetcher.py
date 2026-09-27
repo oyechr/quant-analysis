@@ -5,6 +5,7 @@ Handles fetching historical market data from Yahoo Finance
 
 import json
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -15,8 +16,6 @@ import yfinance as yf
 from .config import get_config
 from .utils.serialization import dataframe_to_json_dict, dataframe_to_records, series_to_dataframe
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +32,9 @@ class DataFetcher:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
         self.config = get_config()
+        # ticker -> resource -> ISO timestamp of when the data was fetched from the source
+        self._fetched_at: Dict[str, Dict[str, str]] = {}
+        self._fetched_at_lock = threading.Lock()
 
     def validate_ticker(self, ticker: str) -> bool:
         """
@@ -135,25 +137,14 @@ class DataFetcher:
         # Validate parameters
         self._validate_params(period, interval, start, end)
 
-        # Validate ticker symbol
-        if not self.validate_ticker(ticker):
-            raise ValueError(
-                f"Invalid or inaccessible ticker symbol: '{ticker}'. "
-                f"Please verify the symbol exists."
-            )
-
         cache_file = self._get_cache_filename(ticker, start, end, period, interval)
 
-        # Check cache
-        if use_cache and cache_file.exists():
-            logger.info(f"Loading cached data for {ticker} from {cache_file}")
-            try:
-                df = pd.read_csv(cache_file, index_col=0)
-                df.index = pd.to_datetime(df.index, utc=True)
-                return df
-            except Exception as e:
-                logger.warning(f"Failed to load cache for {ticker}: {e}")
-                logger.info("Fetching fresh data instead")
+        # Check cache. Invalid symbols are caught below when history() comes back
+        # empty, so no separate (network-bound) validate_ticker() call is needed.
+        if use_cache and self._is_fresh(cache_file, "prices"):
+            cached = self._load_price_cache(cache_file)
+            if cached is not None:
+                return cached
 
         # Fetch from Yahoo Finance
         logger.info(f"Fetching data for {ticker} from Yahoo Finance")
@@ -172,6 +163,8 @@ class DataFetcher:
                     f"or no data available for the specified period/interval."
                 )
 
+            self._record_fetch(ticker, "prices", datetime.now())
+
             # Save to cache
             try:
                 cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -184,33 +177,39 @@ class DataFetcher:
 
             return data
 
-        except ValueError:
-            # Re-raise ValueError (ticker/param validation)
-            raise
-        except ConnectionError as e:
-            logger.error(f"Network error fetching {ticker}: {e}")
-            raise ConnectionError(
-                f"Failed to connect to Yahoo Finance for {ticker}. Check your internet connection."
-            ) from e
         except Exception as e:
-            error_msg = str(e).lower()
+            # Network trouble or rate limiting: an expired cache beats no data.
+            # yfinance often reports connection failures as an empty history
+            # ("possibly delisted"), so the empty-data ValueError gets the same fallback.
+            stale = self._load_price_cache(cache_file) if cache_file.exists() else None
+            if stale is not None:
+                logger.warning(f"Fetch failed for {ticker} ({e}); using expired cache")
+                return stale
+            if isinstance(e, ValueError):
+                raise
+            raise self._fetch_error(ticker, e) from e
 
-            # Detect specific error types
-            if "404" in error_msg or "not found" in error_msg:
-                raise ValueError(
-                    f"Ticker '{ticker}' not found. Verify the symbol is correct."
-                ) from e
-            elif "timeout" in error_msg:
-                raise ConnectionError(
-                    f"Request timeout for {ticker}. Yahoo Finance may be slow or unreachable."
-                ) from e
-            elif "rate limit" in error_msg or "429" in error_msg:
-                raise RuntimeError(
-                    "Yahoo Finance rate limit exceeded. Please wait a few minutes before retrying."
-                ) from e
-            else:
-                logger.error(f"Unexpected error fetching {ticker}: {e}")
-                raise RuntimeError(f"Failed to fetch data for {ticker}: {e}") from e
+    @staticmethod
+    def _fetch_error(ticker: str, e: Exception) -> Exception:
+        """Translate a failed price fetch into a descriptive exception."""
+        error_msg = str(e).lower()
+        if isinstance(e, ConnectionError):
+            logger.error(f"Network error fetching {ticker}: {e}")
+            return ConnectionError(
+                f"Failed to connect to Yahoo Finance for {ticker}. Check your internet connection."
+            )
+        if "404" in error_msg or "not found" in error_msg:
+            return ValueError(f"Ticker '{ticker}' not found. Verify the symbol is correct.")
+        if "timeout" in error_msg:
+            return ConnectionError(
+                f"Request timeout for {ticker}. Yahoo Finance may be slow or unreachable."
+            )
+        if "rate limit" in error_msg or "429" in error_msg:
+            return RuntimeError(
+                "Yahoo Finance rate limit exceeded. Please wait a few minutes before retrying."
+            )
+        logger.error(f"Unexpected error fetching {ticker}: {e}")
+        return RuntimeError(f"Failed to fetch data for {ticker}: {e}")
 
     def fetch_multiple_tickers(
         self,
@@ -327,6 +326,10 @@ class DataFetcher:
             return result
 
         except Exception as e:
+            stale = self._load_json_cache(cache_file, ignore_ttl=True)
+            if stale is not None:
+                logger.warning(f"Fetch of info failed for {ticker} ({e}); using expired cache")
+                return dict(stale)
             logger.error(f"Error fetching info for {ticker}: {e}")
             logger.info("Returning empty dict to allow other sections to continue")
             return {}
@@ -619,23 +622,83 @@ class DataFetcher:
         cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir / filename
 
-    def _load_json_cache(self, cache_path: Path) -> Optional[Any]:
+    def _is_fresh(self, cache_path: Path, resource: str) -> bool:
         """
-        Load data from JSON cache file if it exists
+        Whether a cache file exists and is younger than the resource's TTL.
+
+        TTLs come from AnalysisConfig.cache_ttl_hours; resources without a TTL
+        (or with TTL <= 0) never expire.
+        """
+        if not cache_path.exists():
+            return False
+        ttl_hours = (self.config.cache_ttl_hours or {}).get(resource, 0)
+        if ttl_hours <= 0:
+            return True
+        age_hours = (datetime.now().timestamp() - cache_path.stat().st_mtime) / 3600
+        if age_hours >= ttl_hours:
+            logger.info(f"Cache expired ({age_hours:.0f}h old, TTL {ttl_hours:.0f}h): {cache_path}")
+            return False
+        return True
+
+    def _record_fetch(self, ticker: str, resource: str, when: datetime) -> None:
+        """Remember when a resource's data was pulled from the source (for freshness reporting)."""
+        with self._fetched_at_lock:
+            self._fetched_at.setdefault(ticker.upper(), {})[resource] = when.isoformat(
+                timespec="seconds"
+            )
+
+    def freshness(self, ticker: str) -> Dict[str, str]:
+        """
+        When each resource used for a ticker was fetched from the source.
+
+        Returns:
+            Mapping of resource name (prices, info, fundamentals, ...) to ISO timestamp.
+            Cached data reports the cache file's write time.
+        """
+        with self._fetched_at_lock:
+            return dict(self._fetched_at.get(ticker.upper(), {}))
+
+    def _load_price_cache(self, cache_file: Path) -> Optional[pd.DataFrame]:
+        """Load a cached price CSV, recording its age. Returns None if unreadable."""
+        try:
+            logger.info(f"Loading cached prices from {cache_file}")
+            df = pd.read_csv(cache_file, index_col=0)
+            df.index = pd.to_datetime(df.index, utc=True)
+            ticker = cache_file.parent.parent.name
+            self._record_fetch(ticker, "prices", datetime.fromtimestamp(cache_file.stat().st_mtime))
+            return df
+        except Exception as e:
+            logger.warning(f"Failed to load price cache {cache_file}: {e}")
+            return None
+
+    def _load_json_cache(self, cache_path: Path, ignore_ttl: bool = False) -> Optional[Any]:
+        """
+        Load data from JSON cache file if it exists and has not expired
+
+        The TTL key is the cache file stem (info.json -> "info").
 
         Args:
             cache_path: Path to cache file
+            ignore_ttl: Return expired data too (fallback when a fresh fetch fails)
 
         Returns:
-            Cached data or None if cache doesn't exist or is invalid
+            Cached data or None if cache doesn't exist, is expired, or is invalid
         """
         if not cache_path.exists():
+            return None
+        if not ignore_ttl and not self._is_fresh(cache_path, cache_path.stem):
             return None
 
         try:
             logger.info(f"Loading from cache: {cache_path}")
             with open(cache_path, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+            self._record_fetch(
+                cache_path.parent.parent.name,
+                cache_path.stem,
+                datetime.fromtimestamp(cache_path.stat().st_mtime),
+            )
+            return data
         except json.JSONDecodeError as e:
             logger.warning(f"Invalid JSON in cache file {cache_path}: {e}")
             logger.info("Cache will be regenerated")
@@ -659,6 +722,7 @@ class DataFetcher:
             Logs warnings on failure but does not raise exceptions
             to avoid breaking the main fetch operations
         """
+        self._record_fetch(cache_path.parent.parent.name, cache_path.stem, datetime.now())
         try:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             with open(cache_path, "w") as f:
@@ -718,6 +782,12 @@ class DataFetcher:
             return result
 
         except Exception as e:
+            stale = self._load_json_cache(cache_file, ignore_ttl=True)
+            if stale is not None:
+                logger.warning(
+                    f"Fetch of {resource_name} failed for {ticker} ({e}); using expired cache"
+                )
+                return deserialize_fn(stale)
             logger.error(f"Error fetching {resource_name} for {ticker}: {e}")
             return empty_result
 

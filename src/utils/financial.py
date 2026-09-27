@@ -85,17 +85,58 @@ def validate_price_data(price_data: pd.DataFrame, column: str = "Close") -> bool
     return price_data is not None and not price_data.empty and column in price_data.columns
 
 
-def convert_annual_to_daily_rate(annual_rate_pct: float) -> float:
+def convert_annual_to_daily_rate(annual_rate: float) -> float:
     """
-    Convert annual rate (percentage) to daily rate
+    Convert annual rate to daily rate
 
     Args:
-        annual_rate_pct: Annual rate as percentage (e.g., 4.0 for 4%)
+        annual_rate: Annual rate as a decimal fraction (e.g., 0.04 for 4%),
+            matching AnalysisConfig.risk_free_rate
 
     Returns:
         Daily rate as decimal
     """
-    return (1 + annual_rate_pct / 100) ** (1 / TRADING_DAYS_PER_YEAR) - 1
+    return (1 + annual_rate) ** (1 / TRADING_DAYS_PER_YEAR) - 1
+
+
+def trading_dates(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """
+    Convert daily-bar timestamps to tz-naive trading dates.
+
+    Exchange-local stamps keep their local date. UTC stamps (how price caches
+    are reloaded) turn exchange-local midnight into the previous evening (Oslo)
+    or early morning (New York); shifting by 12h before flooring recovers the
+    trading date for exchanges between UTC-12 and UTC+12.
+    """
+    if index.tz is not None and str(index.tz) == "UTC":
+        return (index + pd.Timedelta(hours=12)).tz_localize(None).floor("D")
+    if index.tz is not None:
+        return index.tz_localize(None).normalize()
+    return index.normalize()
+
+
+def align_daily_returns(stock_returns: pd.Series, benchmark_returns: pd.Series) -> pd.DataFrame:
+    """
+    Align two daily return series on calendar date.
+
+    Daily bars from different exchanges carry midnight timestamps in their own
+    timezone (e.g. Europe/Oslo vs America/New_York), so aligning on the raw
+    index yields no overlap. Normalizing to tz-naive dates fixes that.
+
+    See trading_dates() for how cached UTC stamps are handled.
+
+    Returns:
+        DataFrame with 'stock' and 'benchmark' columns, rows with gaps dropped
+    """
+
+    def _by_date(series: pd.Series) -> pd.Series:
+        by_date = series.copy()
+        by_date.index = trading_dates(pd.DatetimeIndex(series.index))
+        return by_date[~by_date.index.duplicated(keep="last")]
+
+    return pd.DataFrame(
+        {"stock": _by_date(stock_returns), "benchmark": _by_date(benchmark_returns)}
+    ).dropna()
 
 
 def calculate_cagr(ending_value: float, beginning_value: float, num_periods: int) -> float:

@@ -197,7 +197,7 @@ def build_brief_context(report_data: Dict[str, Any]) -> str:
         f"Calmar: {_fmt(ra.get('calmar_ratio'))}",
         f"Max drawdown: {_fmt((dd.get('max_drawdown') or 0) * 100)}%  "
         f"Current drawdown: {_fmt((dd.get('current_drawdown') or 0) * 100)}%",
-        f"Beta vs {mr.get('benchmark', '^GSPC')}: {_fmt(mr.get('beta'))}  "
+        f"Beta vs {mr.get('benchmark', 'benchmark')}: {_fmt(mr.get('beta'))}  "
         f"Alpha: {_fmt(mr.get('alpha'))}  Correlation: {_fmt(mr.get('correlation'))}",
         f"VaR 95% (historical): {_fmt((var95.get('var_historical') or 0) * 100)}%/day  "
         f"CVaR: {_fmt((var95.get('cvar_historical') or 0) * 100)}%/day",

@@ -5,11 +5,22 @@ Centralized configuration for analysis parameters
 
 import json
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_CACHE_TTL_HOURS: Dict[str, float] = {
+    "prices": 12,  # daily bars; refresh after each session
+    "info": 24,  # price-dependent ratios (P/E, market cap)
+    "earnings": 72,
+    "analyst_ratings": 72,
+    "dividends": 168,
+    "fundamentals": 168,  # statements change quarterly, refresh weekly around earnings
+    "holders": 720,
+    "universe": 720,  # index constituent lists
+}
 
 
 @dataclass
@@ -26,7 +37,10 @@ class AnalysisConfig:
 
     # ==================== Risk Parameters ====================
     risk_free_rate: float = 0.04  # 4% annual
-    benchmark_ticker: str = "^GSPC"  # S&P 500 index
+    benchmark_ticker: str = "^GSPC"  # S&P 500 index (default for US / unmapped exchanges)
+    # Per-exchange benchmark overrides keyed by Yahoo suffix, e.g. {".OL": "OBX.OL"}.
+    # Built-in defaults live in src/markets.py.
+    benchmark_by_suffix: Dict[str, str] = field(default_factory=dict)
 
     # ==================== Technical Analysis ====================
     # Moving averages
@@ -65,6 +79,9 @@ class AnalysisConfig:
     default_period: str = "1y"
     default_interval: str = "1d"
     cache_enabled: bool = True
+    # Max cache age per resource, in hours. Older entries are refetched.
+    # A value <= 0 disables expiry for that resource.
+    cache_ttl_hours: Dict[str, float] = field(default_factory=lambda: dict(DEFAULT_CACHE_TTL_HOURS))
 
     # ==================== LLM Integration ====================
     llm_model: str = "gpt-4.1"
@@ -83,6 +100,9 @@ class AnalysisConfig:
         """Initialize default values for mutable fields"""
         if self.sma_periods is None:
             self.sma_periods = [20, 50, 200]
+
+        # Partial overrides in config.json keep the defaults for unspecified resources
+        self.cache_ttl_hours = {**DEFAULT_CACHE_TTL_HOURS, **(self.cache_ttl_hours or {})}
 
         if self.valid_periods is None:
             self.valid_periods = {

@@ -53,6 +53,7 @@ class ValuationAnalyzer:
         self.fundamentals = fundamentals or {}
         self.earnings_data = earnings_data or {}
         self.dividends_data = dividends_data
+        self._results: Optional[Dict[str, Any]] = None
 
         # Extract currency (default to USD if not specified)
         self.currency = ticker_info.get("currency", "USD")
@@ -907,17 +908,23 @@ class ValuationAnalyzer:
             if earnings_dates is not None and not earnings_dates.empty:
                 # Find next upcoming date
                 try:
-                    # Ensure index is DatetimeIndex
-                    if not isinstance(earnings_dates.index, pd.DatetimeIndex):
-                        earnings_dates.index = pd.to_datetime(earnings_dates.index)
+                    # Fresh yfinance data has a tz-aware DatetimeIndex; the JSON cache
+                    # stores the dates in an "Earnings Date" column instead.
+                    if "Earnings Date" in earnings_dates.columns:
+                        dates = pd.to_datetime(earnings_dates["Earnings Date"], utc=True)
+                    else:
+                        dates = pd.Series(
+                            pd.to_datetime(earnings_dates.index, utc=True),
+                            index=earnings_dates.index,
+                        )
 
-                    now = pd.Timestamp.now()
-                    upcoming = earnings_dates[earnings_dates.index > now]
+                    upcoming = dates[dates > pd.Timestamp.now(tz="UTC")]
                     if not upcoming.empty:
-                        next_date = upcoming.index[0]
-                        result["next_earnings_date"] = str(next_date)
+                        # Rows are newest-first, so the next date is the earliest upcoming one
+                        next_label = upcoming.idxmin()
+                        result["next_earnings_date"] = str(upcoming[next_label].date())
                         result["next_earnings_estimate"] = to_float(
-                            upcoming.iloc[0].get("EPS Estimate")
+                            earnings_dates.loc[next_label].get("EPS Estimate")
                         )
                 except Exception as e:
                     logger.warning(f"Could not parse earnings dates: {e}")
@@ -1030,17 +1037,22 @@ class ValuationAnalyzer:
         """
         Run comprehensive valuation analysis
 
+        Results are computed once and reused (the Monte Carlo run is the
+        expensive part), so format_markdown() and JSON export stay consistent.
+
         Returns:
             Dictionary with all valuation results
         """
-        return {
-            "ticker": self.ticker,
-            "dcf_valuation": self.calculate_dcf_valuation(),
-            "monte_carlo_valuation": self.calculate_monte_carlo_valuation(),
-            "ddm_valuation": self.calculate_ddm_valuation(),
-            "dividend_analysis": self.analyze_dividends(),
-            "earnings_analysis": self.analyze_earnings(),
-        }
+        if self._results is None:
+            self._results = {
+                "ticker": self.ticker,
+                "dcf_valuation": self.calculate_dcf_valuation(),
+                "monte_carlo_valuation": self.calculate_monte_carlo_valuation(),
+                "ddm_valuation": self.calculate_ddm_valuation(),
+                "dividend_analysis": self.analyze_dividends(),
+                "earnings_analysis": self.analyze_earnings(),
+            }
+        return self._results
 
     def format_markdown(self) -> List[str]:
         """

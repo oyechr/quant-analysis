@@ -1,7 +1,7 @@
 """
 CLI Interface for Quantitative Analysis Tool
 
-Provides subcommands: report, score, compare, explain, watch
+Provides subcommands: report, score, screen, compare, chat, discover, watch
 Install with: pip install -e .
 Usage: quant report AAPL
 """
@@ -10,7 +10,6 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import click
 
@@ -22,8 +21,13 @@ from .comparison import (
     format_comparison_table,
     format_correlation_heatmap,
 )
+from .data_fetcher import DataFetcher
+from .pipeline import AnalysisOptions
 from .reporting import ReportGenerator
-from .scoring import ScoringConfig, StockScorer
+from .scoring import ScoringConfig
+from .utils.concurrency import DEFAULT_WORKERS, run_concurrently
+
+PRESETS = ["default", "value", "growth", "income"]
 
 
 def _configure_logging(verbose: bool, quiet: bool):
@@ -32,13 +36,18 @@ def _configure_logging(verbose: bool, quiet: bool):
     # cannot represent the Unicode block characters used in scorecards.
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    # Progress goes through click.echo; library logging is for problems (default)
+    # or diagnostics (-v).
     if quiet:
-        level = logging.WARNING
+        level = logging.ERROR
     elif verbose:
         level = logging.DEBUG
     else:
-        level = logging.INFO
+        level = logging.WARNING
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s", force=True)
+    # yfinance logs its own ERRORs for delisted/unknown symbols; our commands already
+    # report those per ticker, so only show them when debugging.
+    logging.getLogger("yfinance").setLevel(logging.DEBUG if verbose else logging.CRITICAL)
 
 
 def _get_scoring_config(config_name: str) -> ScoringConfig:
@@ -55,6 +64,32 @@ def _get_scoring_config(config_name: str) -> ScoringConfig:
             f"Unknown config preset '{config_name}'. Available: {', '.join(presets.keys())}"
         )
     return factory()
+
+
+def _config_option(help_text: str = "Scoring preset (default, value, growth, income)."):
+    return click.option(
+        "--config",
+        "config_name",
+        type=click.Choice(PRESETS, case_sensitive=False),
+        default="default",
+        help=help_text,
+    )
+
+
+def _workers_option():
+    return click.option(
+        "--workers",
+        default=DEFAULT_WORKERS,
+        type=click.IntRange(1, 16),
+        show_default=True,
+        help="Tickers analyzed in parallel (keep modest; Yahoo rate-limits).",
+    )
+
+
+def _echo_freshness_warnings(ticker: str, report_data: dict):
+    """Surface stale/expired data so scores aren't trusted blindly."""
+    for warning in (report_data.get("data_freshness") or {}).get("warnings", []):
+        click.echo(f"  ! {ticker}: {warning}", err=True)
 
 
 @click.group()
@@ -90,20 +125,27 @@ def cli(ctx, output_dir, no_cache, output_format, period, verbose, quiet):
 @click.option("--exclude-fundamental", is_flag=True, help="Exclude fundamental analysis.")
 @click.option("--exclude-risk", is_flag=True, help="Exclude risk analysis.")
 @click.option("--exclude-valuation", is_flag=True, help="Exclude valuation analysis.")
+@_config_option()
 @click.pass_context
-def report(ctx, ticker, exclude_technical, exclude_fundamental, exclude_risk, exclude_valuation):
+def report(
+    ctx,
+    ticker,
+    exclude_technical,
+    exclude_fundamental,
+    exclude_risk,
+    exclude_valuation,
+    config_name,
+):
     """Generate a full report and detailed scorecard for a single ticker.
 
     Prints the complete scorecard breakdown (dimension scores, strengths,
     concerns) and saves json/md/toon report files.
     Use 'score' instead when screening multiple tickers at once.
 
-    Example: quant report AAPL --period 2y
+    Example: quant report AAPL --period 2y --config value
     """
     output_dir = ctx.obj["output_dir"]
-    use_cache = ctx.obj["use_cache"]
     output_format = ctx.obj["output_format"]
-    period = ctx.obj["period"]
 
     ticker = ticker.upper()
     generator = ReportGenerator(output_dir=output_dir)
@@ -112,15 +154,18 @@ def report(ctx, ticker, exclude_technical, exclude_fundamental, exclude_risk, ex
     click.echo(f"  Generating report for {ticker}")
     click.echo("=" * 70)
 
-    report_data = generator.generate_full_report(
-        ticker=ticker,
-        period=period,
+    bundle = generator.generate(
+        ticker,
+        AnalysisOptions(
+            period=ctx.obj["period"],
+            use_cache=ctx.obj["use_cache"],
+            include_technical=not exclude_technical,
+            include_fundamental=not exclude_fundamental,
+            include_risk=not exclude_risk,
+            include_valuation=not exclude_valuation,
+            scoring_config=_get_scoring_config(config_name),
+        ),
         output_format=output_format,
-        use_cache=use_cache,
-        include_technical=not exclude_technical,
-        include_fundamental=not exclude_fundamental,
-        include_risk=not exclude_risk,
-        include_valuation=not exclude_valuation,
     )
 
     click.echo(f"\nReport generated for {ticker}")
@@ -131,61 +176,51 @@ def report(ctx, ticker, exclude_technical, exclude_fundamental, exclude_risk, ex
     if output_format in ("toon", "all"):
         click.echo(f"  - TOON: {output_dir}/{ticker}/reports/full_report.toon")
 
-    # Display scorecard
-    scoring_data = report_data.get("scoring")
-    if scoring_data:
-        scorer = StockScorer()
-        scoring_result = scorer.score(report_data)
+    _echo_freshness_warnings(ticker, bundle.report)
+
+    if bundle.scoring:
         click.echo()
-        click.echo(scoring_result.format_scorecard())
+        click.echo(bundle.scoring.format_scorecard())
 
     click.echo(f"\nFiles saved in: {output_dir}/{ticker}/reports/")
 
 
 @cli.command()
 @click.argument("tickers", nargs=-1, required=True)
-@click.option(
-    "--config",
-    "config_name",
-    type=click.Choice(["default", "value", "growth", "income"], case_sensitive=False),
-    default="default",
-    help="Scoring preset (default, value, growth, income).",
-)
+@_config_option()
+@_workers_option()
 @click.pass_context
-def score(ctx, tickers, config_name):
+def score(ctx, tickers, config_name, workers):
     """Score one or more tickers and display a summary table.
 
     Prints a compact one-row-per-ticker table with composite score, signal,
-    and dimension breakdown. Use 'report' for a single-ticker deep dive.
+    and dimension breakdown. Use 'report' for a single-ticker deep dive,
+    or 'screen' to rank a whole index.
 
     Example: quant score AAPL MSFT TSLA --config value
     """
-    output_dir = ctx.obj["output_dir"]
-    use_cache = ctx.obj["use_cache"]
     output_format = ctx.obj["output_format"]
-    period = ctx.obj["period"]
+    generator = ReportGenerator(output_dir=ctx.obj["output_dir"])
+    options = AnalysisOptions(
+        period=ctx.obj["period"],
+        use_cache=ctx.obj["use_cache"],
+        scoring_config=_get_scoring_config(config_name),
+    )
+    tickers_list = list(dict.fromkeys(t.upper() for t in tickers))
 
-    scoring_config = _get_scoring_config(config_name)
-    generator = ReportGenerator(output_dir=output_dir)
-    scorer = StockScorer(config=scoring_config)
-
-    results: List[Tuple[str, Optional[object]]] = []
-
-    for ticker in tickers:
-        ticker = ticker.upper()
-        click.echo(f"  Analyzing {ticker}...")
-        try:
-            report_data = generator.generate_full_report(
-                ticker=ticker,
-                period=period,
-                output_format=output_format,
-                use_cache=use_cache,
-            )
-            result = scorer.score(report_data)
-            results.append((ticker, result))
-        except Exception as e:
-            click.echo(f"  ✗ Error for {ticker}: {e}", err=True)
-            results.append((ticker, None))
+    click.echo(f"  Analyzing {len(tickers_list)} ticker(s)...")
+    results = {}
+    for ticker, bundle, error in run_concurrently(
+        lambda t: generator.generate(t, options, output_format=output_format),
+        tickers_list,
+        workers=workers,
+    ):
+        if error is not None or bundle.scoring is None:
+            click.echo(f"  ✗ Error for {ticker}: {error or 'scoring failed'}", err=True)
+            results[ticker] = None
+            continue
+        _echo_freshness_warnings(ticker, bundle.report)
+        results[ticker] = bundle.scoring
 
     # Print summary table
     click.echo()
@@ -199,7 +234,8 @@ def score(ctx, tickers, config_name):
     )
     click.echo("  " + "-" * 62)
 
-    for ticker, result in results:
+    for ticker in tickers_list:
+        result = results.get(ticker)
         if result is None:
             click.echo(f"  {ticker:<8}    ERROR")
             continue
@@ -215,15 +251,173 @@ def score(ctx, tickers, config_name):
     click.echo()
 
 
+def _parse_amount_option(ctx, param, value):
+    if value is None:
+        return None
+    from .screening import parse_amount
+
+    try:
+        return parse_amount(value)
+    except ValueError as e:
+        raise click.BadParameter(str(e)) from e
+
+
+@cli.command()
+@click.argument("universe", nargs=-1)
+@click.option("--top", default=20, show_default=True, help="Candidates to fully score.")
+@_config_option()
+@click.option(
+    "--sector",
+    "sectors",
+    multiple=True,
+    help="Keep only this sector/industry (substring, repeatable).",
+)
+@click.option(
+    "--exclude-sector",
+    "exclude_sectors",
+    multiple=True,
+    help="Drop this sector/industry (substring, repeatable).",
+)
+@click.option(
+    "--min-mcap",
+    callback=_parse_amount_option,
+    help="Minimum market cap in the listing currency (e.g. 2B, 500M).",
+)
+@click.option("--max-mcap", callback=_parse_amount_option, help="Maximum market cap.")
+@click.option(
+    "--min-volume",
+    callback=_parse_amount_option,
+    help="Minimum average daily volume in shares (e.g. 500K).",
+)
+@_workers_option()
+@click.option("--list", "list_only", is_flag=True, help="List built-in universes and exit.")
+@click.option("--save/--no-save", default=True, show_default=True, help="Write results files.")
+@click.pass_context
+def screen(
+    ctx,
+    universe,
+    top,
+    config_name,
+    sectors,
+    exclude_sectors,
+    min_mcap,
+    max_mcap,
+    min_volume,
+    workers,
+    list_only,
+    save,
+):
+    """Screen an index or ticker list for the best candidates.
+
+    UNIVERSE is one or more of: a built-in index (sp500, sp100, nasdaq100,
+    obx), 'discover' (consensus picks from the last `quant discover` run),
+    a path to a ticker file, or literal tickers. Mix freely.
+
+    Stage 1 ranks every ticker on value, quality, momentum and low volatility
+    using cheap data. Stage 2 runs the full analysis and composite score on
+    the --top candidates.
+
+    \b
+    Examples:
+      quant screen sp500 --top 25 --config value
+      quant screen obx --exclude-sector Energy
+      quant screen nasdaq100 --sector Technology --min-mcap 50B
+      quant screen discover
+      quant screen watchlist.txt EQNR.OL DNB.OL
+    """
+    from .screening import (
+        Screener,
+        ScreenFilters,
+        format_screen_table,
+        list_universes,
+        resolve_universe,
+        save_screen,
+    )
+
+    if list_only or not universe:
+        click.echo("\n  Built-in universes:")
+        for name, description in list_universes().items():
+            click.echo(f"    {name:<12} {description}")
+        click.echo("\n  Or pass a ticker file path and/or literal tickers.\n")
+        if not list_only:
+            raise click.UsageError("Specify at least one UNIVERSE.")
+        return
+
+    output_dir = ctx.obj["output_dir"]
+    use_cache = ctx.obj["use_cache"]
+
+    try:
+        resolved = resolve_universe(list(universe), data_dir=output_dir, use_cache=use_cache)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+    if not resolved.tickers:
+        raise click.ClickException("Universe is empty.")
+
+    click.echo("=" * 70)
+    click.echo(f"  Screening {len(resolved.tickers)} tickers ({resolved.label})")
+    click.echo("=" * 70)
+
+    screener = Screener(
+        fetcher=DataFetcher(cache_dir=output_dir),
+        options=AnalysisOptions(
+            period=ctx.obj["period"],
+            use_cache=use_cache,
+            scoring_config=_get_scoring_config(config_name),
+        ),
+        workers=workers,
+    )
+    filters = ScreenFilters(
+        sectors=tuple(sectors),
+        exclude_sectors=tuple(exclude_sectors),
+        min_market_cap=min_mcap,
+        max_market_cap=max_mcap,
+        min_avg_volume=min_volume,
+    )
+
+    stage_labels = {"rank": "  Ranking universe  ", "score": "  Scoring shortlist "}
+    bars = {}
+
+    def _progress(stage: str, done: int, total: int):
+        if stage not in bars:
+            bars[stage] = click.progressbar(length=total, label=stage_labels[stage])
+            bars[stage].__enter__()
+        bars[stage].update(1)
+        if done == total:
+            bars[stage].__exit__(None, None, None)
+
+    result = screener.run(
+        resolved.tickers,
+        filters=filters,
+        top_n=top,
+        universe_label=resolved.label,
+        progress=_progress,
+    )
+
+    click.echo()
+    click.echo(format_screen_table(result))
+
+    filtered = sum(1 for r in result.excluded.values() if r.startswith("filtered"))
+    unavailable = len(result.excluded) - filtered
+    if filtered or unavailable:
+        click.echo(f"\n  Excluded: {filtered} by filters, {unavailable} with no usable data")
+        if unavailable:
+            sample = [t for t, r in result.excluded.items() if not r.startswith("filtered")][:8]
+            click.echo(f"    no data: {', '.join(sample)}{' ...' if unavailable > 8 else ''}")
+
+    if save:
+        for path in save_screen(result, output_dir, ctx.obj["output_format"]):
+            click.echo(f"  Saved: {path}")
+
+    if result.scored:
+        best = [c.ticker for c in result.scored[:3] if c.scoring]
+        if best:
+            click.echo(f"\n  Next: quant report {best[0]}   |   quant compare {' '.join(best)}")
+    click.echo()
+
+
 @cli.command()
 @click.argument("tickers", nargs=-1, required=True)
-@click.option(
-    "--config",
-    "config_name",
-    type=click.Choice(["default", "value", "growth", "income"], case_sensitive=False),
-    default="default",
-    help="Scoring preset.",
-)
+@_config_option()
 @click.option(
     "--save-chart",
     default=None,
@@ -603,7 +797,7 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
     else:
         # Auto-enrich: run overlap detection first, then enrich only top tickers
         analyzer_pre = PortfolioAnalyzer(min_overlap=min_overlap)
-        pre_signals = analyzer_pre._detect_overlap(portfolios)
+        pre_signals = analyzer_pre.detect_overlap(portfolios)
         top_tickers = {s.ticker for s in pre_signals[: top * 2]}  # Enrich a bit more than displayed
         if top_tickers:
             click.echo(
@@ -737,6 +931,8 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
         except ImportError:
             pass
 
+    if result.overlap_signals and output_format in ("json", "all"):
+        click.echo("\n  Next: quant screen discover   (factor-rank and score these picks)")
     click.echo()
 
 
@@ -746,28 +942,24 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
     "--interval", default=300, type=int, help="Refresh interval in seconds (default: 300)."
 )
 @click.option("--count", default=0, type=int, help="Number of iterations (default: 0 = infinite).")
-@click.option(
-    "--config",
-    "config_name",
-    type=click.Choice(["default", "value", "growth", "income"], case_sensitive=False),
-    default="default",
-    help="Scoring preset.",
-)
+@_config_option()
 @click.pass_context
 def watch(ctx, tickers, interval, count, config_name):
     """Continuously watch and score tickers at regular intervals.
 
+    Re-fetches data every iteration; nothing is written to disk.
     Press Ctrl-C to stop.
 
     Example: quant watch AAPL MSFT --interval 60 --count 5
     """
-    output_dir = ctx.obj["output_dir"]
     period = ctx.obj["period"]
-    output_format = ctx.obj["output_format"]
-
-    scoring_config = _get_scoring_config(config_name)
-    generator = ReportGenerator(output_dir=output_dir)
-    scorer = StockScorer(config=scoring_config)
+    generator = ReportGenerator(output_dir=ctx.obj["output_dir"])
+    options = AnalysisOptions(
+        period=period,
+        use_cache=False,
+        include_context=False,
+        scoring_config=_get_scoring_config(config_name),
+    )
     tickers_list = [t.upper() for t in tickers]
 
     iteration = 0
@@ -788,13 +980,9 @@ def watch(ctx, tickers, interval, count, config_name):
 
             for ticker in tickers_list:
                 try:
-                    report_data = generator.generate_full_report(
-                        ticker=ticker,
-                        period=period,
-                        output_format=output_format,
-                        use_cache=False,
-                    )
-                    result = scorer.score(report_data)
+                    result = generator.generate(ticker, options, output_format="none").scoring
+                    if result is None:
+                        raise RuntimeError("scoring failed")
                     click.echo(
                         f"  {ticker:<8} {result.composite_score:>5.0f}  "
                         f"{result.signal:<12} {result.confidence:<10}"

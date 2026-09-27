@@ -159,6 +159,7 @@ class ScoringConfig:
     Can be customized per investment style (e.g., value, growth, income).
     """
 
+    name: str = "default"
     weights: DimensionWeight = field(default_factory=DimensionWeight)
     signals: SignalThresholds = field(default_factory=SignalThresholds)
     technical: TechnicalScoringParams = field(default_factory=TechnicalScoringParams)
@@ -198,7 +199,7 @@ class ScoringConfig:
             with open(path, "r") as f:
                 data = json.load(f)
 
-            config = cls()
+            config = cls(name=data.get("name", path.stem))
             if "weights" in data:
                 config.weights = DimensionWeight(**data["weights"])
             if "signals" in data:
@@ -230,6 +231,7 @@ class ScoringConfig:
     def value_investor(cls) -> "ScoringConfig":
         """Preset: Value-oriented investor (emphasizes fundamentals + valuation)"""
         return cls(
+            name="value",
             weights=DimensionWeight(technical=0.10, fundamental=0.35, risk=0.20, valuation=0.35),
         )
 
@@ -237,6 +239,7 @@ class ScoringConfig:
     def growth_investor(cls) -> "ScoringConfig":
         """Preset: Growth-oriented investor (emphasizes growth + momentum)"""
         return cls(
+            name="growth",
             weights=DimensionWeight(technical=0.30, fundamental=0.35, risk=0.15, valuation=0.20),
         )
 
@@ -244,5 +247,6 @@ class ScoringConfig:
     def income_investor(cls) -> "ScoringConfig":
         """Preset: Income-oriented investor (emphasizes dividends + risk)"""
         return cls(
+            name="income",
             weights=DimensionWeight(technical=0.10, fundamental=0.25, risk=0.30, valuation=0.35),
         )

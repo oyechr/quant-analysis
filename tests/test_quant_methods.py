@@ -187,12 +187,12 @@ class TestFactorRanking:
         ranker = FactorRanker()
         ticker_data = {
             "HIGH_VOL": {
-                "info": {"pe_ratio": 15, "price_to_book": 2.0, "roe": 0.15, "debtToEquity": 0.5},
+                "info": {"pe_ratio": 15, "price_to_book": 2.0, "roe": 0.15, "debtToEquity": 50.0},
                 "price_data": sample_price_data,
                 "report": {},
             },
             "LOW_VOL": {
-                "info": {"pe_ratio": 25, "price_to_book": 4.0, "roe": 0.10, "debtToEquity": 1.5},
+                "info": {"pe_ratio": 25, "price_to_book": 4.0, "roe": 0.10, "debtToEquity": 150.0},
                 "price_data": sample_benchmark,  # Lower vol
                 "report": {},
             },
@@ -211,6 +211,23 @@ class TestFactorRanking:
         cheap = ranker._calc_value_factor({"info": {"pe_ratio": 10, "price_to_book": 1.0}})
         expensive = ranker._calc_value_factor({"info": {"pe_ratio": 50, "price_to_book": 5.0}})
         assert cheap > expensive
+
+    def test_debt_to_equity_is_read_as_yahoo_percentage(self):
+        ranker = FactorRanker()
+        components = ranker._quality_components({"info": {"debtToEquity": 150.0}})
+        assert components["low_leverage"] == pytest.approx(0.5)
+
+    def test_value_components_ranked_before_averaging(self):
+        # A is cheapest on earnings, B on book value. Averaging raw yields would let
+        # book/price (larger scale) dominate; ranking each metric first treats them equally.
+        ranker = FactorRanker()
+        ticker_data = {
+            "A": {"info": {"pe_ratio": 10, "price_to_book": 10.0}},
+            "B": {"info": {"pe_ratio": 50, "price_to_book": 2.0}},
+            "C": {"info": {"pe_ratio": 20, "price_to_book": 5.0}},
+        }
+        results = {r.ticker: r for r in ranker.rank_universe(ticker_data)}
+        assert results["A"].value_score == pytest.approx(results["B"].value_score)
 
     def test_custom_weights(self, sample_price_data, sample_benchmark):
         weights = FactorWeights(value=0.0, quality=0.0, momentum=1.0, low_volatility=0.0)

@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Required for 'quant explain'
+# Required for 'quant chat'
 llm = [
     "anthropic>=0.25.0",
     "openai>=1.0.0",

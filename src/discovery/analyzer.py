@@ -70,7 +70,7 @@ class PortfolioAnalyzer:
         )
 
         # Run all analysis patterns
-        result.overlap_signals = self._detect_overlap(portfolios)
+        result.overlap_signals = self.detect_overlap(portfolios)
         result.sector_clusters = self._detect_sector_clusters(portfolios)
         result.convergence_events = self._detect_convergence(portfolios)
         result.contrarian_signals = self._detect_contrarian(portfolios)
@@ -84,7 +84,7 @@ class PortfolioAnalyzer:
 
         return result
 
-    def _detect_overlap(self, portfolios: list[TrackedPortfolio]) -> list[DiscoverySignal]:
+    def detect_overlap(self, portfolios: list[TrackedPortfolio]) -> list[DiscoverySignal]:
         """
         Detect tickers that appear in multiple portfolios.
 
