@@ -1103,5 +1103,77 @@ def watch(ctx, tickers, interval, count, config_name):
         click.echo("\n  Watch stopped.")
 
 
+@cli.command("import-portfolio")
+@click.argument("exports", nargs=-1, required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--map",
+    "map_path",
+    default="portfolio/tickers.csv",
+    show_default=True,
+    help="CSV mapping Nordnet names to Yahoo tickers (columns: name,ticker).",
+)
+@click.option(
+    "--out",
+    "out_path",
+    default="portfolio/portfolio.csv",
+    show_default=True,
+    help="Combined portfolio file to write.",
+)
+@click.option(
+    "--label",
+    "labels",
+    multiple=True,
+    help="Account label, e.g. --label 12345678=ASK (default: the account number).",
+)
+@click.option("--verify", is_flag=True, help="Look up each ticker on Yahoo and show its name.")
+@click.pass_context
+def import_portfolio(ctx, exports, map_path, out_path, labels, verify):
+    """Combine Nordnet holdings exports into one portfolio file.
+
+    EXPORTS are Nordnet "aksjelister" CSVs (one per account). Names are mapped
+    to Yahoo tickers with --map; unmapped names are listed so you can add
+    them and rerun. Keep real holdings in the gitignored portfolio/ folder.
+
+    \b
+    Example:
+      quant import-portfolio ~/Downloads/aksjelister_konto-*.csv --label 12345678=ASK --verify
+    """
+    import re
+
+    from .portfolio import combine_holdings, load_ticker_map, write_portfolio
+
+    label_map = dict(label.split("=", 1) for label in labels if "=" in label)
+
+    def account_for(path: str) -> str | None:
+        match = re.search(r"konto-(\d+)", Path(path).name)
+        return label_map.get(match.group(1)) if match else None
+
+    holdings, unmapped = combine_holdings(
+        [(Path(p), account_for(p)) for p in exports], load_ticker_map(Path(map_path))
+    )
+    write_portfolio(holdings, Path(out_path))
+    click.echo(f"  Wrote {len(holdings)} holdings from {len(exports)} account(s) to {out_path}")
+    if unmapped:
+        click.echo(f"  No ticker for {len(unmapped)} name(s); add them to {map_path}:")
+        for name in unmapped:
+            click.echo(f"    {name}")
+
+    if verify:
+        from .utils.fx import major_currency
+
+        fetcher = DataFetcher(cache_dir=ctx.obj["output_dir"])
+        click.echo(f"\n  {'Ticker':<12} {'Nordnet name':<32} {'Yahoo name':<32} Currency")
+        for row in holdings.drop_duplicates("ticker").itertuples():
+            if not row.ticker:
+                continue
+            info = fetcher.get_ticker_info(row.ticker)
+            yahoo_ccy = info.get("currency") or "?"
+            same = major_currency(yahoo_ccy)[0] == major_currency(row.currency)[0]
+            click.echo(
+                f"  {row.ticker:<12} {row.name[:32]:<32} {str(info.get('name') or 'NOT FOUND')[:32]:<32} "
+                f"{row.currency}/{yahoo_ccy}{'' if same else '  <- check'}"
+            )
+
+
 if __name__ == "__main__":
     cli()

@@ -62,6 +62,17 @@ def fair_value_range(report: Dict[str, Any]) -> Dict[str, Any]:
         if value is not None and not model.get("error"):
             result[name] = value
 
+    dcf = valuation.get("dcf_valuation") or {}
+    if not dcf.get("error") and dcf.get("growth_rate_used") is not None:
+        # The reverse DCF reads better than a bare value: "the price implies X% growth"
+        result["dcf_assumptions"] = {
+            "growth_start": _num(dcf.get("growth_rate_used")),
+            "implied_growth": _num(dcf.get("implied_growth_pct")),
+            "terminal_growth": _num(dcf.get("terminal_growth_rate")),
+            "wacc": _num(dcf.get("wacc_used")),
+            "years": dcf.get("projection_years"),
+        }
+
     if price:
         result["upside_pct"] = {
             name: (value / price - 1) * 100

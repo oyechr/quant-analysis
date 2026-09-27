@@ -308,6 +308,16 @@ def _verdict_section(data: Dict[str, Any], sym: str) -> Section:
             )
         if mc.get("probability_undervalued") is not None:
             blocks.append(f"P(undervalued) per Monte Carlo: {mc['probability_undervalued']:.0%}")
+        dcf = fv.get("dcf_assumptions") or {}
+        if dcf.get("growth_start") is not None and dcf.get("wacc") is not None:
+            line = (
+                f"DCF: FCF growth {dcf['growth_start']:+.1f}% fading to "
+                f"{dcf.get('terminal_growth') or 0:.1f}% over {dcf.get('years')}y, "
+                f"discounted at {dcf['wacc']:.1f}%"
+            )
+            if dcf.get("implied_growth") is not None:
+                line += f"; the price implies {dcf['implied_growth']:+.1f}% starting growth"
+            blocks.append(line)
         if fv.get("currency_note"):
             blocks.append(fv["currency_note"])
     else:

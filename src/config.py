@@ -38,6 +38,9 @@ class AnalysisConfig:
 
     # ==================== Risk Parameters ====================
     risk_free_rate: float = 0.04  # 4% annual
+    # Mature-market equity risk premium for CAPM (Damodaran's implied ERP has been
+    # about 4-5% in recent years; Kroll recommends 5%)
+    equity_risk_premium: float = 0.05
     benchmark_ticker: str = "^GSPC"  # S&P 500 index (default for US / unmapped exchanges)
     # Per-exchange benchmark overrides keyed by Yahoo suffix, e.g. {".OL": "OBX.OL"}.
     # Built-in defaults live in src/markets.py.

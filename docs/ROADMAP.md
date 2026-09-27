@@ -11,10 +11,44 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 2 | Vet: `quant vet TICKER` | Done (live-checked on EQNR.OL and AAPL, 2026-09-28) |
 | 2b | Vet follow-ups: established data sources, verdict summary | Done; the live run showed Yahoo's micro-cap peer lists and mixed-currency ratios, both handled but over-engineered (see 2c) |
 | 2c | Simplify peers and currency handling (standard practice) | Done (live-checked on AAPL, EQNR.OL and EQNR.OL --peers AKRBP.OL,VAR.OL, 2026-09-28) |
-| 3 | Review: portfolio file -> exit / hold / add advice | Next (needs a sample portfolio / Nordnet export from the user) |
+| 2d | DCF fix: two-stage fade, standard WACC, reverse DCF | Done offline (2026-09-28); live check pending |
+| 3 | Review: portfolio file -> exit / hold / add advice | Next. Input is ready: `quant import-portfolio` built, the user's file is imported (ticker map and account labels still to confirm) |
 | 4 | Track: watchlist, score history, `quant changes` | Planned |
 | 5 | Trust: price-only backtest, calibrate signal thresholds | Planned |
 | 6 | Cleanup (do alongside the others) | Planned |
+
+## Current state and next session (updated 2026-09-28)
+
+Everything through 2c is committed. The 2d DCF fix and the portfolio importer are uncommitted on `main`, and all tests pass offline (454 passed, 27 skipped).
+
+**Next session, in order:**
+
+1. **Live-check 2d.** Ask the user to run `quant vet AAPL` and `quant vet EQNR.OL`. Offline, on their cached data, the new model gave AAPL a DCF of $90 (was $60; price $341; the price implies 33% starting FCF growth) and EQNR.OL 244 NOK (was 32; price 405; implies 0.2%). EQNR.OL's Monte Carlo 10/50/90 was 182/268/480 NOK with P(undervalued) 17% (was 1%). Then commit 2d and the importer.
+2. **Confirm the portfolio input.** The user runs `quant import-portfolio <both Nordnet files> --verify` and checks the Yahoo names. The least certain tickers are listed in `portfolio/NOTES.md`, which is gitignored. Ask which account is ASK and which is AF, then rerun with `--label <number>=ASK --label <number>=AF`.
+3. **Build Phase 3** (`quant review portfolio/portfolio.csv`). Design notes below.
+
+**Portfolio input as built:**
+- `src/portfolio/nordnet.py` provides `read_nordnet_holdings`, `load_ticker_map`, `combine_holdings` and `write_portfolio`. The CLI command is `quant import-portfolio EXPORTS... [--map] [--out] [--label N=NAME] [--verify]`.
+- Nordnet's holdings export ("aksjelister") is UTF-16 and tab-separated, with decimal commas and Norwegian headers: Navn, Valuta, Antall, GAV (average cost per share in the instrument currency), Siste kurs, Verdi, Verdi NOK, Avkast. It has no ISIN or ticker, so names are mapped with `portfolio/tickers.csv`.
+- Output format is `portfolio/portfolio.csv` with columns `ticker,name,account,shares,cost_basis,currency`: one row per account and instrument. The same stock can appear in two accounts, and it stays as two rows because tax treatment differs, so Phase 3 should aggregate by ticker for weights.
+- The account defaults to the number in the file name.
+- `/portfolio/` and `aksjelister_*.csv` are gitignored. Tests use synthetic exports written in `tmp_path` (`tests/test_portfolio.py`). Never put real holdings, account numbers or amounts in committed files, including this one.
+- The user's holdings span many listing currencies and include an ETF, so Phase 3 must handle mixed currencies. Value the holdings in NOK using `utils/fx.usd_per_unit` / `conversion_rate`, and handle the ETF, which has no fundamentals (score it on technicals and risk only, or skip it with a note).
+
+**2d DCF fix as built** (`src/analysis/valuation.py`):
+- `dcf_enterprise_value()` is one vectorized core shared by DCF, Monte Carlo and the reverse DCF `implied_growth()`. Starting FCF growth is the 3-year FCF CAGR clamped to `GROWTH_BOUNDS` (-10%, +20%). It fades linearly to `TERMINAL_GROWTH` (2.5%) over `PROJECTION_YEARS` (10), followed by a Gordon terminal value.
+- Discount rate: WACC = E/V x cost of equity + D/V x cost of debt x (1 - tax).
+  - Cost of equity uses CAPM: `config.risk_free_rate` + a Blume-adjusted beta (0.67 x raw + 0.33) x `config.equity_risk_premium` (new, 5%). A missing or negative Yahoo beta falls back to 1.
+  - Cost of debt is interest over debt, at least the risk-free rate. Tax is "Tax Rate For Calcs".
+  - The old version used an 8% premium, raw beta and no debt.
+- Net debt is Total Debt minus Cash, Cash Equivalents and Short Term Investments, from the latest converted balance sheet. Before this, net debt was always 0, because `totalDebt`/`totalCash` were never in info.
+- DDM discounts at the cost of equity.
+- `vet` shows "DCF: FCF growth X% fading to 2.5% over 10y, discounted at W%; the price implies Y% starting growth".
+- Tests are in `tests/test_valuation.py`.
+- Known limits:
+  - The latest FCF is the base, so cyclicals at a capex peak (EQNR) still look expensive. Options: normalize the base FCF (average over the cycle) or use analyst growth estimates (yfinance `growth_estimates`) as the starting growth.
+  - DDM is shown even for low-payout firms, where it means little.
+  - The risk section's beta (2.22 for EQNR.OL) differs from Yahoo's (-0.73); check the alignment in `risk.py`.
 
 ## How the code fits together (after Phases 0-1)
 
@@ -41,7 +75,7 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 - Pipeline: `report["signals"] = {pead, relative_strength}`. PEAD uses `earnings_dates` (announcement dates), sorted newest first. `fundamental_analysis.analysis.annual_history` has per-year FCF, shares, dividends paid, EBIT, interest, interest cover (feeds red flags; useful for Phase 4 history too). `FundamentalAnalyzer.calculate_all()` is now memoized (Phase 6 item done).
 - Info now includes `ev_to_ebitda`, `enterprise_value`, `current_price`, `shares_outstanding`, `free_cashflow`, `financial_currency`. Older cached info.json files lack them until refreshed (info TTL).
 - Fixed along the way: 13F values were multiplied by 1000 (SEC reports whole dollars since 2023); `compare` correlation now aligns cross-exchange prices by trading date.
-- Known gaps: the DCF projects the historical FCF growth rate forward for 5 years, so a company whose FCF fell sharply (EQNR: -43%/yr) gets a very low value; consider capping or mean-reverting growth. `ValuationScorer` looks for `fcf_metrics` in `valuation_analysis`, where it never is, so FCF yield never scores. The FCF-yield lookup is a Phase 6 item.
+- Known gaps: the DCF growth problem (EQNR: -43%/yr projected for 5 years) was fixed in 2d. `ValuationScorer` looks for `fcf_metrics` in `valuation_analysis`, where it never is, so FCF yield never scores. The FCF-yield lookup is a Phase 6 item.
 
 ## Phase 2: `quant vet TICKER`
 
@@ -136,7 +170,7 @@ Phase 2b grew workarounds for Yahoo's free-data quirks. Bring it back in line wi
 
 Input: the holdings you own. Output: per holding, **Exit / Trim / Hold / Add**, plus portfolio-level problems. Runs `vet` on every holding, so it builds directly on Phase 2.
 
-1. **Input file** `portfolio.csv` (gitignored): `ticker, shares, cost_basis (optional), account (optional, e.g. ASK/AF)`. Also accept a Nordnet transactions/holdings CSV export (map ISIN or name to Yahoo tickers; ask the user for a sample file first).
+1. **Input file (done, see "Current state" above):** `portfolio/portfolio.csv` (gitignored), built from Nordnet holdings exports by `quant import-portfolio`. Columns: `ticker, name, account, shares, cost_basis, currency`. `review` reads this file; it doesn't need to parse Nordnet files itself.
 2. **Per holding:** the vet verdict and red flags, current weight vs a risk-parity weight, unrealized gain/loss if a cost basis is given, and distance to the signal flip prices.
 3. **Action rules (explicit and testable, like the red flags):**
    - Exit: `Pass` verdict (a high red flag or a Sell signal).
@@ -145,7 +179,7 @@ Input: the holdings you own. Output: per holding, **Exit / Trim / Hold / Add**, 
    - Hold: everything else.
    - Each action comes with one-line reasons, the same way the verdict summary does.
 4. **Portfolio level:** sector/industry and currency concentration, correlated clusters (from `identify_correlation_flags`), weighted score and beta, and suggested weights.
-5. **CLI:** `quant review portfolio.csv [--config] [--json] [--save]`. The output leads with a summary table (ticker, weight, verdict, action, one reason); details follow.
+5. **CLI:** `quant review [portfolio/portfolio.csv] [--config] [--json] [--save]`. `--save` writes under the gitignored `portfolio/`, not `data/`. The output leads with a summary table (ticker, weight, verdict, action, one reason); details follow.
 6. **Caveats in the output:** these are rule-based suggestions, not advice. Taxes are ignored (e.g. selling outside an ASK realizes gains), and the valuation limits from Phase 2b still apply.
 
 **Done when:** a synthetic portfolio in tests gets the expected action per holding for each rule, and `quant review` on the user's real file renders from live data. The README is updated.
@@ -189,4 +223,4 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 
 Paste something like:
 
-> Read docs/ROADMAP.md and continue with the next planned phase (3). Follow its conventions (offline tests with the fake_market fixture; give me live commands to run since your shell can't reach Yahoo). For Phase 3, ask me for a sample portfolio/Nordnet export before designing the input format.
+> Read docs/ROADMAP.md, starting with "Current state and next session". Live-check the 2d DCF fix, confirm the portfolio ticker map and account labels, then build Phase 3 (`quant review`). Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings.

@@ -34,7 +34,7 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 
 ### Valuation Analysis
 
-- **DCF Valuation:** Discounted Cash Flow intrinsic value calculation
+- **DCF Valuation:** two-stage DCF. FCF growth starts at the clamped 3-year history (-10% to +20%) and fades linearly to 2.5% over 10 years. Cash flows are discounted at a CAPM WACC (config risk-free rate, 5% equity risk premium, Blume-adjusted beta, after-tax debt weight), and net debt comes from the balance sheet. A reverse DCF gives the starting growth the current price implies. Monte Carlo runs the same model with varied inputs.
 - **DDM Valuation:** Dividend Discount Model (Gordon Growth Model)
 - **Dividend Analysis:** Yield, growth rate, payout ratio, coverage, sustainability scoring
 - **Earnings Analysis:** EPS trends, surprises, quality assessment (cash flow backing)
@@ -366,6 +366,15 @@ quant watch EQNR --interval 300 --count 5
 Options:
 - ``--interval`` -- refresh interval in seconds (default: 300)
 - ``--count`` -- number of iterations before exiting (default: 0 = infinite)
+
+### ``quant import-portfolio`` -- Nordnet holdings to a portfolio file
+
+Combines Nordnet holdings exports (``aksjelister_konto-<account>_<date>.csv``, one per account) into ``portfolio/portfolio.csv`` with the columns ``ticker,name,account,shares,cost_basis,currency``. Nordnet's export has names but no tickers, so ``portfolio/tickers.csv`` (``name,ticker``) maps names to Yahoo tickers. Unmapped names are listed so you can add them and rerun. ``portfolio/`` and ``aksjelister_*.csv`` are gitignored: holdings never go into git.
+
+```bash
+quant import-portfolio ~/Downloads/aksjelister_konto-*.csv --label 12345678=ASK --label 87654321=AF
+quant import-portfolio ~/Downloads/aksjelister_konto-*.csv --verify   # show Yahoo's name/currency per ticker
+```
 
 ### Global options
 

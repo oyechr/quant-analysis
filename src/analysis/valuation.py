@@ -9,10 +9,75 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from ..config import get_config
 from ..utils.dataframe_utils import normalize_datetime_index, safe_get_dataframe_value
 from ..utils.financial import calculate_cagr, to_float
 
 logger = logging.getLogger(__name__)
+
+# DCF assumptions (all in %). A two-stage model: growth fades linearly from a
+# starting rate to the terminal rate over PROJECTION_YEARS (the shape of
+# Damodaran's standard FCFF models), rather than extrapolating recent history.
+PROJECTION_YEARS = 10
+TERMINAL_GROWTH = 2.5
+GROWTH_BOUNDS = (-10.0, 20.0)  # starting growth; 3 years of FCF history is noisy
+DEFAULT_GROWTH = 5.0  # when there's too little FCF history
+DEFAULT_TAX_RATE = 0.21
+BLUME_WEIGHT = 0.67  # adjusted beta = 0.67 x raw + 0.33 x 1
+
+
+def dcf_enterprise_value(
+    fcf_current: float,
+    growth_start: Any,
+    wacc: Any,
+    terminal_growth: Any,
+    years: int = PROJECTION_YEARS,
+) -> np.ndarray:
+    """
+    Present value of FCF growing at a rate that fades linearly from
+    `growth_start` (year 1) to `terminal_growth` (year `years`), plus a Gordon
+    terminal value. Rates are in %; array arguments give one value per row.
+    """
+    start = np.atleast_1d(np.asarray(growth_start, dtype=float))[:, None]
+    end = np.atleast_1d(np.asarray(terminal_growth, dtype=float))[:, None]
+    rate = np.atleast_1d(np.asarray(wacc, dtype=float))[:, None] / 100
+    fade = np.linspace(0.0, 1.0, years)[None, :]
+    growth = (start + (end - start) * fade) / 100
+    fcf = fcf_current * np.cumprod(1 + growth, axis=1)
+    discount = (1 + rate) ** np.arange(1, years + 1)[None, :]
+    terminal = fcf[:, -1] * (1 + end[:, 0] / 100) / (rate[:, 0] - end[:, 0] / 100)
+    result: np.ndarray = (fcf / discount).sum(axis=1) + terminal / discount[:, -1]
+    return result
+
+
+def implied_growth(
+    target_equity: float,
+    fcf_current: float,
+    wacc: float,
+    terminal_growth: float,
+    years: int = PROJECTION_YEARS,
+    net_debt: float = 0.0,
+    bounds: tuple[float, float] = (-50.0, 100.0),
+) -> Optional[float]:
+    """
+    Reverse DCF: the starting FCF growth (%) at which the DCF equity value
+    equals `target_equity` (e.g. the market cap), or None if outside `bounds`.
+    """
+
+    def gap(growth: float) -> float:
+        value = dcf_enterprise_value(fcf_current, growth, wacc, terminal_growth, years)[0]
+        return float(value) - net_debt - target_equity
+
+    low, high = bounds
+    if gap(low) > 0 or gap(high) < 0:
+        return None
+    for _ in range(60):  # value rises with growth, so bisect
+        mid = (low + high) / 2
+        if gap(mid) < 0:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2
 
 
 class ValuationAnalyzer:
@@ -54,6 +119,7 @@ class ValuationAnalyzer:
         self.earnings_data = earnings_data or {}
         self.dividends_data = dividends_data
         self._results: Optional[Dict[str, Any]] = None
+        self._dcf_inputs_cache: Optional[Dict[str, Any]] = None
 
         # Extract currency (default to USD if not specified)
         self.currency = ticker_info.get("currency", "USD")
@@ -171,47 +237,50 @@ class ValuationAnalyzer:
 
         # If we got dividends in the TTM window, use them
         if not ttm_dividends.empty and ttm_dividends.sum() > 0:
-            return ttm_dividends.sum()
+            return float(ttm_dividends.sum())
 
         # Fallback: use appropriate number of payments based on frequency
         if frequency == "annual":
             # For annual payers, most recent single payment represents the annual dividend
-            return dividends_series.tail(1).sum()
+            return float(dividends_series.tail(1).sum())
         elif frequency == "semi-annual":
             # Last 2 payments = 1 year
-            return dividends_series.tail(2).sum()
+            return float(dividends_series.tail(2).sum())
         elif frequency == "quarterly":
             # Last 4 payments = 1 year
-            return dividends_series.tail(4).sum()
+            return float(dividends_series.tail(4).sum())
         elif frequency == "monthly":
             # Last 12 payments = 1 year
-            return dividends_series.tail(12).sum()
+            return float(dividends_series.tail(12).sum())
         else:
             # For irregular/unknown, use last 4 payments as conservative estimate
-            return dividends_series.tail(min(4, len(dividends_series))).sum()
+            return float(dividends_series.tail(min(4, len(dividends_series))).sum())
 
     # ==================== DCF Valuation ====================
 
     def calculate_dcf_valuation(
         self,
         growth_rate: Optional[float] = None,
-        terminal_growth_rate: float = 2.5,
+        terminal_growth_rate: float = TERMINAL_GROWTH,
         wacc: Optional[float] = None,
-        projection_years: int = 5,
+        projection_years: int = PROJECTION_YEARS,
     ) -> Dict[str, Any]:
         """
-        Calculate DCF (Discounted Cash Flow) intrinsic value
+        Two-stage DCF: FCF growth fades linearly from a starting rate to the
+        terminal rate over `projection_years`, then a Gordon terminal value.
 
         Args:
-            growth_rate: FCF growth rate (%). If None, calculated from historical data
-            terminal_growth_rate: Perpetual growth rate (%). Default 2.5%
-            wacc: Weighted Average Cost of Capital (%). If None, estimated from beta/market
-            projection_years: Number of years to project cash flows
+            growth_rate: Starting FCF growth (%). If None, the historical FCF
+                growth clamped to GROWTH_BOUNDS
+            terminal_growth_rate: Perpetual growth rate (%)
+            wacc: Discount rate (%). If None, estimated (see `_estimate_wacc_details`)
+            projection_years: Years until growth reaches the terminal rate
 
         Returns:
-            Dictionary with DCF valuation results
+            Dictionary with DCF valuation results, including the starting growth
+            the current price implies (`implied_growth_pct`, a reverse DCF)
         """
-        result = {
+        result: Dict[str, Any] = {
             "intrinsic_value_per_share": None,
             "current_price": self.current_price,
             "currency": self.currency,
@@ -224,52 +293,36 @@ class ValuationAnalyzer:
             "equity_value": None,
             "shares_outstanding": None,
             "projection_years": projection_years,
+            "implied_growth_pct": None,
             "assumptions": {},
             "error": None,
         }
 
         try:
-            # Get cash flow data
-            cash_flow_a = self.fundamentals.get("income_stmt_annual")
-            if cash_flow_a is None or cash_flow_a.empty:
-                result["error"] = "No annual cash flow data available"
+            inputs = self._dcf_inputs()
+            if inputs.get("error"):
+                result["error"] = inputs["error"]
                 return result
-
-            # Get current FCF directly (yfinance provides it pre-calculated)
-            fcf_current = self._get_value(
-                self.fundamentals.get("cash_flow_annual"), "Free Cash Flow", 0
-            )
-
-            if fcf_current is None:
-                result["error"] = "Free Cash Flow not available"
-                return result
+            fcf_current = inputs["fcf_current"]
             result["fcf_current"] = fcf_current
 
-            if fcf_current <= 0:
-                result["error"] = "Negative or zero FCF - DCF not applicable"
-                return result
-
-            # Estimate growth rate if not provided
             if growth_rate is None:
-                growth_rate = self._estimate_fcf_growth_rate()
-                if growth_rate is None:
-                    growth_rate = 5.0  # Default conservative growth
-                result["assumptions"]["growth_rate_source"] = "historical_fcf"
+                growth_rate = inputs["growth_start"]
+                result["assumptions"]["growth_rate_source"] = inputs["growth_source"]
+                result["assumptions"]["growth_rate_historical"] = inputs["growth_historical"]
             else:
                 result["assumptions"]["growth_rate_source"] = "user_provided"
-
             result["growth_rate_used"] = growth_rate
 
-            # Estimate WACC if not provided
             if wacc is None:
-                wacc = self._estimate_wacc()
-                result["assumptions"]["wacc_source"] = "estimated_from_beta"
+                wacc = inputs["wacc"]
+                result["assumptions"]["wacc_source"] = "capm_wacc"
+                result["assumptions"].update(inputs["wacc_details"])
             else:
                 result["assumptions"]["wacc_source"] = "user_provided"
-
             result["wacc_used"] = wacc
 
-            # Validate WACC > terminal growth (required for Gordon Growth Model)
+            # Gordon Growth Model needs WACC > terminal growth
             if wacc <= terminal_growth_rate:
                 result["error"] = (
                     f"WACC ({wacc:.2f}%) must exceed terminal growth "
@@ -277,62 +330,36 @@ class ValuationAnalyzer:
                 )
                 return result
 
-            # Project FCF for projection_years
-            projected_fcf = []
-            for year in range(1, projection_years + 1):
-                fcf_year = fcf_current * pow(1 + growth_rate / 100, year)
-                pv_fcf = fcf_year / pow(1 + wacc / 100, year)
-                projected_fcf.append({"year": year, "fcf": fcf_year, "present_value": pv_fcf})
-
-            # Calculate terminal value
-            fcf_terminal_year = fcf_current * pow(1 + growth_rate / 100, projection_years)
-            fcf_terminal = fcf_terminal_year * (1 + terminal_growth_rate / 100)
-            terminal_value = fcf_terminal / ((wacc - terminal_growth_rate) / 100)
-            pv_terminal_value = terminal_value / pow(1 + wacc / 100, projection_years)
-
-            # Enterprise Value = Sum of PV of projected FCF + PV of terminal value
-            pv_projected_fcf = sum(cf["present_value"] for cf in projected_fcf)
-            enterprise_value = pv_projected_fcf + pv_terminal_value
-            result["enterprise_value"] = enterprise_value
-            result["assumptions"]["pv_projected_fcf"] = pv_projected_fcf
-            result["assumptions"]["terminal_value"] = terminal_value
-            result["assumptions"]["pv_terminal_value"] = pv_terminal_value
-
-            # Convert to Equity Value (EV - Net Debt)
-            cash = self._get_info_value("totalCash") or 0.0
-            debt = self._get_info_value("totalDebt") or 0.0
-            net_debt = debt - cash
-            equity_value = enterprise_value - net_debt
-            result["equity_value"] = equity_value
-            result["assumptions"]["cash"] = cash
-            result["assumptions"]["debt"] = debt
-            result["assumptions"]["net_debt"] = net_debt
-
-            # Per-share intrinsic value
-            shares_outstanding = to_float(self.info.get("sharesOutstanding")) or to_float(
-                self.info.get("impliedSharesOutstanding")
+            enterprise_value = float(
+                dcf_enterprise_value(
+                    fcf_current, growth_rate, wacc, terminal_growth_rate, projection_years
+                )[0]
             )
+            net_debt = inputs["net_debt"]
+            equity_value = enterprise_value - net_debt
+            result["enterprise_value"] = enterprise_value
+            result["equity_value"] = equity_value
+            result["assumptions"]["net_debt"] = net_debt
+            result["assumptions"]["net_debt_source"] = inputs["net_debt_source"]
 
-            # Fallback: calculate from market cap and current price
-            if not shares_outstanding or shares_outstanding <= 0:
-                market_cap = self._get_info_value("marketCap")
-                if market_cap and market_cap > 0 and self.current_price and self.current_price > 0:
-                    shares_outstanding = market_cap / self.current_price
-                    result["assumptions"]["shares_calculated_from_market_cap"] = True
+            shares = inputs["shares"]
+            result["shares_outstanding"] = shares
+            intrinsic_value = equity_value / shares
+            result["intrinsic_value_per_share"] = intrinsic_value
 
-            if shares_outstanding and shares_outstanding > 0:
-                result["shares_outstanding"] = shares_outstanding
-                intrinsic_value = equity_value / shares_outstanding
-                result["intrinsic_value_per_share"] = intrinsic_value
-
-                # Calculate discount/premium
-                if self.current_price and self.current_price > 0:
-                    discount_premium = (
+            if self.current_price and self.current_price > 0:
+                if intrinsic_value > 0:
+                    result["discount_premium_pct"] = (
                         (self.current_price - intrinsic_value) / intrinsic_value
                     ) * 100
-                    result["discount_premium_pct"] = discount_premium
-            else:
-                result["error"] = "Shares outstanding not available"
+                result["implied_growth_pct"] = implied_growth(
+                    target_equity=self.current_price * shares,
+                    fcf_current=fcf_current,
+                    wacc=wacc,
+                    terminal_growth=terminal_growth_rate,
+                    years=projection_years,
+                    net_debt=net_debt,
+                )
 
         except Exception as e:
             logger.error(f"DCF calculation error for {self.ticker}: {e}")
@@ -340,14 +367,83 @@ class ValuationAnalyzer:
 
         return result
 
+    def _dcf_inputs(self) -> Dict[str, Any]:
+        """
+        Inputs shared by the DCF and Monte Carlo models (memoized).
+
+        Statement values come from the currency-converted statements, so FCF,
+        debt and cash are in the listing currency, like the market cap.
+        """
+        if self._dcf_inputs_cache is not None:
+            return self._dcf_inputs_cache
+        inputs: Dict[str, Any]
+        fcf = self._get_value(self.fundamentals.get("cash_flow_annual"), "Free Cash Flow", 0)
+        shares = self._shares_outstanding()
+        if fcf is None:
+            inputs = {"error": "Free Cash Flow not available"}
+        elif fcf <= 0:
+            inputs = {"error": "Negative or zero FCF - DCF not applicable"}
+        elif not shares:
+            inputs = {"error": "Shares outstanding not available"}
+        else:
+            historical = self._estimate_fcf_growth_rate()
+            low, high = GROWTH_BOUNDS
+            net_debt, net_debt_source = self._net_debt()
+            wacc, wacc_details = self._estimate_wacc_details()
+            inputs = {
+                "fcf_current": fcf,
+                "shares": shares,
+                "growth_historical": historical,
+                "growth_start": (
+                    min(max(historical, low), high) if historical is not None else DEFAULT_GROWTH
+                ),
+                "growth_source": "historical_fcf_clamped" if historical is not None else "default",
+                "net_debt": net_debt,
+                "net_debt_source": net_debt_source,
+                "wacc": wacc,
+                "wacc_details": wacc_details,
+            }
+        self._dcf_inputs_cache = inputs
+        return inputs
+
+    def _shares_outstanding(self) -> Optional[float]:
+        shares = self._get_info_value("sharesOutstanding") or self._get_info_value(
+            "impliedSharesOutstanding"
+        )
+        if shares:
+            return shares
+        market_cap = self._get_info_value("marketCap")
+        if market_cap and self.current_price and self.current_price > 0:
+            return market_cap / self.current_price
+        return None
+
+    def _latest_balance_value(self, *rows: str) -> Optional[float]:
+        """First of `rows` found in the latest balance sheet (quarterly, then annual)."""
+        for name in ("balance_sheet_quarterly", "balance_sheet_annual"):
+            sheet = self.fundamentals.get(name)
+            for row in rows:
+                value = self._get_value(sheet, row, 0)
+                if value is not None:
+                    return value
+        return None
+
+    def _net_debt(self) -> tuple[float, str]:
+        """Total debt minus cash and short-term investments, from the balance sheet."""
+        debt = self._latest_balance_value("Total Debt")
+        cash = self._latest_balance_value(
+            "Cash Cash Equivalents And Short Term Investments", "Cash And Cash Equivalents"
+        )
+        if debt is None and cash is None:
+            return 0.0, "unavailable"
+        return (debt or 0.0) - (cash or 0.0), "balance_sheet"
+
     def _estimate_fcf_growth_rate(self) -> Optional[float]:
-        """Estimate FCF growth rate from historical cash flow data"""
+        """Historical FCF growth (CAGR over the last 3 annual values), unclamped"""
         try:
             cash_flow_a = self.fundamentals.get("cash_flow_annual")
             if cash_flow_a is None or cash_flow_a.empty:
                 return None
 
-            # Get 3-year historical FCF
             fcf_values = []
             for i in range(3):
                 fcf = self._get_value(cash_flow_a, "Free Cash Flow", i)
@@ -362,25 +458,59 @@ class ValuationAnalyzer:
 
         return None
 
+    def _cost_of_equity(self) -> tuple[float, Dict[str, Any]]:
+        """
+        CAPM cost of equity (%): risk-free rate + adjusted beta x equity risk premium.
+
+        Yahoo's raw beta is Blume-adjusted toward 1 (0.67 x raw + 0.33), as
+        Bloomberg and most data vendors do. A missing or negative beta (Yahoo
+        gives EQNR.OL -0.73) falls back to the market beta of 1.
+        """
+        config = get_config()
+        risk_free = config.risk_free_rate * 100
+        premium = config.equity_risk_premium * 100
+        raw_beta = to_float(self.info.get("beta")) or None
+        if raw_beta is not None and raw_beta > 0:
+            beta = BLUME_WEIGHT * raw_beta + (1 - BLUME_WEIGHT)
+        else:
+            beta = 1.0
+        cost = risk_free + beta * premium
+        details: Dict[str, Any] = {
+            "risk_free_rate": risk_free,
+            "equity_risk_premium": premium,
+            "beta_raw": raw_beta,
+            "beta_adjusted": beta,
+            "cost_of_equity": cost,
+        }
+        return cost, details
+
+    def _estimate_wacc_details(self) -> tuple[float, Dict[str, Any]]:
+        """
+        WACC (%) = E/V x cost of equity + D/V x cost of debt x (1 - tax).
+
+        E is the market cap and D the balance-sheet debt. Cost of debt is
+        interest expense over debt, at least the risk-free rate. Tax is Yahoo's
+        "Tax Rate For Calcs" (21% if missing).
+        """
+        cost_of_equity, details = self._cost_of_equity()
+        equity = self._get_info_value("marketCap")
+        debt = self._latest_balance_value("Total Debt")
+        if not equity or not debt or debt <= 0:
+            details["debt_weight"] = 0.0
+            return cost_of_equity, details
+
+        income = self.fundamentals.get("income_stmt_annual")
+        interest = abs(self._get_value(income, "Interest Expense", 0) or 0.0)
+        tax = self._get_value(income, "Tax Rate For Calcs", 0)
+        tax = min(max(tax, 0.0), 0.5) if tax is not None else DEFAULT_TAX_RATE
+        cost_of_debt = max(interest / debt * 100, details["risk_free_rate"])
+        weight = debt / (debt + equity)
+        details.update({"debt_weight": weight, "cost_of_debt": cost_of_debt, "tax_rate": tax})
+        return (1 - weight) * cost_of_equity + weight * cost_of_debt * (1 - tax), details
+
     def _estimate_wacc(self) -> float:
-        """
-        Estimate WACC using CAPM
-
-        WACC ≈ Cost of Equity (for simplicity, ignoring debt component)
-        Cost of Equity = Risk-free rate + Beta * Market risk premium
-        """
-        risk_free_rate = 4.0  # 4% assumption (could pull from config)
-        market_risk_premium = 8.0  # Historical equity risk premium
-
-        beta = self._get_info_value("beta")
-        if beta is None or beta <= 0:
-            beta = 1.0  # Market beta if not available
-
-        cost_of_equity = risk_free_rate + (beta * market_risk_premium)
-
-        # For simplicity, using cost of equity as WACC proxy
-        # More sophisticated: weight by debt-to-equity ratio
-        return cost_of_equity
+        """WACC in % (see `_estimate_wacc_details`)"""
+        return self._estimate_wacc_details()[0]
 
     # ==================== Monte Carlo Valuation ====================
 
@@ -390,31 +520,28 @@ class ValuationAnalyzer:
         growth_rate_mean: Optional[float] = None,
         growth_rate_std: Optional[float] = None,
         wacc_mean: Optional[float] = None,
-        wacc_std: float = 2.0,
-        terminal_growth_mean: float = 2.5,
+        wacc_std: float = 1.5,
+        terminal_growth_mean: float = TERMINAL_GROWTH,
         terminal_growth_std: float = 0.5,
-        projection_years: int = 5,
+        projection_years: int = PROJECTION_YEARS,
     ) -> Dict[str, Any]:
         """
         Monte Carlo DCF Valuation - probabilistic intrinsic value estimation
 
-        Instead of a single-point DCF estimate, runs N simulations varying:
-        - FCF growth rate (normal distribution around estimate)
-        - WACC / discount rate (normal distribution around CAPM estimate)
-        - Terminal growth rate (normal distribution around long-term GDP growth)
-
-        Produces a distribution of intrinsic values with confidence intervals,
-        giving a probability that the stock is undervalued.
+        Runs the same two-stage DCF as `calculate_dcf_valuation` N times, varying:
+        - Starting FCF growth (normal around the estimate, clipped to GROWTH_BOUNDS)
+        - WACC (normal around the estimate)
+        - Terminal growth (normal around TERMINAL_GROWTH, clipped to 0-4%)
 
         Args:
             n_simulations: Number of Monte Carlo iterations (default 10,000)
-            growth_rate_mean: Center of growth rate distribution (%). Auto-estimated if None.
-            growth_rate_std: Std dev of growth rate (%). Auto-estimated if None.
-            wacc_mean: Center of WACC distribution (%). Auto-estimated if None.
-            wacc_std: Std dev of WACC distribution (%). Default 2%.
-            terminal_growth_mean: Center of terminal growth (%). Default 2.5%.
-            terminal_growth_std: Std dev of terminal growth (%). Default 0.5%.
-            projection_years: FCF projection horizon. Default 5 years.
+            growth_rate_mean: Center of starting growth (%). Estimated if None.
+            growth_rate_std: Std dev of starting growth (%). max(|mean| / 2, 3) if None.
+            wacc_mean: Center of WACC distribution (%). Estimated if None.
+            wacc_std: Std dev of WACC distribution (%).
+            terminal_growth_mean: Center of terminal growth (%).
+            terminal_growth_std: Std dev of terminal growth (%).
+            projection_years: Years until growth reaches the terminal rate.
 
         Returns:
             Dictionary with probability distribution of intrinsic values
@@ -432,23 +559,18 @@ class ValuationAnalyzer:
         }
 
         try:
-            # Get current FCF
-            fcf_current = self._get_value(
-                self.fundamentals.get("cash_flow_annual"), "Free Cash Flow", 0
-            )
-
-            if fcf_current is None or fcf_current <= 0:
-                result["error"] = "Positive FCF required for Monte Carlo DCF"
+            inputs = self._dcf_inputs()
+            if inputs.get("error"):
+                result["error"] = inputs["error"]
                 return result
+            fcf_current = inputs["fcf_current"]
 
-            # Estimate parameters if not provided
             if growth_rate_mean is None:
-                growth_rate_mean = self._estimate_fcf_growth_rate() or 5.0
+                growth_rate_mean = float(inputs["growth_start"])
             if growth_rate_std is None:
-                # Use half the mean as std dev (wider uncertainty for higher growth)
                 growth_rate_std = max(abs(growth_rate_mean) * 0.5, 3.0)
             if wacc_mean is None:
-                wacc_mean = self._estimate_wacc()
+                wacc_mean = float(inputs["wacc"])
 
             result["assumptions"] = {
                 "fcf_current": fcf_current,
@@ -459,96 +581,45 @@ class ValuationAnalyzer:
                 "terminal_growth_mean_pct": terminal_growth_mean,
                 "terminal_growth_std_pct": terminal_growth_std,
                 "projection_years": projection_years,
+                "net_debt": inputs["net_debt"],
             }
 
-            # Get shares outstanding and net debt
-            shares_outstanding = to_float(self.info.get("sharesOutstanding")) or to_float(
-                self.info.get("impliedSharesOutstanding")
-            )
-            if not shares_outstanding or shares_outstanding <= 0:
-                market_cap = self._get_info_value("marketCap")
-                if market_cap and self.current_price and self.current_price > 0:
-                    shares_outstanding = market_cap / self.current_price
-                else:
-                    result["error"] = "Shares outstanding not available"
-                    return result
-
-            cash = self._get_info_value("totalCash") or 0.0
-            debt = self._get_info_value("totalDebt") or 0.0
-            net_debt = debt - cash
-
-            # Run simulations
             rng = np.random.default_rng(seed=42)  # Reproducible results
-            intrinsic_values = np.zeros(n_simulations)
+            growth = np.clip(
+                rng.normal(growth_rate_mean, growth_rate_std, n_simulations), *GROWTH_BOUNDS
+            )
+            terminal = np.clip(
+                rng.normal(terminal_growth_mean, terminal_growth_std, n_simulations), 0.0, 4.0
+            )
+            # WACC must stay above terminal growth for the Gordon terminal value
+            wacc = np.maximum(rng.normal(wacc_mean, wacc_std, n_simulations), terminal + 1.0)
 
-            for i in range(n_simulations):
-                # Sample parameters from distributions
-                sim_growth = rng.normal(growth_rate_mean, growth_rate_std)
-                sim_wacc = rng.normal(wacc_mean, wacc_std)
-                sim_terminal = rng.normal(terminal_growth_mean, terminal_growth_std)
+            enterprise = dcf_enterprise_value(fcf_current, growth, wacc, terminal, projection_years)
+            intrinsic_values = np.maximum((enterprise - inputs["net_debt"]) / inputs["shares"], 0.0)
 
-                # Enforce constraints: WACC > terminal growth, WACC > 0
-                sim_wacc = max(sim_wacc, sim_terminal + 1.0, 3.0)
-                # Cap growth at reasonable bounds
-                sim_growth = np.clip(sim_growth, -20.0, 50.0)
-                sim_terminal = np.clip(sim_terminal, 0.0, 5.0)
-
-                # Project FCF
-                pv_fcf_sum = 0.0
-                for year in range(1, projection_years + 1):
-                    fcf_year = fcf_current * pow(1 + sim_growth / 100, year)
-                    pv_fcf = fcf_year / pow(1 + sim_wacc / 100, year)
-                    pv_fcf_sum += pv_fcf
-
-                # Terminal value
-                fcf_terminal = (
-                    fcf_current
-                    * pow(1 + sim_growth / 100, projection_years)
-                    * (1 + sim_terminal / 100)
-                )
-                terminal_value = fcf_terminal / ((sim_wacc - sim_terminal) / 100)
-                pv_terminal = terminal_value / pow(1 + sim_wacc / 100, projection_years)
-
-                # Enterprise to equity value
-                enterprise_value = pv_fcf_sum + pv_terminal
-                equity_value = enterprise_value - net_debt
-                intrinsic_per_share = equity_value / shares_outstanding
-
-                intrinsic_values[i] = max(intrinsic_per_share, 0.0)
-
-            # Compute statistics from simulation results
             result["intrinsic_value_median"] = float(np.median(intrinsic_values))
             result["intrinsic_value_mean"] = float(np.mean(intrinsic_values))
             result["intrinsic_value_std"] = float(np.std(intrinsic_values))
 
-            # Probability stock is undervalued (price < intrinsic value)
             if self.current_price and self.current_price > 0:
-                prob_undervalued = float(
-                    (intrinsic_values > self.current_price).sum() / n_simulations
+                result["probability_undervalued"] = float(
+                    (intrinsic_values > self.current_price).mean()
                 )
-                result["probability_undervalued"] = prob_undervalued
-
-                # Discount/premium vs median
                 median_val = result["intrinsic_value_median"]
                 if median_val and median_val > 0:
                     result["median_discount_premium_pct"] = (
                         (self.current_price - median_val) / median_val
                     ) * 100
 
-            # Confidence intervals
+            levels = (10, 25, 50, 75, 90)
+            percentiles = np.percentile(intrinsic_values, levels)
             result["confidence_intervals"] = {
-                "ci_10": float(np.percentile(intrinsic_values, 10)),
-                "ci_25": float(np.percentile(intrinsic_values, 25)),
-                "ci_50": float(np.percentile(intrinsic_values, 50)),
-                "ci_75": float(np.percentile(intrinsic_values, 75)),
-                "ci_90": float(np.percentile(intrinsic_values, 90)),
+                f"ci_{level}": float(value) for level, value in zip(levels, percentiles)
             }
-
-            # Scenario summary
             result["scenarios"] = {
-                "bear_case": float(np.percentile(intrinsic_values, 10)),
-                "base_case": float(np.median(intrinsic_values)),
-                "bull_case": float(np.percentile(intrinsic_values, 90)),
+                "bear_case": float(percentiles[0]),
+                "base_case": float(percentiles[2]),
+                "bull_case": float(percentiles[4]),
             }
 
         except Exception as e:
@@ -624,8 +695,8 @@ class ValuationAnalyzer:
 
             # Estimate required return if not provided
             if required_return is None:
-                required_return = self._estimate_wacc()
-                result["assumptions"]["required_return_source"] = "estimated_from_beta"
+                required_return = self._cost_of_equity()[0]
+                result["assumptions"]["required_return_source"] = "capm_cost_of_equity"
             else:
                 result["assumptions"]["required_return_source"] = "user_provided"
 
@@ -697,7 +768,7 @@ class ValuationAnalyzer:
         Returns:
             Dictionary with dividend metrics and sustainability analysis
         """
-        result = {
+        result: Dict[str, Any] = {
             "pays_dividends": False,
             "dividend_yield": None,
             "annual_dividend": None,
@@ -850,7 +921,7 @@ class ValuationAnalyzer:
         Returns:
             Dictionary with EPS trends, surprises, and quality metrics
         """
-        result = {
+        result: Dict[str, Any] = {
             "current_eps": None,
             "forward_eps": None,
             "eps_growth_1y": None,
@@ -974,7 +1045,7 @@ class ValuationAnalyzer:
 
         High-quality earnings are backed by cash flow
         """
-        quality = {"assessment": None, "score": None, "metrics": {}}
+        quality: Dict[str, Any] = {"assessment": None, "score": None, "metrics": {}}
 
         try:
             income_stmt = self.fundamentals.get("income_stmt_annual")
