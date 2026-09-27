@@ -24,7 +24,7 @@ import time
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 
@@ -347,7 +347,7 @@ class Edgar13FSource(PortfolioSource):
                 if not info_table_url:
                     continue
 
-                result = {"info_table_url": info_table_url}
+                result: dict[str, Any] = {"info_table_url": info_table_url}
                 if filing_date_str:
                     try:
                         result["filing_date"] = datetime.strptime(filing_date_str, "%Y-%m-%d")
@@ -487,17 +487,18 @@ class Edgar13FSource(PortfolioSource):
 
         name = _find_text(entry, "nameOfIssuer")
         cusip = _find_text(entry, "cusip")
-        value_str = _find_text(entry, "value")  # In thousands of USD
+        value_str = _find_text(entry, "value")
         shares_str = _find_nested_text(entry, "shrsOrPrnAmt", "sshPrnamt")
 
         if not name:
             return None
 
-        # Convert value (reported in thousands)
+        # Reported in whole USD since January 2023 (it was thousands before);
+        # only the two latest filings are fetched, so no conversion is needed
         value = None
         if value_str:
             try:
-                value = float(value_str) * 1000  # Convert from thousands to USD
+                value = float(value_str)
             except ValueError:
                 pass
 

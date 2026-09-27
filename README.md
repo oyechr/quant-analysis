@@ -56,6 +56,16 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 - **Filters:** sector/industry include/exclude, market cap range, minimum volume
 - Results saved as CSV (spreadsheet-friendly), JSON, and TOON
 
+### Vetting
+
+- **One-screen verdict** on a single ticker (`quant vet`), without writing report files
+- **Red flags:** Beneish M-Score, Altman Z distress, repeated negative FCF, share dilution, uncovered dividend, weak interest cover, stale statements, low data coverage, stale data, statements in a different currency than the price
+- **Peer-relative valuation:** P/E, forward P/E, EV/EBITDA, P/S, P/B and FCF yield against the peer median, with percentile rank. With 4+ peers, the P/E sub-score is judged against the peer median instead of fixed cutoffs
+- **Signals:** post-earnings drift (SUE) and relative strength against the home-market benchmark
+- **13F fund activity** from the `quant discover` cache: which tracked funds hold it and whether they bought, added, trimmed or exited
+- **What would change the verdict:** analyst price targets, Monte Carlo/DCF/DDM fair value range, the price at which the signal moves one band up or down, and trade levels
+- **Currency-safe valuation:** when a company reports in another currency than it trades in (EQNR.OL: USD vs NOK), statements are converted at the latest Yahoo FX rate before any analysis
+
 ### Portfolio Discovery
 
 - **Cross-portfolio pattern detection** from SEC EDGAR 13F filings (free, no API key)
@@ -178,9 +188,40 @@ Options:
 
 **Performance:** the first ``sp500`` screen downloads info and prices for about 500 tickers, which takes a few minutes. Later runs within the cache TTL take seconds.
 
+### ``quant vet`` -- Should this ticker get a deeper look?
+
+Prints a one-screen verdict for a single ticker. It opens with ``VERDICT: Look deeper / Watch / Pass`` and the reasons on one line: Pass means a high-severity red flag or a Sell signal, and Look deeper means a Buy signal with at least medium confidence. Then come the details: header (score, signal, confidence, preset), red flags, peer valuation, signals, 13F fund activity, what would change the verdict, strengths/concerns, and next steps. Nothing is written to disk unless you pass ``--save``.
+
+```bash
+quant vet EQNR.OL
+quant vet AAPL --peers MSFT,GOOGL,META
+quant vet EQNR.OL --peers AKRBP.OL,VAR.OL  # home-market peers
+quant vet NVDA --config growth --save      # also writes data/NVDA/reports/vet.json + vet.md
+quant vet AAPL --json                      # machine-readable
+```
+
+Options:
+- ``--peers T1,T2,...`` -- explicit peer group, used as given (no size filter)
+- ``--config [default|value|growth|income]`` -- scoring preset
+- ``--brief`` -- only the verdict, key facts, and next steps
+- ``--json`` -- print the result as JSON
+- ``--save`` -- write ``vet.json`` and ``vet.md`` to ``data/TICKER/reports/``
+
+**Peers:** your ``--peers``; otherwise Yahoo's industry list, topped up from its sector list when fewer than 4 remain, keeping companies within 0.1x-10x of the ticker's USD market cap and dropping other listings of the same company.
+
+Yahoo's lists (``yf.Industry``/``yf.Sector`` ``top_companies``, cached for 30 days) are mostly US companies, so use ``--peers`` for home-market comparisons. Ratios are Yahoo's own (TTM). Many companies report in one currency and trade in another (most Oslo energy names report in USD), and Yahoo mixes the two in P/S, EV/EBITDA and sometimes P/B. For every ticker, the ticker itself and its peers, P/S and EV/EBITDA are converted at the latest FX rate. P/B is recomputed from the converted balance sheet for the ticker, and is left out for such peers. FCF yield is left out for such tickers.
+
+**Peer-relative scoring:** when at least 4 peers have a P/E, ``vet`` rescores with the P/E cutoffs scaled around the peer median, so its score can differ slightly from ``report``/``score``. Turn it off with ``"peer_relative": false`` under ``valuation`` in a scoring config.
+
+**Statements in another currency** (e.g. USD statements for a NOK-listed share) are converted into the listing currency at the latest Yahoo FX rate (``USDNOK=X``) before any analysis, so DCF, Monte Carlo, FCF yield and Altman Z use one currency. The fair value section says which rate was used. If no rate is available, a red flag says the values mix currencies.
+
+**Signal flip prices** hold everything except price-driven valuation inputs (multiples, DCF premium, FCF yield) constant. They show how far the price must move for valuation alone to change the signal, not a price target.
+
+**13F activity** needs the cache from ``quant discover``. Holdings are matched by ticker (through the CUSIP map) or by issuer name, which also finds US ADRs of foreign listings.
+
 ### ``quant compare`` -- Side-by-side comparison
 
-Compares two or more tickers across scores, relative valuation, key metrics, and return correlation. Use this for head-to-head evaluation before a buy decision.
+Compares two or more tickers across scores, relative valuation, key metrics, and return correlation. It also flags highly correlated pairs (above 0.8) and hedges (below -0.3), and suggests risk-parity (inverse volatility) weights. Use this for head-to-head evaluation before a buy decision.
 
 ```bash
 quant compare AAPL MSFT
@@ -210,6 +251,8 @@ Options:
 - ``--model`` -- LLM model override (e.g. ``gpt-4o``, ``claude-sonnet-4-5``). Reads ``llm_model`` from ``config.json`` if not set.
 - ``--no-intro`` -- skip the automatic opening investment brief
 - ``--debug-context`` -- print the context sent to the LLM and exit (useful for debugging)
+
+Peer valuation is included when ``quant vet TICKER --save`` has been run, since chat reads the peers from ``vet.json``.
 
 Special commands during the session:
 
@@ -365,7 +408,7 @@ Optional ``config.json`` in the working directory (gitignored). All keys are opt
 - ``risk_free_rate`` -- annual rate as a decimal (0.04 = 4%), used for Sharpe, Sortino, and alpha
 - ``benchmark_ticker`` -- benchmark for US and unmapped listings
 - ``benchmark_by_suffix`` -- override the built-in exchange-to-index map in ``src/markets.py``
-- ``cache_ttl_hours`` -- max cache age per resource (``prices``, ``info``, ``earnings``, ``analyst_ratings``, ``dividends``, ``fundamentals``, ``holders``, ``universe``). Only keys you set are overridden; ``0`` means never expire.
+- ``cache_ttl_hours`` -- max cache age per resource (``prices``, ``info``, ``earnings``, ``analyst_ratings``, ``dividends``, ``fundamentals``, ``holders``, ``universe``, ``industry``). Only keys you set are overridden; ``0`` means never expire.
 
 ## When to Use Which Command
 
@@ -373,6 +416,7 @@ Optional ``config.json`` in the working directory (gitignored). All keys are opt
 |------|---------|
 | Find candidates in an index | ``quant screen sp500`` |
 | Discover new investment ideas | ``quant discover`` |
+| Quick verdict on one stock | ``quant vet TICKER`` |
 | Deep dive on one stock | ``quant report TICKER`` |
 | Ask follow-up questions / interrogate a stock | ``quant chat TICKER`` |
 | Screen / rank a watchlist | ``quant score T1 T2 T3 ...`` |
@@ -390,7 +434,8 @@ quant screen discover --config growth         # rank + score the consensus picks
 # Step 2: Score any extra names you're curious about
 quant score AAPL NVDA AMZN MSFT BAC --config growth
 
-# Step 3: Deep dive on the highest-scoring ticker
+# Step 3: Vet the best names, then deep dive on the survivor
+quant vet NVDA
 quant report NVDA
 
 # Step 4: Compare your top 2-3 candidates
@@ -489,6 +534,13 @@ quant-analysis/
 |   +-- screening/
 |   |   +-- universe.py              # Index lists, ticker files, discover picks
 |   |   +-- screener.py              # Two-stage factor rank -> full score
+|   +-- vetting/
+|   |   +-- red_flags.py             # Rule-based red flags over a report dict
+|   |   +-- peers.py                 # Yahoo industry/sector peers + peer-relative valuation
+|   |   +-- ownership.py             # 13F fund activity from the discover cache
+|   |   +-- verdict.py               # Fair value range, signal flip prices
+|   |   +-- vet.py                   # vet_ticker() orchestration
+|   |   +-- render.py                # Terminal + Markdown output
 |   +-- scoring/
 |   |   +-- config.py                # Scoring configuration & presets
 |   |   +-- dimensions.py            # Dimension scorers
@@ -519,6 +571,7 @@ quant-analysis/
     +-- test_scorer.py
     +-- test_screening.py
     +-- test_toon_serializer.py
+    +-- test_vetting.py
 ```
 
 ## Python API
@@ -544,6 +597,12 @@ universe = resolve_universe(["sp100"])
 result = Screener().run(universe.tickers, ScreenFilters(min_market_cap=100e9), top_n=10)
 for c in result.scored:
     print(c.ticker, c.scoring.composite_score, c.factor_rank)
+
+# Vet one ticker (red flags, peers, 13F activity, fair value)
+from src.vetting import render_text, vet_ticker
+vet = vet_ticker("AAPL", peers=["MSFT", "GOOGL", "META"])
+print(render_text(vet.to_dict()))
+print([f.title for f in vet.red_flags])
 ```
 
 ## Data Organization

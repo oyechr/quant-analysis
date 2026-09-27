@@ -133,6 +133,12 @@ class ValuationScoringParams:
     pe_fair: float = 25.0
     pe_expensive: float = 35.0
 
+    # Peer-relative P/E: when a report carries `peer_valuation` with enough peers,
+    # the P/E cutoffs above are rescaled around the peer median (pe_fair maps to
+    # the median). With fewer peers the absolute cutoffs apply.
+    peer_relative: bool = True
+    min_peers: int = 4
+
     # PEG ratio thresholds
     peg_undervalued: float = 1.0
     peg_fair: float = 2.0

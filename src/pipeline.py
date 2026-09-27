@@ -21,6 +21,12 @@ from .data_fetcher import DataFetcher
 from .scoring import ScoringConfig, StockScorer
 from .scoring.scorer import ScoringResult
 from .utils.financial import trading_dates
+from .utils.fx import (
+    adjust_info_ratios,
+    conversion_rate,
+    convert_statements,
+    needs_conversion,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,12 +99,18 @@ class _RunFetcher:
 
     def __init__(self, fetcher: DataFetcher):
         self._fetcher = fetcher
-        self._memo: Dict[tuple, Any] = {}
+        self._memo: Dict[tuple[Any, ...], Any] = {}
+        # Set by analyze_ticker when statements are in another currency than the price
+        self.statement_rate: Optional[float] = None
+        self.converted_ticker: Optional[str] = None
 
     def __getattr__(self, name: str) -> Any:
-        attr = getattr(self._fetcher, name)
         if name not in self._MEMOIZED:
-            return attr
+            return getattr(self._fetcher, name)
+        return self._memoized(name)
+
+    def _memoized(self, name: str) -> Callable[..., Any]:
+        attr = getattr(self._fetcher, name)
 
         def memoized(*args: Any, **kwargs: Any) -> Any:
             key_kwargs = tuple(sorted((k, v) for k, v in kwargs.items() if k != "use_cache"))
@@ -108,6 +120,19 @@ class _RunFetcher:
             return self._memo[key]
 
         return memoized
+
+    def fetch_fundamentals(self, ticker: str, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
+        """Statements, converted to the listing currency when a rate is set for this ticker."""
+        raw: Dict[str, pd.DataFrame] = self._memoized("fetch_fundamentals")(
+            ticker, use_cache=use_cache
+        )
+        if self.statement_rate is None or ticker.upper() != self.converted_ticker:
+            return raw
+        key = ("converted_fundamentals", ticker.upper(), self.statement_rate)
+        if key not in self._memo:
+            self._memo[key] = convert_statements(raw, self.statement_rate)
+        converted: Dict[str, pd.DataFrame] = self._memo[key]
+        return converted
 
 
 def analyze_ticker(
@@ -159,6 +184,14 @@ def analyze_ticker(
             report[name] = None
             return None
 
+    # Statements in another currency than the price (EQNR.OL: USD vs NOK) are
+    # converted before any analysis sees them
+    conversion = _run_step(
+        "currency_conversion", lambda: _setup_statement_conversion(run, ticker, use_cache)
+    )
+    if conversion:
+        report["currency_conversion"] = conversion
+
     # Data sections
     sections: Dict[str, ReportSection] = {
         "info": InfoSection(),
@@ -179,6 +212,13 @@ def analyze_ticker(
         )
         if raw is not None:
             report[section_name] = section.format_for_json(raw)
+    if run.statement_rate is not None and report.get("info"):
+        # Yahoo's P/S, EV/EBITDA and P/B can mix currencies for such tickers
+        report["info"] = adjust_info_ratios(
+            report["info"],
+            run.statement_rate,
+            book_equity=_latest_book_equity(run, ticker, use_cache),
+        )
 
     # Technical (always 1y: the 200-day SMA needs a full year)
     if options.include_technical:
@@ -238,6 +278,12 @@ def analyze_ticker(
         if bundle.valuation is not None:
             report["valuation_analysis"] = bundle.valuation.analyze()
 
+    # Signals not used by the composite score (shown by `vet` and chat)
+    if options.include_technical:
+        signals = _run_step("signals", lambda: _signals(run, ticker, use_cache, bundle))
+        if signals:
+            report["signals"] = signals
+
     # Scoring
     def _score() -> ScoringResult:
         result = StockScorer(config=options.scoring_config).score(report)
@@ -250,6 +296,139 @@ def analyze_ticker(
 
     report["data_freshness"] = _freshness_summary(ticker, base_fetcher, report)
     return bundle
+
+
+def _latest_book_equity(run: _RunFetcher, ticker: str, use_cache: bool) -> Optional[float]:
+    """
+    Common equity from the latest converted balance sheet (quarterly first, like
+    Yahoo's own P/B), or None if not reported.
+    """
+    try:
+        statements = run.fetch_fundamentals(ticker, use_cache=use_cache)
+    except Exception as e:  # P/B then stays out of the peer comparison
+        logger.warning(f"No balance sheet for {ticker}'s P/B: {e}")
+        return None
+    for name in ("balance_sheet_quarterly", "balance_sheet_annual"):
+        sheet = statements.get(name)
+        if sheet is None or sheet.empty:
+            continue
+        for row in ("Common Stock Equity", "Stockholders Equity"):
+            if row in sheet.index:
+                values = pd.to_numeric(sheet.loc[row], errors="coerce").dropna()
+                if not values.empty:
+                    return float(values.iloc[0])
+    return None
+
+
+def _setup_statement_conversion(
+    run: _RunFetcher, ticker: str, use_cache: bool
+) -> Optional[Dict[str, Any]]:
+    """
+    Set the run's statement conversion rate, if statements need one.
+
+    Returns a description of the conversion (or of why it failed), or None when
+    statements are already in the listing currency.
+    """
+    info = run.get_ticker_info(ticker, use_cache=use_cache) or {}
+    statement_ccy = info.get("financial_currency")
+    listing_ccy = info.get("currency")
+    if not statement_ccy or not listing_ccy or not needs_conversion(statement_ccy, listing_ccy):
+        return None
+
+    result = conversion_rate(
+        statement_ccy, listing_ccy, lambda symbol: run.latest_close(symbol, use_cache=use_cache)
+    )
+    description: Dict[str, Any] = {"from": statement_ccy, "to": listing_ccy}
+    if result is None:
+        description["rate"] = None
+        description["error"] = f"no FX rate for {statement_ccy}->{listing_ccy}"
+        logger.warning(f"{ticker}: {description['error']}; statement values left unconverted")
+        return description
+
+    rate, symbol = result
+    run.statement_rate = rate
+    run.converted_ticker = ticker.upper()
+    description.update({"rate": rate, "fx_symbol": symbol})
+    return description
+
+
+def _signals(run: Any, ticker: str, use_cache: bool, bundle: AnalysisBundle) -> Dict[str, Any]:
+    """Post-earnings drift (PEAD) and relative strength vs the home benchmark."""
+    from .analysis.fundamental import calculate_pead_signal
+    from .analysis.technical import calculate_relative_strength
+    from .markets import benchmark_for
+
+    prices = run.fetch_ticker(ticker, period="1y", use_cache=use_cache)
+    signals: Dict[str, Any] = {}
+
+    earnings = run.fetch_earnings(ticker, use_cache=use_cache)
+    signals["pead"] = calculate_pead_signal(pead_history(earnings), prices)
+
+    benchmark_symbol = bundle.report.get("benchmark") or benchmark_for(ticker)
+    benchmark = None
+    if bundle.risk is not None and len(bundle.risk) > 2:
+        benchmark = bundle.risk[2]
+    if benchmark is None or getattr(benchmark, "empty", True):
+        benchmark = run.fetch_ticker(benchmark_symbol, period="1y", use_cache=use_cache)
+    if benchmark is not None and benchmark.empty:
+        benchmark = None
+    relative = calculate_relative_strength(prices, benchmark)
+    if relative is not None:
+        relative["benchmark"] = benchmark_symbol if benchmark is not None else None
+    signals["relative_strength"] = relative
+
+    return {k: v for k, v in signals.items() if v is not None}
+
+
+def pead_history(earnings: Optional[Dict[str, pd.DataFrame]]) -> List[Dict[str, Any]]:
+    """
+    Earnings surprises in the shape calculate_pead_signal() expects.
+
+    Prefers `earnings_dates` (actual announcement timestamps, so post-earnings
+    drift is measured from the right day) and falls back to `earnings_history`
+    (quarter-end dates).
+    """
+    if not earnings:
+        return []
+
+    dates = earnings.get("earnings_dates")
+    rows: List[Dict[str, Any]] = []
+    if dates is not None and not dates.empty:
+        frame = dates.reset_index() if "Earnings Date" not in dates.columns else dates
+        for record in frame.to_dict("records"):
+            actual = _number(record.get("Reported EPS"))
+            estimate = _number(record.get("EPS Estimate"))
+            if actual is None or estimate is None or record.get("Earnings Date") is None:
+                continue
+            rows.append(
+                {
+                    "quarter": str(record["Earnings Date"]),
+                    "epsActual": actual,
+                    "epsEstimate": estimate,
+                    "epsDifference": actual - estimate,
+                    "surprisePercent": (actual - estimate) / abs(estimate) if estimate else None,
+                }
+            )
+    if len(rows) >= 2:
+        return rows
+
+    history = earnings.get("earnings_history")
+    if history is None or history.empty:
+        return rows
+    frame = history.reset_index() if "quarter" not in history.columns else history
+    frame = frame.rename(columns={"index": "quarter"})
+    return [
+        {k: (None if isinstance(v, float) and pd.isna(v) else v) for k, v in r.items()}
+        for r in frame.to_dict("records")
+    ]
+
+
+def _number(value: Any) -> Optional[float]:
+    try:
+        result = float(value)
+    except TypeError, ValueError:
+        return None
+    return None if pd.isna(result) else result
 
 
 def _dividends_series(div_data: Optional[Dict[str, pd.DataFrame]]) -> Optional[pd.Series]:

@@ -18,6 +18,9 @@ from .utils.serialization import dataframe_to_json_dict, dataframe_to_records, s
 
 logger = logging.getLogger(__name__)
 
+# Bump when get_ticker_info extracts new fields, so older cached info is refetched
+INFO_CACHE_VERSION = 2
+
 
 class DataFetcher:
     """Fetches and caches financial market data"""
@@ -263,10 +266,10 @@ class DataFetcher:
         ticker = ticker.upper()
         cache_file = self._get_cache_file_path(ticker, "info.json")
 
-        # Check cache
+        # Check cache (info saved with an older field set is refetched)
         if use_cache:
             cached = self._load_json_cache(cache_file)
-            if cached is not None:
+            if isinstance(cached, dict) and cached.get("cache_version") == INFO_CACHE_VERSION:
                 logger.info(f"Loaded cached ticker info for {ticker}")
                 return cached
 
@@ -274,9 +277,10 @@ class DataFetcher:
             stock = yf.Ticker(ticker)
             info = stock.info
 
-            # Validate we got meaningful data
+            # Validate we got meaningful data (callers decide whether it matters:
+            # a delisted name in a Yahoo peer list shouldn't warn)
             if not info or len(info) < 5:
-                logger.warning(
+                logger.info(
                     f"Minimal or no information returned for {ticker}. "
                     f"Ticker may be invalid or delisted."
                 )
@@ -284,12 +288,19 @@ class DataFetcher:
 
             # Extract comprehensive fields
             result = {
+                "cache_version": INFO_CACHE_VERSION,
                 "symbol": ticker,
                 "name": info.get("longName", "N/A"),
                 "sector": info.get("sector", "N/A"),
                 "industry": info.get("industry", "N/A"),
+                # Yahoo's slugs for yf.Sector / yf.Industry (e.g. "consumer-electronics")
+                "sector_key": info.get("sectorKey"),
+                "industry_key": info.get("industryKey"),
                 "market_cap": info.get("marketCap", None),
                 "currency": info.get("currency", "USD"),
+                # Statements can be in another currency than the listing (EQNR.OL
+                # trades in NOK, reports in USD)
+                "financial_currency": info.get("financialCurrency"),
                 "exchange": info.get("exchange", "N/A"),
                 "website": info.get("website", "N/A"),
                 # Valuation metrics
@@ -298,6 +309,11 @@ class DataFetcher:
                 "peg_ratio": info.get("pegRatio", None),
                 "price_to_book": info.get("priceToBook", None),
                 "price_to_sales": info.get("priceToSalesTrailing12Months", None),
+                "ev_to_ebitda": info.get("enterpriseToEbitda", None),
+                "enterprise_value": info.get("enterpriseValue", None),
+                "current_price": info.get("currentPrice") or info.get("regularMarketPrice"),
+                "shares_outstanding": info.get("sharesOutstanding", None),
+                "free_cashflow": info.get("freeCashflow", None),
                 # Profitability
                 "profit_margin": info.get("profitMargins", None),
                 "operating_margin": info.get("operatingMargins", None),
@@ -315,6 +331,14 @@ class DataFetcher:
                 "52w_high": info.get("fiftyTwoWeekHigh", None),
                 "52w_low": info.get("fiftyTwoWeekLow", None),
                 "avg_volume": info.get("averageVolume", None),
+                # Analyst consensus (price targets are in the listing currency)
+                "target_mean_price": info.get("targetMeanPrice"),
+                "target_median_price": info.get("targetMedianPrice"),
+                "target_low_price": info.get("targetLowPrice"),
+                "target_high_price": info.get("targetHighPrice"),
+                "analyst_count": info.get("numberOfAnalystOpinions"),
+                "recommendation_mean": info.get("recommendationMean"),  # 1 = strong buy, 5 = sell
+                "recommendation_key": info.get("recommendationKey"),
             }
 
             # Cache the result
@@ -377,6 +401,76 @@ class DataFetcher:
             empty_result={k: pd.DataFrame() for k in keys},
             use_cache=use_cache,
         )
+
+    def get_industry_peers(self, industry_key: str, use_cache: bool = True) -> List[str]:
+        """
+        Yahoo's leading companies in an industry (yf.Industry(key).top_companies).
+
+        Args:
+            industry_key: Yahoo industry slug, e.g. "consumer-electronics"
+                (``get_ticker_info(...)["industry_key"]``)
+            use_cache: Whether to use cached data
+
+        Returns:
+            Ticker symbols in Yahoo's order (largest first); [] if unavailable
+        """
+        return self._peer_group("industry", industry_key, use_cache)
+
+    def get_sector_peers(self, sector_key: str, use_cache: bool = True) -> List[str]:
+        """
+        Yahoo's leading companies in a sector (yf.Sector(key).top_companies).
+
+        Args:
+            sector_key: Yahoo sector slug, e.g. "technology"
+                (``get_ticker_info(...)["sector_key"]``)
+            use_cache: Whether to use cached data
+
+        Returns:
+            Ticker symbols in Yahoo's order (largest first); [] if unavailable
+        """
+        return self._peer_group("sector", sector_key, use_cache)
+
+    def _peer_group(self, kind: str, key: str, use_cache: bool) -> List[str]:
+        """
+        Fetch and cache a Yahoo industry/sector company list.
+
+        Cached in <cache_dir>/_peer_groups/cache/<kind>-<key>.json for the
+        "industry" TTL; falls back to an expired cache, then to [], on failure.
+        """
+        cache_file = self._get_cache_file_path("_peer_groups", f"{kind}-{key}.json")
+        if use_cache and self._is_fresh(cache_file, "industry"):
+            cached = self._load_json_cache(cache_file, ignore_ttl=True)
+            if isinstance(cached, dict):
+                return [str(t) for t in cached.get("tickers", [])]
+
+        try:
+            group = yf.Industry(key) if kind == "industry" else yf.Sector(key)
+            top = group.top_companies
+            if top is None or top.empty:
+                raise ValueError(f"no companies listed for {kind} {key!r}")
+            symbols = top["symbol"] if "symbol" in top.columns else top.index
+            tickers = [str(t).upper() for t in symbols if str(t).strip()]
+            self._save_json_cache(cache_file, {kind: key, "tickers": tickers})
+            return tickers
+        except Exception as e:
+            stale = self._load_json_cache(cache_file, ignore_ttl=True)
+            if isinstance(stale, dict):
+                logger.warning(f"{kind} lookup failed for {key} ({e}); using expired cache")
+                return [str(t) for t in stale.get("tickers", [])]
+            logger.warning(f"{kind} lookup failed for {key}: {e}")
+            return []
+
+    def latest_close(self, symbol: str, use_cache: bool = True) -> Optional[float]:
+        """Most recent close for a symbol (e.g. an FX pair like USDNOK=X), or None."""
+        try:
+            prices = self.fetch_ticker(symbol, period="1mo", use_cache=use_cache)
+        except Exception as e:
+            logger.warning(f"No price for {symbol}: {e}")
+            return None
+        if prices is None or prices.empty or "Close" not in prices.columns:
+            return None
+        closes = prices["Close"].dropna()
+        return float(closes.iloc[-1]) if not closes.empty else None
 
     def fetch_earnings(self, ticker: str, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
         """
@@ -585,7 +679,7 @@ class DataFetcher:
         # Check cache
         if use_cache:
             cached = self._load_json_cache(cache_file)
-            if cached is not None:
+            if isinstance(cached, list):
                 return cached
 
         try:

@@ -5,6 +5,7 @@ Uses mocked report data — no network calls.
 
 import sys
 from pathlib import Path
+from typing import Any, ClassVar
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -24,6 +25,7 @@ from src.comparison.formatters import (
     format_comparison_markdown,
     format_comparison_table,
     format_correlation_heatmap,
+    format_diversification,
 )
 from src.scoring.dimensions import DimensionResult
 from src.scoring.scorer import ScoringResult
@@ -203,6 +205,70 @@ class TestCorrelationMatrix:
         assert corr.shape == (2, 2)
         assert abs(corr.at["AAPL", "AAPL"] - 1.0) < 0.001
         assert abs(corr.at["MSFT", "MSFT"] - 1.0) < 0.001
+
+    def test_aligns_exchanges_in_different_timezones(self, price_factory):
+        # Oslo and New York bars are stamped at local midnight, so the raw
+        # timestamps never coincide; alignment is by trading date
+        comp = TickerComparator(["EQNR.OL", "AAPL"])
+        mock_fetcher = MagicMock()
+        mock_fetcher.fetch_ticker.side_effect = [
+            price_factory("EQNR.OL", days=60, seed=1),
+            price_factory("AAPL", days=60, seed=2),
+        ]
+        comp.fetcher = mock_fetcher
+
+        corr = comp.correlation_matrix()
+
+        assert corr.shape == (2, 2)
+        assert not corr.isna().any().any()
+
+    def test_prices_fetched_once(self, price_factory):
+        comp = TickerComparator(["A", "B"])
+        comp.fetcher = MagicMock()
+        comp.fetcher.fetch_ticker.side_effect = lambda t, **kw: price_factory(t, days=40)
+
+        comp.correlation_matrix()
+        comp.correlation_matrix()
+        comp.price_data()
+
+        assert comp.fetcher.fetch_ticker.call_count == 2
+
+
+class TestDiversificationFormat:
+    FLAGS: ClassVar[dict[str, Any]] = {
+        "diversification_score": 35,
+        "average_correlation": 0.65,
+        "assessment": "Poorly diversified",
+        "redundant_pairs": [{"pair": ("AAPL", "MSFT"), "correlation": 0.91}],
+        "hedge_opportunities": [{"pair": ("AAPL", "GLD"), "correlation": -0.4}],
+    }
+    PARITY: ClassVar[dict[str, Any]] = {
+        "weights": {"AAPL": 0.4, "MSFT": 0.6},
+        "volatilities": {"AAPL": 0.3, "MSFT": 0.2},
+    }
+
+    def test_text(self):
+        text = format_diversification(self.FLAGS, self.PARITY)
+        assert "Highly correlated: AAPL / MSFT (+0.91)" in text
+        assert "Hedge: AAPL / GLD (-0.40)" in text
+        assert "MSFT" in text and "60.0%" in text
+
+    def test_markdown(self):
+        md = format_diversification(self.FLAGS, self.PARITY, markdown=True)
+        assert md.startswith("## Diversification")
+        assert "| MSFT | 60.0% | 50.0% | 20.0% |" in md
+
+    def test_nothing_to_show(self):
+        assert format_diversification(None, None) == ""
+
+    def test_json_includes_sections(self):
+        import json
+
+        data = json.loads(
+            format_comparison_json(correlation_flags=self.FLAGS, risk_parity=self.PARITY)
+        )
+        assert data["risk_parity"]["weights"]["MSFT"] == 0.6
+        assert data["correlation_flags"]["diversification_score"] == 35
 
 
 class TestKeyMetrics:

@@ -1,15 +1,15 @@
 """
 Shared fixtures.
 
-`fake_yahoo` replaces yfinance.Ticker (the network boundary) with a synthetic
-in-memory market so the real DataFetcher, cache, analyzers, and scorer run
-offline.
+`fake_market` replaces yfinance.Ticker, Industry and Sector (the network
+boundary) with a synthetic in-memory market so the real DataFetcher, cache,
+analyzers, and scorer run offline.
 """
 
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -58,22 +58,53 @@ def make_prices(
 class FakeMarket:
     """Configurable stand-in for Yahoo Finance; counts calls per (attribute, symbol)."""
 
-    def __init__(self):
-        self.calls: Counter = Counter()
+    def __init__(self) -> None:
+        self.calls: Counter[tuple[str, str]] = Counter()
         self.price_overrides: Dict[str, pd.DataFrame] = {}
         self.failing: set[str] = set()
-        self.info_overrides: Dict[str, dict] = {}
+        self.info_overrides: Dict[str, Dict[str, Any]] = {}
+        # symbol -> attribute (e.g. "cashflow", "income_stmt") -> value
+        self.attribute_overrides: Dict[str, Dict[str, Any]] = {}
+        # Yahoo industry/sector key -> top company symbols (yf.Industry/Sector(key).top_companies)
+        self.industries: Dict[str, List[str]] = {}
+        self.sectors: Dict[str, List[str]] = {}
 
     def ticker(self, symbol: str) -> "FakeTicker":
         return FakeTicker(symbol.upper(), self)
 
+    def industry(self, key: str) -> "FakeGroup":
+        return FakeGroup("industry", key, self)
+
+    def sector(self, key: str) -> "FakeGroup":
+        return FakeGroup("sector", key, self)
+
+
+class FakeGroup:
+    """Stand-in for yf.Industry / yf.Sector."""
+
+    def __init__(self, kind: str, key: str, market: FakeMarket) -> None:
+        self.kind = kind
+        self.key = key
+        self._market = market
+
+    @property
+    def top_companies(self) -> pd.DataFrame:
+        self._market.calls[(self.kind, self.key)] += 1
+        if self.key in self._market.failing:
+            raise ConnectionError(f"simulated outage for {self.kind} {self.key}")
+        groups = self._market.industries if self.kind == "industry" else self._market.sectors
+        symbols = groups.get(self.key, [])
+        return pd.DataFrame(
+            {"name": [f"{t} Corp" for t in symbols]}, index=pd.Index(symbols, name="symbol")
+        )
+
 
 class FakeTicker:
-    def __init__(self, symbol: str, market: FakeMarket):
+    def __init__(self, symbol: str, market: FakeMarket) -> None:
         self.symbol = symbol
         self._market = market
 
-    def _check(self, attr: str):
+    def _check(self, attr: str) -> None:
         self._market.calls[(attr, self.symbol)] += 1
         if self.symbol in self._market.failing:
             raise ConnectionError(f"simulated outage for {self.symbol}")
@@ -102,9 +133,13 @@ class FakeTicker:
         }
         return {**base, **self._market.info_overrides.get(self.symbol, {})}
 
-    def __getattr__(self, name: str):
-        # Statements, earnings, holders, ratings: empty frames; news: empty list
+    def __getattr__(self, name: str) -> Any:
+        # Statements, earnings, holders, ratings: empty frames unless overridden;
+        # news: empty list
         self._check(name)
+        overrides = self._market.attribute_overrides.get(self.symbol, {})
+        if name in overrides:
+            return overrides[name]
         if name == "news":
             return []
         if name in ("dividends", "splits"):
@@ -113,7 +148,7 @@ class FakeTicker:
 
 
 @pytest.fixture
-def default_config():
+def default_config() -> Iterator[AnalysisConfig]:
     """Isolate tests from any local config.json."""
     config = AnalysisConfig()
     set_config(config)
@@ -122,9 +157,11 @@ def default_config():
 
 
 @pytest.fixture
-def fake_market(monkeypatch, default_config) -> FakeMarket:
+def fake_market(monkeypatch: pytest.MonkeyPatch, default_config: AnalysisConfig) -> FakeMarket:
     market = FakeMarket()
     monkeypatch.setattr("src.data_fetcher.yf.Ticker", market.ticker)
+    monkeypatch.setattr("src.data_fetcher.yf.Industry", market.industry)
+    monkeypatch.setattr("src.data_fetcher.yf.Sector", market.sector)
     return market
 
 

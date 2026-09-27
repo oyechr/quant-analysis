@@ -1177,6 +1177,7 @@ class ValuationScorer:
         self,
         valuation_data: Dict[str, Any],
         ticker_info: Optional[Dict[str, Any]] = None,
+        peer_valuation: Optional[Dict[str, Any]] = None,
     ) -> DimensionResult:
         """
         Score valuation analysis data.
@@ -1185,6 +1186,8 @@ class ValuationScorer:
             valuation_data: Output from ValuationAnalyzer.analyze() or
                            the valuation_analysis section of a full report
             ticker_info: Optional ticker info dict for P/E, P/B, PEG, etc.
+            peer_valuation: Optional peer comparison (see vetting.peers); with
+                           enough peers, P/E is scored against the peer median
 
         Returns:
             DimensionResult with valuation dimension score
@@ -1203,7 +1206,8 @@ class ValuationScorer:
         pe = None
         if ticker_info:
             pe = _safe_float(ticker_info.get("pe_ratio"))
-        sub_scores.append(self._score_pe(pe, strengths, concerns))
+        peer_median = self.peer_pe_median(peer_valuation)
+        sub_scores.append(self._score_pe(pe, strengths, concerns, peer_median))
 
         # 3. PEG Ratio (weight: 0.15)
         peg = None
@@ -1295,36 +1299,55 @@ class ValuationScorer:
             label=label,
         )
 
-    def _score_pe(self, pe: Optional[float], strengths: List[str], concerns: List[str]) -> SubScore:
+    def peer_pe_median(self, peer_valuation: Optional[Dict[str, Any]]) -> Optional[float]:
+        """Peer median P/E to score against, or None to use the absolute cutoffs."""
+        if not self.params.peer_relative or not peer_valuation:
+            return None
+        pe = (peer_valuation.get("metrics") or {}).get("pe_ratio") or {}
+        median = _safe_float(pe.get("median"))
+        if median is None or median <= 0 or (pe.get("n") or 0) < self.params.min_peers:
+            return None
+        return median
+
+    def _score_pe(
+        self,
+        pe: Optional[float],
+        strengths: List[str],
+        concerns: List[str],
+        peer_median: Optional[float] = None,
+    ) -> SubScore:
         if pe is None or pe <= 0:
             return SubScore(name="P/E Ratio", score=50.0, weight=0.20, available=False)
 
-        if pe <= self.params.pe_undervalued:
-            score = 80.0 + min((self.params.pe_undervalued - pe) * 1.5, 20.0)
+        undervalued = self.params.pe_undervalued
+        fair = self.params.pe_fair
+        expensive = self.params.pe_expensive
+        context = ""
+        if peer_median is not None:
+            # Same curve, rescaled so the peer median sits where pe_fair does
+            scale = peer_median / fair
+            undervalued, fair, expensive = undervalued * scale, peer_median, expensive * scale
+            context = f" vs peer median {peer_median:.1f}"
+        # The outer slopes are per P/E point on the absolute scale; rescale them too
+        unit = fair / self.params.pe_fair
+
+        if pe <= undervalued:
+            score = 80.0 + min((undervalued - pe) / unit * 1.5, 20.0)
             label = "Attractive"
-            strengths.append(f"P/E {pe:.1f}  -  attractively valued")
-        elif pe <= self.params.pe_fair:
-            score = (
-                50.0
-                + ((self.params.pe_fair - pe) / (self.params.pe_fair - self.params.pe_undervalued))
-                * 30.0
-            )
+            strengths.append(f"P/E {pe:.1f}{context}  -  attractively valued")
+        elif pe <= fair:
+            score = 50.0 + ((fair - pe) / (fair - undervalued)) * 30.0
             label = "Fair"
-        elif pe <= self.params.pe_expensive:
-            score = (
-                25.0
-                + (
-                    (self.params.pe_expensive - pe)
-                    / (self.params.pe_expensive - self.params.pe_fair)
-                )
-                * 25.0
-            )
+        elif pe <= expensive:
+            score = 25.0 + ((expensive - pe) / (expensive - fair)) * 25.0
             label = "Expensive"
         else:
-            score = max(25.0 - (pe - self.params.pe_expensive) * 0.3, 5.0)
+            score = max(25.0 - (pe - expensive) / unit * 0.3, 5.0)
             label = "Very expensive"
-            concerns.append(f"P/E {pe:.1f}  -  richly valued")
+            concerns.append(f"P/E {pe:.1f}{context}  -  richly valued")
 
+        if peer_median is not None:
+            label += " (vs peers)"
         return SubScore(
             name="P/E Ratio", score=_clamp(score), weight=0.20, raw_value=pe, label=label
         )

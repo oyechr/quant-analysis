@@ -16,6 +16,7 @@ from ..data_fetcher import DataFetcher
 from ..reporting import ReportGenerator
 from ..scoring import ScoringConfig, StockScorer
 from ..scoring.scorer import ScoringResult
+from ..utils.financial import trading_dates
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ class TickerComparator:
 
         self._reports: Dict[str, Dict[str, Any]] = {}
         self._scores: Dict[str, ScoringResult] = {}
+        self._prices: Optional[Dict[str, pd.DataFrame]] = None
 
     def fetch_all(self, use_cache: bool = True) -> Dict[str, Dict[str, Any]]:
         """
@@ -181,6 +183,25 @@ class TickerComparator:
         df = pd.DataFrame(rows)
         return df
 
+    def price_data(self, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
+        """
+        Daily prices per ticker (fetched once, then reused).
+
+        Tickers whose prices can't be fetched are left out.
+        """
+        if self._prices is None:
+            self._prices = {}
+            for ticker in self.tickers:
+                try:
+                    prices = self.fetcher.fetch_ticker(
+                        ticker, period=self.period, use_cache=use_cache
+                    )
+                    if not prices.empty and "Close" in prices.columns:
+                        self._prices[ticker] = prices
+                except Exception as e:
+                    logger.warning(f"Could not fetch prices for {ticker}: {e}")
+        return self._prices
+
     def correlation_matrix(self, use_cache: bool = True) -> pd.DataFrame:
         """
         Compute daily-return correlation matrix for all tickers.
@@ -191,22 +212,20 @@ class TickerComparator:
         Returns:
             DataFrame correlation matrix (tickers × tickers).
         """
+        # Align on trading date: bars from different exchanges carry midnight
+        # stamps in their own timezone and would otherwise never overlap
         price_frames: Dict[str, pd.Series] = {}
-
-        for ticker in self.tickers:
-            try:
-                prices = self.fetcher.fetch_ticker(ticker, period=self.period, use_cache=use_cache)
-                if not prices.empty and "Close" in prices.columns:
-                    price_frames[ticker] = prices["Close"]
-            except Exception as e:
-                logger.warning(f"Could not fetch prices for {ticker}: {e}")
+        for ticker, prices in self.price_data(use_cache).items():
+            close = prices["Close"].copy()
+            close.index = trading_dates(pd.DatetimeIndex(close.index))
+            price_frames[ticker] = close[~close.index.duplicated(keep="last")]
 
         if len(price_frames) < 2:
             logger.warning("Need at least 2 tickers with price data for correlation")
             return pd.DataFrame()
 
         combined = pd.DataFrame(price_frames)
-        returns = combined.pct_change().dropna()
+        returns = combined.pct_change(fill_method=None).dropna()
         return returns.corr()
 
     def key_metrics_table(self) -> pd.DataFrame:

@@ -20,7 +20,7 @@ import logging
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 _USAGE_FILE = Path(__file__).parent.parent / "data" / ".llm_usage.json"
 
@@ -96,20 +96,34 @@ def _fmt(value: Any, pct: bool = False, decimals: int = 1) -> str:
         return str(value)
 
 
-def build_brief_context(report_data: Dict[str, Any]) -> str:
+def build_brief_context(
+    report_data: Dict[str, Any],
+    red_flags: Optional[List[Dict[str, Any]]] = None,
+    peer_valuation: Optional[Dict[str, Any]] = None,
+) -> str:
     """
     Build a focused context string (~1,500 tokens) from a full report dict.
 
     Strips time-series data, raw indicator history, holders, and detailed
-    DCF workings. Keeps scoring, key fundamentals, risk metrics, valuation
-    results, technical signals, earnings beats, and analyst consensus.
+    DCF workings. Keeps scoring, red flags, peer valuation, key fundamentals,
+    risk metrics, valuation results, technical signals, earnings beats, and
+    analyst consensus.
 
     Args:
         report_data: Parsed full_report.json dict.
+        red_flags: Red flags as dicts; computed from the report when omitted.
+        peer_valuation: Peer comparison dict (vetting.PeerValuation.to_dict());
+            defaults to the report's own `peer_valuation` if present.
 
     Returns:
         Compact context string for the LLM prompt.
     """
+    if red_flags is None:
+        from .vetting import find_red_flags
+
+        red_flags = [f.to_dict() for f in find_red_flags(report_data)]
+    peer_valuation = peer_valuation or report_data.get("peer_valuation")
+
     lines = []
 
     # --- Company identity ---
@@ -149,6 +163,60 @@ def build_brief_context(report_data: Dict[str, Any]) -> str:
     if concerns:
         lines.append(f"Concerns: {'; '.join(concerns)}")
     lines.append("")
+
+    # --- Red flags ---
+    lines.append("=== RED FLAGS ===")
+    if red_flags:
+        for flag in red_flags:
+            lines.append(f"  [{flag.get('severity')}] {flag.get('title')}: {flag.get('detail')}")
+    else:
+        lines.append("  None found")
+    lines.append("")
+
+    # --- Peer-relative valuation ---
+    if peer_valuation and peer_valuation.get("peers"):
+        group = f" in {peer_valuation['group']}" if peer_valuation.get("group") else ""
+        lines.append(
+            f"=== PEER VALUATION ({peer_valuation.get('basis')}{group}: "
+            f"{', '.join(peer_valuation['peers'])}) ==="
+        )
+        for metric in (peer_valuation.get("metrics") or {}).values():
+            if metric.get("value") is None and metric.get("median") is None:
+                continue
+            cheap = metric.get("cheapness")
+            rank = f"cheaper than {cheap:.0f}% of peers" if cheap is not None else "no rank"
+            lines.append(
+                f"  {metric.get('label')}: {_fmt(metric.get('value'))} vs peer median "
+                f"{_fmt(metric.get('median'))} ({rank}, n={metric.get('n', 0)})"
+            )
+        lines.append("")
+
+    # --- Analyst price targets ---
+    if info.get("target_mean_price"):
+        lines.append(
+            f"Analyst targets: mean {_fmt(info.get('target_mean_price'))} "
+            f"(low {_fmt(info.get('target_low_price'))}, high {_fmt(info.get('target_high_price'))}, "
+            f"n={info.get('analyst_count', 'N/A')})  Consensus: {info.get('recommendation_key', 'N/A')}"
+        )
+        lines.append("")
+
+    # --- Signals outside the composite score ---
+    signals = report_data.get("signals") or {}
+    rs = signals.get("relative_strength")
+    pead = signals.get("pead")
+    if rs or pead:
+        lines.append("=== MOMENTUM & EARNINGS SIGNALS ===")
+        if rs:
+            lines.append(
+                f"  Relative strength vs {rs.get('benchmark') or 'benchmark'}: "
+                f"{rs.get('rs_rating')}/99 ({rs.get('interpretation', '')})"
+            )
+        if pead:
+            lines.append(
+                f"  Post-earnings drift: {pead.get('signal')} (SUE {_fmt(pead.get('sue'), decimals=2)}; "
+                f"{pead.get('interpretation', '')})"
+            )
+        lines.append("")
 
     # --- Key valuation ratios from info ---
     lines += [
@@ -371,7 +439,7 @@ def _read_github_usage() -> Dict[str, Any]:
     if _USAGE_FILE.exists():
         try:
             stored = json.loads(_USAGE_FILE.read_text(encoding="utf-8"))
-            if stored.get("date") == today:
+            if isinstance(stored, dict) and stored.get("date") == today:
                 # Migrate old flat format {date, count} -> {date, models: {}}
                 if "count" in stored and "models" not in stored:
                     return {"date": today, "models": {}}
@@ -555,6 +623,8 @@ def _chat_anthropic(system: str, messages: List[Dict[str, str]], model: str, api
     except ImportError:
         raise ImportError("anthropic package not installed. Run: pip install anthropic")
 
+    from anthropic.types import MessageParam
+
     client = anthropic.Anthropic(api_key=api_key)
     tokens = []
 
@@ -562,7 +632,7 @@ def _chat_anthropic(system: str, messages: List[Dict[str, str]], model: str, api
         model=model,
         max_tokens=1024,
         system=system,
-        messages=messages,
+        messages=cast(List[MessageParam], messages),
     ) as stream:
         for text in stream.text_stream:
             sys.stdout.write(text)
@@ -612,8 +682,13 @@ def _chat_openai_messages(
     except ImportError:
         raise ImportError("openai package not installed. Run: pip install openai")
 
+    from openai.types.chat import ChatCompletionMessageParam
+
     client = openai.OpenAI(api_key=api_key, base_url=base_url)
-    full_messages = [{"role": "system", "content": system}] + list(messages)
+    full_messages = cast(
+        List[ChatCompletionMessageParam],
+        [{"role": "system", "content": system}, *messages],
+    )
     tokens = []
 
     try:

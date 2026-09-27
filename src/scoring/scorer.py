@@ -53,13 +53,14 @@ class ScoringResult:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
-        result = {
+        dimensions: Dict[str, Any] = {}
+        result: Dict[str, Any] = {
             "ticker": self.ticker,
             "composite_score": round(self.composite_score, 1),
             "signal": self.signal,
             "confidence": self.confidence,
             "confidence_score": round(self.confidence_score, 2),
-            "dimensions": {},
+            "dimensions": dimensions,
             "strengths": self.strengths,
             "concerns": self.concerns,
             "metadata": {
@@ -71,13 +72,13 @@ class ScoringResult:
         }
 
         if self.technical:
-            result["dimensions"]["technical"] = self.technical.to_dict()
+            dimensions["technical"] = self.technical.to_dict()
         if self.fundamental:
-            result["dimensions"]["fundamental"] = self.fundamental.to_dict()
+            dimensions["fundamental"] = self.fundamental.to_dict()
         if self.risk:
-            result["dimensions"]["risk"] = self.risk.to_dict()
+            dimensions["risk"] = self.risk.to_dict()
         if self.valuation:
-            result["dimensions"]["valuation"] = self.valuation.to_dict()
+            dimensions["valuation"] = self.valuation.to_dict()
 
         if self.trade_levels:
             result["trade_levels"] = self.trade_levels.to_dict()
@@ -301,6 +302,7 @@ class StockScorer:
             valuation_data=report_data.get("valuation_analysis"),
             ticker_info=ticker_info,
             ticker=ticker,
+            peer_valuation=report_data.get("peer_valuation"),
         )
 
         # Compute trade levels from full report data
@@ -323,6 +325,7 @@ class StockScorer:
         valuation_data: Optional[Dict[str, Any]] = None,
         ticker_info: Optional[Dict[str, Any]] = None,
         ticker: str = "UNKNOWN",
+        peer_valuation: Optional[Dict[str, Any]] = None,
     ) -> ScoringResult:
         """
         Score a stock from individual analysis data dictionaries.
@@ -334,11 +337,12 @@ class StockScorer:
             valuation_data: Valuation analysis JSON (from ValuationAnalyzer)
             ticker_info: Ticker info dict with P/E, PEG, ROE, etc.
             ticker: Stock ticker symbol
+            peer_valuation: Optional peer comparison for peer-relative P/E
 
         Returns:
             ScoringResult with composite score, signals, and dimension breakdowns
         """
-        dimensions: List[tuple] = []  # (weight_attr, DimensionResult)
+        dimensions: List[tuple[str, DimensionResult]] = []  # (weight_attr, result)
         all_strengths: List[str] = []
         all_concerns: List[str] = []
 
@@ -376,7 +380,9 @@ class StockScorer:
         valuation_result = None
         if valuation_data:
             try:
-                valuation_result = self.valuation_scorer.score(valuation_data, ticker_info)
+                valuation_result = self.valuation_scorer.score(
+                    valuation_data, ticker_info, peer_valuation
+                )
                 dimensions.append(("valuation", valuation_result))
                 all_strengths.extend(valuation_result.strengths)
                 all_concerns.extend(valuation_result.concerns)
@@ -411,7 +417,7 @@ class StockScorer:
             dimensions_total=4,
         )
 
-    def _calculate_composite(self, dimensions: List[tuple]) -> float:
+    def _calculate_composite(self, dimensions: List[tuple[str, DimensionResult]]) -> float:
         """
         Calculate weighted composite score from available dimensions.
         Re-normalizes weights when some dimensions are missing.
@@ -431,7 +437,7 @@ class StockScorer:
             return weighted_sum / total_weight
         return 50.0
 
-    def _calculate_confidence(self, dimensions: List[tuple]) -> float:
+    def _calculate_confidence(self, dimensions: List[tuple[str, DimensionResult]]) -> float:
         """
         Calculate confidence score (0-1) based on:
         1. Number of dimensions available (40% weight)

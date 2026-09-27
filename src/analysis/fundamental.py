@@ -55,6 +55,7 @@ class FundamentalAnalyzer:
         self.balance_sheet_a = self.fundamentals.get("balance_sheet_annual")
         self.cash_flow_q = self.fundamentals.get("cash_flow_quarterly")
         self.cash_flow_a = self.fundamentals.get("cash_flow_annual")
+        self._all: Optional[Dict[str, Any]] = None
 
     # ==================== Helper Methods ====================
 
@@ -940,13 +941,74 @@ class FundamentalAnalyzer:
 
     # ==================== Aggregation Methods ====================
 
+    # ==================== Annual History ====================
+
+    def calculate_annual_history(self, years: int = 4) -> Dict[str, Any]:
+        """
+        Per-year values the red-flag checks need (most recent year first).
+
+        Returns:
+            Dictionary with 'periods' (statement dates) and one list per metric,
+            aligned with 'periods'; missing values are None. Empty dict if there
+            are no annual statements.
+        """
+        periods = _annual_periods(self.cash_flow_a, self.income_stmt_a, self.balance_sheet_a)[
+            :years
+        ]
+        if not periods:
+            return {}
+
+        def row(df: Optional[pd.DataFrame], *names: str) -> List[Optional[float]]:
+            values: List[Optional[float]] = []
+            for period in periods:
+                value = None
+                for name in names:
+                    value = _value_at(df, name, period)
+                    if value is not None:
+                        break
+                values.append(value)
+            return values
+
+        fcf = row(self.cash_flow_a, "Free Cash Flow")
+        ocf = row(self.cash_flow_a, "Operating Cash Flow", "Total Cash From Operating Activities")
+        capex = row(self.cash_flow_a, "Capital Expenditure")
+        fcf = [
+            f if f is not None else (o + c if o is not None and c is not None else None)
+            for f, o, c in zip(fcf, ocf, capex, strict=True)
+        ]
+
+        ebit = row(self.income_stmt_a, "EBIT", "Operating Income")
+        interest = row(self.income_stmt_a, "Interest Expense", "Interest Expense Non Operating")
+        coverage = [
+            e / abs(i) if e is not None and i else None for e, i in zip(ebit, interest, strict=True)
+        ]
+
+        shares = row(self.balance_sheet_a, "Ordinary Shares Number", "Share Issued")
+        if all(v is None for v in shares):
+            shares = row(self.income_stmt_a, "Diluted Average Shares", "Basic Average Shares")
+
+        return {
+            "periods": [str(p.date()) for p in periods],
+            "free_cash_flow": fcf,
+            "shares_outstanding": shares,
+            "dividends_paid": row(
+                self.cash_flow_a, "Cash Dividends Paid", "Common Stock Dividend Paid"
+            ),
+            "ebit": ebit,
+            "interest_expense": interest,
+            "interest_coverage": coverage,
+        }
+
     def calculate_all(self) -> Dict[str, Any]:
         """
-        Calculate all fundamental metrics
+        Calculate all fundamental metrics (computed once, then reused)
 
         Returns:
             Dictionary with all analysis results
         """
+        if self._all is not None:
+            return self._all
+
         logger.info("Calculating fundamental metrics...")
 
         results = {
@@ -962,9 +1024,11 @@ class FundamentalAnalyzer:
                 "accruals_quality": self.calculate_accruals_quality(),
                 "cash_conversion": self.calculate_cash_conversion(),
             },
+            "annual_history": self.calculate_annual_history(),
         }
 
         logger.info("Fundamental analysis complete")
+        self._all = results
         return results
 
     def get_summary(self) -> Dict[str, Any]:
@@ -1243,6 +1307,49 @@ class FundamentalAnalyzer:
 # ==================== Standalone Functions ====================
 
 
+def _naive_date(value: Any) -> pd.Timestamp:
+    """Parse a date/timestamp (naive or tz-aware) into a tz-naive calendar date."""
+    stamp = pd.Timestamp(value)
+    if stamp.tzinfo is not None:
+        stamp = stamp.tz_localize(None)
+    return stamp.normalize()
+
+
+def _annual_periods(*frames: Optional[pd.DataFrame]) -> List[pd.Timestamp]:
+    """Statement dates across the given frames, most recent first."""
+    dates = set()
+    for df in frames:
+        if df is None or df.empty:
+            continue
+        for column in df.columns:
+            try:
+                dates.add(pd.Timestamp(column).tz_localize(None).normalize())
+            except ValueError, TypeError:
+                continue
+    return sorted(dates, reverse=True)
+
+
+def _value_at(df: Optional[pd.DataFrame], row_name: str, period: pd.Timestamp) -> Optional[float]:
+    """Value of a statement line for one period (matching the column by date)."""
+    if df is None or df.empty or row_name not in df.index:
+        return None
+    for column in df.columns:
+        try:
+            if pd.Timestamp(column).tz_localize(None).normalize() != period:
+                continue
+        except ValueError, TypeError:
+            continue
+        value = df.loc[row_name, column]
+        if isinstance(value, pd.Series):
+            value = value.iloc[0]
+        try:
+            value = float(value)
+        except ValueError, TypeError:
+            return None
+        return None if pd.isna(value) else value
+    return None
+
+
 def calculate_pead_signal(
     earnings_history: List[Dict[str, Any]],
     price_data: Optional[pd.DataFrame] = None,
@@ -1282,6 +1389,15 @@ def calculate_pead_signal(
 
     if len(valid) < 2:
         return None
+
+    # Yahoo returns earnings history oldest first; everything below expects newest first
+    def _date_key(entry: Dict[str, Any]) -> pd.Timestamp:
+        try:
+            return _naive_date(entry.get("quarter"))
+        except ValueError, TypeError:
+            return pd.Timestamp.min
+
+    valid.sort(key=_date_key, reverse=True)
 
     # Calculate surprise statistics
     surprises = [e["epsDifference"] for e in valid]
@@ -1329,9 +1445,13 @@ def calculate_pead_signal(
 
     if price_data is not None and not price_data.empty and latest.get("quarter"):
         try:
-            earnings_date = pd.Timestamp(latest["quarter"])
-            # Find the closest trading day after earnings
-            prices_after = price_data[price_data.index >= earnings_date]
+            from ..utils.financial import trading_dates
+
+            earnings_date = _naive_date(latest["quarter"])
+            # Find the closest trading day after earnings (compare tz-naive dates:
+            # price bars are exchange-local or UTC, announcement stamps vary)
+            bar_dates = trading_dates(pd.DatetimeIndex(price_data.index))
+            prices_after = price_data[bar_dates >= earnings_date]
             if len(prices_after) >= 2:
                 days_since_earnings = len(prices_after)
                 price_at_earnings = float(prices_after["Close"].iloc[0])

@@ -111,6 +111,8 @@ def format_comparison_json(
     correlation_df: Optional[pd.DataFrame] = None,
     metrics_df: Optional[pd.DataFrame] = None,
     portfolio_stats: Optional[Dict[str, Any]] = None,
+    correlation_flags: Optional[Dict[str, Any]] = None,
+    risk_parity: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Combine comparison data into a JSON string.
@@ -121,6 +123,8 @@ def format_comparison_json(
         correlation_df: Correlation matrix DataFrame.
         metrics_df: Key metrics DataFrame.
         portfolio_stats: Portfolio statistics dict.
+        correlation_flags: Output of identify_correlation_flags().
+        risk_parity: Output of calculate_risk_parity_weights().
 
     Returns:
         JSON string.
@@ -137,8 +141,78 @@ def format_comparison_json(
         result["key_metrics"] = _df_to_dict(metrics_df)
     if portfolio_stats is not None:
         result["portfolio"] = portfolio_stats
+    if correlation_flags:
+        result["correlation_flags"] = correlation_flags
+    if risk_parity:
+        result["risk_parity"] = risk_parity
 
     return json.dumps(result, indent=2, default=str)
+
+
+def format_diversification(
+    correlation_flags: Optional[Dict[str, Any]],
+    risk_parity: Optional[Dict[str, Any]],
+    markdown: bool = False,
+) -> str:
+    """
+    Correlated pairs, hedges, and inverse-volatility (risk parity) weights.
+
+    Args:
+        correlation_flags: Output of identify_correlation_flags().
+        risk_parity: Output of calculate_risk_parity_weights().
+        markdown: Render as Markdown instead of a terminal block.
+
+    Returns:
+        Formatted text, or "" if there is nothing to show.
+    """
+    if not correlation_flags and not risk_parity:
+        return ""
+
+    if markdown:
+        lines = ["## Diversification", ""]
+        indent, bullet = "", "- "
+    else:
+        lines = ["", "=" * 70, "  DIVERSIFICATION", "=" * 70, ""]
+        indent, bullet = "  ", "  "
+
+    if correlation_flags:
+        lines.append(
+            f"{indent}Score: {correlation_flags.get('diversification_score')}/100 "
+            f"({correlation_flags.get('assessment')}; "
+            f"average correlation {correlation_flags.get('average_correlation')})"
+        )
+        for pair in correlation_flags.get("redundant_pairs") or []:
+            a, b = pair["pair"]
+            lines.append(
+                f"{bullet}Highly correlated: {a} / {b} ({pair['correlation']:+.2f}), "
+                "consider holding only one"
+            )
+        for pair in correlation_flags.get("hedge_opportunities") or []:
+            a, b = pair["pair"]
+            lines.append(f"{bullet}Hedge: {a} / {b} ({pair['correlation']:+.2f}) offset each other")
+        lines.append("")
+
+    if risk_parity:
+        weights = risk_parity.get("weights") or {}
+        vols = risk_parity.get("volatilities") or {}
+        equal = 1 / len(weights) if weights else 0.0
+        if markdown:
+            lines += [
+                "Suggested weights (risk parity: inverse volatility)",
+                "",
+                "| Ticker | Weight | Equal weight | Ann. vol |",
+                "|---|---:|---:|---:|",
+            ]
+            for ticker, w in weights.items():
+                lines.append(f"| {ticker} | {w:.1%} | {equal:.1%} | {vols.get(ticker, 0):.1%} |")
+        else:
+            lines.append("  Suggested weights (risk parity: inverse volatility)")
+            lines.append(f"  {'Ticker':<10} {'Weight':>8} {'Equal':>8} {'Ann. vol':>9}")
+            for ticker, w in weights.items():
+                lines.append(f"  {ticker:<10} {w:>8.1%} {equal:>8.1%} {vols.get(ticker, 0):>9.1%}")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 def format_correlation_heatmap(

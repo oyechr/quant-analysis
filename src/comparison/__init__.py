@@ -11,6 +11,7 @@ from .formatters import (
     format_comparison_markdown,
     format_comparison_table,
     format_correlation_heatmap,
+    format_diversification,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "format_comparison_markdown",
     "format_comparison_json",
     "format_correlation_heatmap",
+    "format_diversification",
 ]

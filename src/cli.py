@@ -1,7 +1,7 @@
 """
 CLI Interface for Quantitative Analysis Tool
 
-Provides subcommands: report, score, screen, compare, chat, discover, watch
+Provides subcommands: report, score, screen, vet, compare, chat, discover, watch
 Install with: pip install -e .
 Usage: quant report AAPL
 """
@@ -16,10 +16,13 @@ import click
 from .comparison import (
     PortfolioView,
     TickerComparator,
+    calculate_risk_parity_weights,
     format_comparison_json,
     format_comparison_markdown,
     format_comparison_table,
     format_correlation_heatmap,
+    format_diversification,
+    identify_correlation_flags,
 )
 from .data_fetcher import DataFetcher
 from .pipeline import AnalysisOptions
@@ -251,6 +254,80 @@ def score(ctx, tickers, config_name, workers):
     click.echo()
 
 
+@cli.command()
+@click.argument("ticker")
+@click.option(
+    "--peers",
+    default=None,
+    help="Comma-separated peer tickers (default: Yahoo's industry/sector list, similar size).",
+)
+@_config_option()
+@click.option("--brief", is_flag=True, help="Only the verdict, key facts, and next steps.")
+@click.option("--json", "as_json", is_flag=True, help="Print the result as JSON.")
+@click.option(
+    "--save", is_flag=True, help="Also write <output-dir>/<TICKER>/reports/vet.json and vet.md."
+)
+@click.pass_context
+def vet(ctx, ticker, peers, config_name, brief, as_json, save):
+    """One-screen verdict: should TICKER get a deeper look?
+
+    Shows the score, red flags, valuation against peers, earnings drift and
+    relative strength, 13F fund activity, fair value range, and the price at
+    which the signal would change. Nothing is written unless --save is given.
+
+    Automatic peers come from Yahoo's industry list (its sector list if fewer
+    than 4 remain), filtered to 0.1x-10x the ticker's market cap. Yahoo's lists
+    are mostly US companies; pass --peers for home-market peers.
+
+    \b
+    Examples:
+      quant vet EQNR.OL
+      quant vet EQNR.OL --brief
+      quant vet AAPL --peers MSFT,GOOGL,META
+      quant vet EQNR.OL --peers AKRBP.OL,VAR.OL
+      quant vet NVDA --config growth --save
+    """
+    import json as _json
+
+    from .vetting import render_markdown, render_text, vet_ticker
+
+    output_dir = ctx.obj["output_dir"]
+    ticker = ticker.upper()
+    peer_list = [p.strip().upper() for p in (peers or "").split(",") if p.strip()]
+
+    if not as_json:
+        click.echo(f"  Vetting {ticker}...", err=True)
+    result = vet_ticker(
+        ticker,
+        fetcher=DataFetcher(cache_dir=output_dir),
+        options=AnalysisOptions(
+            period=ctx.obj["period"],
+            use_cache=ctx.obj["use_cache"],
+            include_context=False,
+            scoring_config=_get_scoring_config(config_name),
+        ),
+        peers=peer_list or None,
+        data_dir=output_dir,
+    )
+    if not (result.report.get("info") or {}) and result.bundle.scoring is None:
+        raise click.ClickException(f"No data for {ticker}. Check the symbol (e.g. EQNR.OL).")
+
+    data = result.to_dict()
+    if as_json:
+        click.echo(_json.dumps(data, indent=2, default=str))
+    else:
+        click.echo(render_text(data, brief=brief))
+
+    if save:
+        reports_dir = Path(output_dir) / ticker / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        (reports_dir / "vet.json").write_text(
+            _json.dumps(data, indent=2, default=str), encoding="utf-8"
+        )
+        (reports_dir / "vet.md").write_text(render_markdown(data), encoding="utf-8")
+        click.echo(f"  Saved: {reports_dir / 'vet.json'}, {reports_dir / 'vet.md'}", err=True)
+
+
 def _parse_amount_option(ctx, param, value):
     if value is None:
         return None
@@ -434,7 +511,8 @@ def screen(
 def compare(ctx, tickers, config_name, save_chart, weights):
     """Compare two or more tickers side-by-side.
 
-    Shows scoring comparison, relative valuation, and correlation matrix.
+    Shows scoring comparison, relative valuation, correlation matrix,
+    highly correlated pairs and hedges, and risk-parity suggested weights.
 
     Example: quant compare AAPL MSFT GOOGL --weights 0.5,0.3,0.2
     """
@@ -491,6 +569,16 @@ def compare(ctx, tickers, config_name, save_chart, weights):
     except Exception:
         corr_df = None
 
+    # Diversification: correlated pairs/hedges and inverse-volatility weights
+    correlation_flags = None
+    risk_parity = None
+    try:
+        if corr_df is not None and not corr_df.empty:
+            correlation_flags = identify_correlation_flags(corr_df)
+        risk_parity = calculate_risk_parity_weights(comparator.price_data(use_cache=use_cache))
+    except Exception as e:
+        click.echo(f"  ✗ Diversification analysis failed: {e}", err=True)
+
     # Portfolio view
     portfolio_stats = None
     if weights:
@@ -510,6 +598,8 @@ def compare(ctx, tickers, config_name, save_chart, weights):
                 correlation_df=corr_df,
                 metrics_df=metrics_df,
                 portfolio_stats=portfolio_stats,
+                correlation_flags=correlation_flags,
+                risk_parity=risk_parity,
             )
         )
     elif output_format == "markdown":
@@ -521,6 +611,7 @@ def compare(ctx, tickers, config_name, save_chart, weights):
             click.echo(format_comparison_markdown(metrics_df, title="Key Metrics"))
         if corr_df is not None:
             click.echo(format_comparison_markdown(corr_df, title="Correlation Matrix"))
+        click.echo(format_diversification(correlation_flags, risk_parity, markdown=True))
     else:
         # Table / all format
         if scores_df is not None:
@@ -531,6 +622,7 @@ def compare(ctx, tickers, config_name, save_chart, weights):
             click.echo(format_comparison_table(metrics_df, title="KEY METRICS"))
         if corr_df is not None:
             click.echo(format_correlation_heatmap(corr_df, save_path=save_chart))
+        click.echo(format_diversification(correlation_flags, risk_parity))
 
     # Portfolio summary
     if portfolio_stats:
@@ -616,8 +708,19 @@ def chat(ctx, ticker, model, no_intro, debug_context):
             raise click.ClickException(f"Failed to generate report for {ticker}.")
         return _json.loads(json_path.read_text(encoding="utf-8"))
 
+    def _build_context(report: dict) -> str:
+        # Peers come from the last `quant vet --save`, so chat startup stays offline
+        peers = None
+        vet_path = Path(output_dir) / ticker / "reports" / "vet.json"
+        if vet_path.exists():
+            try:
+                peers = _json.loads(vet_path.read_text(encoding="utf-8")).get("peer_valuation")
+            except (OSError, ValueError) as e:
+                logging.getLogger(__name__).warning(f"Peer context unavailable: {e}")
+        return build_brief_context(report, peer_valuation=peers)
+
     report_data = _load_report()
-    context = build_brief_context(report_data)
+    context = _build_context(report_data)
 
     if debug_context:
         click.echo(context)
@@ -678,7 +781,7 @@ def chat(ctx, ticker, model, no_intro, debug_context):
             click.echo("  Re-fetching data...")
             try:
                 report_data = _load_report(force_refresh=True)
-                context = build_brief_context(report_data)
+                context = _build_context(report_data)
                 messages.clear()
                 click.echo("  Data refreshed. Conversation history cleared.\n")
             except Exception as e:

@@ -1,6 +1,6 @@
 # Roadmap: discovery & vetting companion
 
-Goal: make `quant` a practical companion for **finding** candidate tickers, **vetting** a specific ticker, and **tracking** picks over time. Work is split into phases, done in order. This file is the handoff between sessions: read it first, and update the status table when a phase lands.
+Goal: make `quant` a practical companion for **finding** candidate tickers, **vetting** a specific ticker, **reviewing** the portfolio you hold, and **tracking** picks over time. Work is split into phases, done in order. This file is the handoff between sessions: read it first, and update the status table when a phase lands.
 
 ## Status
 
@@ -8,10 +8,13 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 |-------|-------|--------|
 | 0 | Groundwork: compute/render split, cache expiry, local benchmarks, correctness fixes | Done |
 | 1 | Find: `quant screen` | Done (sp500, sp100, nasdaq100, obx lists verified live; full command suite not yet run live) |
-| 2 | Vet: `quant vet TICKER` | Next |
-| 3 | Track: watchlist, score history, `quant changes` | Planned |
-| 4 | Trust: price-only backtest, calibrate signal thresholds | Planned |
-| 5 | Cleanup (do alongside the others) | Planned |
+| 2 | Vet: `quant vet TICKER` | Done (live-checked on EQNR.OL and AAPL, 2026-09-28) |
+| 2b | Vet follow-ups: established data sources, verdict summary | Done; the live run showed Yahoo's micro-cap peer lists and mixed-currency ratios, both handled but over-engineered (see 2c) |
+| 2c | Simplify peers and currency handling (standard practice) | Done (live-checked on AAPL, EQNR.OL and EQNR.OL --peers AKRBP.OL,VAR.OL, 2026-09-28) |
+| 3 | Review: portfolio file -> exit / hold / add advice | Next (needs a sample portfolio / Nordnet export from the user) |
+| 4 | Track: watchlist, score history, `quant changes` | Planned |
+| 5 | Trust: price-only backtest, calibrate signal thresholds | Planned |
+| 6 | Cleanup (do alongside the others) | Planned |
 
 ## How the code fits together (after Phases 0-1)
 
@@ -30,6 +33,15 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 - **Claude's shell cannot reach Yahoo/Wikipedia/Nasdaq** (TLS interception). For live checks, give the user exact commands to run and ask them to paste the output. Their local `data/` folder can be read afterwards for inspection.
 - Before finishing a phase: `ruff check src tests`, `ruff format src tests`, `pytest tests -q`, update the README, and update this file.
 - Yahoo units: `debtToEquity` is a percentage (150 = 1.5x). `risk_free_rate` is a decimal (0.04).
+
+## Phase 2 as built (notes for later phases)
+
+- `src/vetting/`: `red_flags.py` (one function per rule, `find_red_flags(report)`), `peers.py` (Yahoo industry/sector peers since 2c; `percentile_rank`, `compare_to_peers`), `ownership.py` (13F from the discover cache, matched by CUSIP map or issuer name), `verdict.py` (fair value range, signal flip prices by bisection over a repriced report), `vet.py` (`vet_ticker() -> VetResult`), `render.py` (text + Markdown from `VetResult.to_dict()`).
+- Scoring: `ValuationScoringParams.peer_relative` / `min_peers`. `StockScorer.score` reads `report["peer_valuation"]`; with 4+ P/E peers the P/E cutoffs are scaled so `pe_fair` = peer median. Only `vet` adds `peer_valuation`, so `report`/`score` are unchanged.
+- Pipeline: `report["signals"] = {pead, relative_strength}`. PEAD uses `earnings_dates` (announcement dates), sorted newest first. `fundamental_analysis.analysis.annual_history` has per-year FCF, shares, dividends paid, EBIT, interest, interest cover (feeds red flags; useful for Phase 4 history too). `FundamentalAnalyzer.calculate_all()` is now memoized (Phase 6 item done).
+- Info now includes `ev_to_ebitda`, `enterprise_value`, `current_price`, `shares_outstanding`, `free_cashflow`, `financial_currency`. Older cached info.json files lack them until refreshed (info TTL).
+- Fixed along the way: 13F values were multiplied by 1000 (SEC reports whole dollars since 2023); `compare` correlation now aligns cross-exchange prices by trading date.
+- Known gaps: the DCF projects the historical FCF growth rate forward for 5 years, so a company whose FCF fell sharply (EQNR: -43%/yr) gets a very low value; consider capping or mean-reverting growth. `ValuationScorer` looks for `fcf_metrics` in `valuation_analysis`, where it never is, so FCF yield never scores. The FCF-yield lookup is a Phase 6 item.
 
 ## Phase 2: `quant vet TICKER`
 
@@ -70,7 +82,75 @@ A one-screen verdict for deciding whether a ticker deserves a deeper look. It co
 
 **Done when:** `quant vet EQNR.OL` and `quant vet AAPL --peers MSFT,GOOGL,META` render every section from live data. Each red-flag rule has an offline test using a synthetic report. The peer percentile maths is tested. The README is updated.
 
-## Phase 3: Track
+## Phase 2b: Vet follow-ups
+
+Build on established sources where they exist; keep our own maths only where no free source gives the number.
+
+1. **Verdict summary (done).** `vet` opens with `VERDICT: Look deeper / Watch / Pass`, a one-line list of reasons, and the nearest signal flip within ±50%. `--brief` prints only that, the key facts, and next steps. The rules are in `vetting/vet.py::summarize_verdict`.
+2. **Peers from Yahoo's industry lists (done; simplified in 2c, see below).** As built: `DataFetcher.get_industry_peers` / `get_sector_peers` (cached in `data/_peer_groups/`, `industry` TTL). `peer_valuation` tries a cascade (US: Yahoo industry, Yahoo sector, local cache; other listings: same-exchange cache industry peers first). Yahoo peers must be within 10x of the target's USD market cap, because Yahoo's lists mix mega and micro caps (Consumer Electronics gave Apple Sonos and AXIL). Other listings of the same company are dropped, and peers' P/S and EV/EBITDA are FX-corrected. Original notes: yfinance (1.7, already a dependency) has `yf.Industry(info["industryKey"]).top_companies`, which is Yahoo's own industry peer list. Make it the default auto-peer source and keep the cache scan as the fallback and for local-market peers (Yahoo's lists are mostly US large caps, so an Oslo ticker would get US giants). Needs `industryKey` in `get_ticker_info`. Other options (Finnhub `/stock/peers`, FMP) need API keys.
+3. **Analyst targets as a fair-value anchor (done).** Shown first in the fair value table, and as a verdict reason with 3+ analysts. Original notes: Yahoo info already carries `targetMeanPrice`, `targetLowPrice`, `targetHighPrice`, `numberOfAnalystOpinions`, and `recommendationMean`. Extract them and show them next to Monte Carlo/DCF, because they're an outside view and don't depend on our DCF.
+4. **Fix the DCF/Monte Carlo currency mix (done).** `_RunFetcher.fetch_fundamentals` returns statements converted with `utils/fx.py` (share counts and tax rates are left alone); the cache keeps the original currency; `report["currency_conversion"]` records the rate. Also fixes FCF yield and Altman Z for such tickers. Yahoo's own P/S and EV/EBITDA mix currencies too (EQNR: P/S 8.4 = NOK market cap / USD revenue; really 0.9), so `utils/fx.adjust_info_ratios` corrects the target's report info. Yahoo's `freeCashflow` currency is inconsistent and is never corrected. Original notes: (statements in USD, price in NOK). Convert statement figures with a Yahoo FX pair (`USDNOK=X`) before valuing. Until this is done, `vet` shows a low-severity flag and the fair value numbers are wrong for such tickers.
+5. **Keep as is:** peer median/percentile maths (about 20 lines; no free service computes it for your own peer set), relative strength (IBD's RS Rating is proprietary; ours is an index-relative look-alike from prices we already fetch), and PEAD/SUE (not offered free anywhere).
+
+## Phase 2c: Simplify (standard practice over workarounds)
+
+Phase 2b grew workarounds for Yahoo's free-data quirks. Bring it back in line with how this is usually done: normalize data once when it comes in, compute from the normalized data, and keep peer selection to a rule that fits in one sentence.
+
+**Standard practice, and where we stand**
+
+- **Normalize at ingestion, then compute your own ratios.** Convert everything to one currency when the data arrives and calculate multiples yourself instead of trusting a vendor's pre-computed ratios. We convert statements (keep this), but we also patch Yahoo's pre-computed ratios, for the target and for peers. Patching vendor ratios is the part to shrink.
+- **Peers: classification + size filter + analyst override.** Professionals use an industry classification (GICS/ICB) plus a size band, or a vendor's peer list, and let the analyst edit it. Our cascade (4 sources, same-exchange rule, universes, size band) is more than this needs.
+- **Medians, percentiles, minimum peer count.** Already done; keep.
+- **Industry benchmark medians** (Aswath Damodaran, NYU Stern: free yearly industry multiples by region, e.g. US, Europe, global) are a standard outside reference for relative valuation that needs no peer fetching.
+- **Cleaner data vendors** (Financial Modeling Prep, Finnhub, EODHD) have normalized fundamentals and peer endpoints, but their free tiers cover Oslo poorly. Yahoo stays the data source.
+
+**Tasks**
+
+1. **One peer rule:** `--peers` if given; otherwise Yahoo's industry list, falling back to Yahoo's sector list, filtered to similar size (0.1x-10x USD market cap) with other listings of the same company dropped. Remove the local-cache peer scan (`find_auto_peers`, `load_cached_infos`, `cached_universes`, same-exchange ranking) and the per-listing ordering. Oslo-only comparisons use `--peers`, e.g. `quant vet EQNR.OL --peers AKRBP.OL,VAR.OL`. Update `next_steps` and the chat context builder, which currently use cache-only peers (chat could use the peers saved in `vet.json`, or skip peers when there is none).
+2. **No FX correction for peers:** a peer whose statements are in another currency gets its P/S, EV/EBITDA and FCF yield skipped (these are rare in Yahoo's mostly-US lists). Remove `_correct_currency` and the `fx_lookup` correction path; keep `fx_lookup` only for the size filter.
+3. **Keep:** statement conversion in the pipeline, `adjust_info_ratios` for the target (it's the "normalize once" step for the ratios we show), the size filter, medians/percentiles, and `min_peers`.
+4. **Consider computing the target's multiples from converted statements** (P/S from revenue, EV/EBITDA from EBITDA and net debt) instead of correcting Yahoo's. Do this only if it doesn't add a second code path; peers still use Yahoo's ratios, so both sides should use the same definitions (TTM).
+5. **Optional: Damodaran industry medians** as a "vs industry" column (map Yahoo industries to Damodaran's; cache the yearly file under `data/_benchmarks/`). Only if the peer table proves too noisy.
+6. Update tests (drop the local-cache peer tests, keep size/sector/same-company tests), README, and this file.
+
+**As built (2026-09-28)**
+
+- `peers.py` went from 464 to 325 lines. `peer_valuation(ticker, info, fetch_info, peers=None, industry_peers=None, sector_peers=None, fx_lookup=None, min_peers=4)`: explicit peers are used as given (same-company listings dropped, no size filter); otherwise Yahoo's industry list, or its sector list when the industry has fewer than `min_peers` similar-size peers (if both are short, the larger group wins, and ties go to the industry). The basis is `explicit`, `yahoo_industry`, `yahoo_sector` or `none`. `fetch_info` is now required, and there is no `data_dir`.
+- Removed: `load_cached_infos`, `cached_universes`, `find_auto_peers`, `_peer_rank`, `_correct_currency`, and the per-listing option order. `fx_lookup` is only used by `_similar_size` (through `usd_per_unit`). A peer whose USD size can't be worked out is dropped by the size filter.
+- `metric_value` still skips statement-based ratios (P/S, EV/EBITDA, FCF yield) when statements and price use different currencies and the ratio wasn't corrected. After this change only the target is ever corrected (`adjust_info_ratios` in the pipeline).
+- Task 4 (compute the target's multiples from statements) was not done. Peers use Yahoo's TTM ratios, so computing the target's from annual statements would make the two sides inconsistent. `adjust_info_ratios` stays as the single normalization step. Task 5 (Damodaran) was skipped as optional.
+- `next_steps`: when no peers are found, it suggests `--peers`. For non-US listings with automatic peers, it notes that Yahoo's lists are mostly US and suggests `--peers T1.OL,...`.
+- Chat: `_build_context` reads `peer_valuation` from `data/<T>/reports/vet.json` (written by `vet --save`). Without that file there's no peer section, so startup stays offline.
+
+**Follow-ups after the first live run (2026-09-28)**
+
+- **EQNR got refiners and midstream names:** Yahoo's `oil-gas-integrated` list is XOM, CVX, NFG, DEC, SLNG. Only XOM and CVX are within the size band, so it fell back to the Energy sector list, and the 10 names closest in size pushed XOM and CVX out. Now similar-size industry peers are kept first and the sector list only fills up to `MAX_YAHOO_PEERS`. The sector list is only fetched when the industry list is short. The basis is `yahoo_industry_sector` when both lists contributed, and `yahoo_sector` when no industry peer survived the size filter (AAPL).
+- **Oslo `--peers` lost EV/EBITDA and P/S, and P/B was wrong:** AKRBP.OL and VAR.OL report in USD. Yahoo's P/B for VAR.OL was 59.7 (NOK price / USD book value per share), while EQNR.OL's was right. This partly reverses 2c task 2: `utils.fx.normalize_info(info, fx_lookup)` now applies to every peer (in `vet_ticker`'s `fetch_info`). It is the same `adjust_info_ratios` the pipeline runs for the target. `adjust_info_ratios` records `converted_ratios`, which replaces `statements_converted_at`, and `metric_value` skips statement-based ratios (now including P/B) that aren't in that list. The target's P/B is recomputed as market cap / converted common equity (latest quarterly balance sheet, then annual; see `pipeline._latest_book_equity`). Peers' P/B can't be converted from info alone, so it's skipped for mixed-currency peers.
+- **Old cached info lacked `financial_currency`:** `DataFetcher.INFO_CACHE_VERSION` (currently 2) is stored in info.json, and older files are refetched. Bump it whenever `get_ticker_info` gains fields.
+- **`Minimal or no information returned for WTO`** (a delisted name in Yahoo's list) is now logged at info level. Explicit peers with no data still show under "No data for".
+- **Other sources considered:** free tiers of FMP, Finnhub and Alpha Vantage cover Oslo poorly. Børsdata's API (Nordic) and EODHD's fundamentals need a paid plan and a key. SEC XBRL is free but US-only. Yahoo stays, and the conversion step above is applied to every ticker.
+
+**Done when:** the peer rule in the README is one sentence, `src/vetting/peers.py` is noticeably shorter, all tests pass, and `quant vet EQNR.OL` / `quant vet AAPL` render sensible live peer groups (AAPL: Yahoo sector large caps such as MSFT, NVDA, AVGO; EQNR: similar-size integrated oil/energy names).
+
+## Phase 3: Review a portfolio
+
+Input: the holdings you own. Output: per holding, **Exit / Trim / Hold / Add**, plus portfolio-level problems. Runs `vet` on every holding, so it builds directly on Phase 2.
+
+1. **Input file** `portfolio.csv` (gitignored): `ticker, shares, cost_basis (optional), account (optional, e.g. ASK/AF)`. Also accept a Nordnet transactions/holdings CSV export (map ISIN or name to Yahoo tickers; ask the user for a sample file first).
+2. **Per holding:** the vet verdict and red flags, current weight vs a risk-parity weight, unrealized gain/loss if a cost basis is given, and distance to the signal flip prices.
+3. **Action rules (explicit and testable, like the red flags):**
+   - Exit: `Pass` verdict (a high red flag or a Sell signal).
+   - Trim: weight well above risk-parity/target weight, or highly correlated with a larger holding (redundant).
+   - Add: `Look deeper` verdict, below target weight, and not redundant.
+   - Hold: everything else.
+   - Each action comes with one-line reasons, the same way the verdict summary does.
+4. **Portfolio level:** sector/industry and currency concentration, correlated clusters (from `identify_correlation_flags`), weighted score and beta, and suggested weights.
+5. **CLI:** `quant review portfolio.csv [--config] [--json] [--save]`. The output leads with a summary table (ticker, weight, verdict, action, one reason); details follow.
+6. **Caveats in the output:** these are rule-based suggestions, not advice. Taxes are ignored (e.g. selling outside an ASK realizes gains), and the valuation limits from Phase 2b still apply.
+
+**Done when:** a synthetic portfolio in tests gets the expected action per holding for each rule, and `quant review` on the user's real file renders from live data. The README is updated.
+
+## Phase 4: Track
 
 1. **Watchlist.** `watchlist.toml` in the repo root (gitignored, since it's personal). Each entry has a ticker, an optional one-line thesis, the date added, and an optional target/stop.
    - `quant watchlist add T --thesis "..."`, `quant watchlist rm T`, `quant watchlist ls`.
@@ -82,7 +162,7 @@ A one-screen verdict for deciding whether a ticker deserves a deeper look. It co
 
 **Done when:** add, change, and remove work with offline tests. After two runs on different days (simulate by editing history in a test), `changes` reports the deltas. The README is updated.
 
-## Phase 4: Trust (backtest & calibration)
+## Phase 5: Trust (backtest & calibration)
 
 Price-only walk-forward test of the signals that can be computed point-in-time.
 
@@ -94,7 +174,7 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 
 **Done when:** the backtest runs offline on synthetic prices in tests, and live on sp100. The signal thresholds are either justified by results or documented as heuristics.
 
-## Phase 5: Cleanup (do alongside the other phases)
+## Phase 6: Cleanup (do alongside the other phases)
 
 - Split `src/reporting/generator.py` (~900 lines of Markdown formatting) into `reporting/markdown.py`.
 - Turn `src/cli.py` into a package (`cli/__init__.py` plus one module per command group). Move table rendering out of the command functions.
@@ -102,10 +182,11 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 - `FundamentalAnalyzer.calculate_all()` runs 3 times per report (JSON section, markdown, per-analysis JSON). Memoize it like `ValuationAnalyzer.analyze()`.
 - Filters for market cap and volume mix currencies across exchanges (NOK vs USD). Convert with FX rates (`EURUSD=X`-style Yahoo symbols) if it matters.
 - Make mypy blocking in CI once the backlog is cleared (currently `continue-on-error`).
+- Typing: the user switched Pylance to `standard` (2026-09-28) and wants lint issues fixed in whatever file is being edited. `pandas-stubs`/`types-requests` are in the dev extras (install with `pip install -e .[dev]`), and mypy skips untyped libraries (yfinance, finta, toon, seaborn, matplotlib). Earlier note: the user ran Pylance in `strict` mode. The pandas/yfinance-heavy modules show many "partially unknown" warnings. Options: `pip install pandas-stubs types-requests`, and/or a `[tool.pyright]` section in pyproject that keeps strict for `src/vetting` (already clean under `mypy --strict`) and standard elsewhere.
 - `examples/` duplicates the CLI. Keep only what documents the Python API.
 
 ## Starting a new session
 
 Paste something like:
 
-> Read docs/ROADMAP.md and start Phase 2. Follow its conventions (offline tests with the fake_market fixture; give me live commands to run since your shell can't reach Yahoo). Propose the design for red flags and peer selection before writing code.
+> Read docs/ROADMAP.md and continue with the next planned phase (3). Follow its conventions (offline tests with the fake_market fixture; give me live commands to run since your shell can't reach Yahoo). For Phase 3, ask me for a sample portfolio/Nordnet export before designing the input format.

@@ -20,6 +20,7 @@ DEFAULT_CACHE_TTL_HOURS: Dict[str, float] = {
     "fundamentals": 168,  # statements change quarterly, refresh weekly around earnings
     "holders": 720,
     "universe": 720,  # index constituent lists
+    "industry": 720,  # Yahoo industry peer lists
 }
 
 
