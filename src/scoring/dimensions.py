@@ -76,7 +76,7 @@ def _safe_float(value: Any, default: Optional[float] = None) -> Optional[float]:
         if math.isnan(result) or math.isinf(result):
             return default
         return result
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 

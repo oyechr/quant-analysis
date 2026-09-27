@@ -4,10 +4,10 @@ Demonstration scripts showing how to use the quantitative analysis toolkit.
 
 ## Installation
 
-Install dependencies first:
+Install the project first (from the repo root, see the main README for venv setup):
 
 ```bash
-pip install -r requirements.txt
+pip install -e ".[all]"
 ```
 
 ## Running Examples

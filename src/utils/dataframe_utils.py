@@ -71,7 +71,7 @@ def safe_get_dataframe_value(
             # Return float or None for NaN
             return float(value) if pd.notna(value) and value is not None else None
 
-    except (KeyError, IndexError, ValueError, TypeError):
+    except KeyError, IndexError, ValueError, TypeError:
         pass
 
     return None

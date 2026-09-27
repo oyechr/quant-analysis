@@ -517,7 +517,7 @@ def _safe_metric(
         return None
     try:
         val = float(val)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
     if divisor_key:
@@ -536,7 +536,7 @@ def _format_large_number(value: Any) -> Optional[str]:
         return None
     try:
         val = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
     if abs(val) >= 1e12:

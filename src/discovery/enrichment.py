@@ -37,7 +37,7 @@ class HoldingEnricher:
         if self._cusip_cache_file.exists():
             try:
                 return json.loads(self._cusip_cache_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 pass
         return {}
 
@@ -46,7 +46,7 @@ class HoldingEnricher:
         if self._sector_cache_file.exists():
             try:
                 return json.loads(self._sector_cache_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 pass
         return {}
 

@@ -82,16 +82,22 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 
 ## Installation
 
-```bash
-pip install -e .
+Requires Python 3.14+. All dependencies are declared in `pyproject.toml`.
+
+```powershell
+py install 3.14                  # Python install manager (Windows)
+py -V:3.14 -m venv venv
+.\venv\Scripts\Activate.ps1      # macOS/Linux: source venv/bin/activate
+python -m pip install -U pip
+pip install -e ".[all]"
 ```
 
-### Requirements
+Optional extras (combine as needed, e.g. `".[llm,dev]"`):
 
-- Python 3.11+
-- yfinance, pandas, numpy
-- finta (technical analysis)
-- lxml, matplotlib, seaborn
+- `llm` -- anthropic, openai (required for `quant explain`)
+- `viz` -- matplotlib, seaborn (correlation heatmap in `quant compare`)
+- `all` -- `llm` + `viz`
+- `dev` -- pytest, ruff, mypy
 
 ## CLI Reference
 
@@ -458,7 +464,7 @@ This allows regenerating fresh data without losing analysis history, and enables
 Install all dev dependencies (linter, formatter, test runner, type checker):
 
 ```bash
-pip install -e ".[dev,llm]"
+pip install -e ".[all,dev]"
 ```
 
 Before pushing, run lint + format in one pass:

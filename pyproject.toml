@@ -1,21 +1,31 @@
 [project]
 name = "quant-analysis"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
-    "yfinance>=0.2.0",
-    "pandas>=2.0.0",
-    "numpy>=1.24.0",
+    "yfinance>=0.2.36",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
     "python-toon>=0.1.3",
     "click>=8.1.0",
     "finta>=1.3",
     "lxml>=5.0.0",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
+# Required for 'quant explain'
 llm = [
     "anthropic>=0.25.0",
     "openai>=1.0.0",
+]
+# Correlation heatmap in 'quant compare'
+viz = [
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+]
+all = [
+    "quant-analysis[llm,viz]",
 ]
 dev = [
     "pytest>=8.0.0",
@@ -32,7 +42,7 @@ quant = "src.cli:cli"
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
@@ -50,7 +60,7 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false

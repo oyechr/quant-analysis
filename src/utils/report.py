@@ -66,7 +66,7 @@ def format_currency(value: Any, currency: str = "USD") -> str:
         num = float(value)
         symbol = get_currency_symbol(currency)
         return f"{symbol}{num:.2f}"
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return "N/A"
 
 
@@ -96,7 +96,7 @@ def format_number(value: Any, currency: str = "USD") -> str:
             return f"{symbol}{num / 1_000:.2f}K"
         else:
             return f"{num:.2f}"
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return "N/A"
 
 
@@ -114,7 +114,7 @@ def format_percent(value: Any) -> str:
         return "N/A"
     try:
         return f"{float(value) * 100:.2f}%"
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return "N/A"
 
 

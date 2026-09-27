@@ -456,7 +456,7 @@ def chat(ctx, ticker, model, no_intro, debug_context):
     while True:
         try:
             user_input = click.prompt("  You", prompt_suffix=" > ").strip()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             click.echo("\n  Session ended.")
             break
 

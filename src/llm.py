@@ -92,7 +92,7 @@ def _fmt(value: Any, pct: bool = False, decimals: int = 1) -> str:
     try:
         f = float(value)
         return f"{f:.{decimals}f}{'%' if pct else ''}"
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return str(value)
 
 
@@ -376,7 +376,7 @@ def _read_github_usage() -> Dict[str, Any]:
                 if "count" in stored and "models" not in stored:
                     return {"date": today, "models": {}}
                 return stored
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             pass
     return {"date": today, "models": {}}
 
