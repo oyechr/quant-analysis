@@ -262,64 +262,16 @@ class FactorRanker:
         return float(np.mean(list(components.values()))) if components else None
 
     def _calc_momentum_factor(self, data: Dict[str, Any]) -> Optional[float]:
-        """
-        Momentum factor: 12-minus-1-month return.
-        Skip the most recent month (proven to remove short-term reversal noise).
-        Higher past returns = better momentum.
-        """
         price_data = data.get("price_data")
-        if price_data is None or price_data.empty or len(price_data) < 60:
+        if price_data is None or price_data.empty:
             return None
-
-        try:
-            prices = price_data["Close"]
-
-            # Skip most recent 21 trading days (~1 month)
-            # Then measure return over prior ~11 months
-            if len(prices) < 42:  # Need at least 2 months
-                return None
-
-            price_end = float(prices.iloc[-22])  # ~1 month ago
-            # Go back as far as possible (up to 252 days for 12-month)
-            lookback = min(len(prices) - 1, 252)
-            price_start = float(prices.iloc[-lookback])
-
-            if price_start <= 0:
-                return None
-
-            # 12-minus-1 month return
-            momentum_return = (price_end - price_start) / price_start
-            return momentum_return
-
-        except Exception as e:
-            logger.warning(f"Momentum calculation failed: {e}")
-            return None
+        return momentum_12_1(price_data["Close"])
 
     def _calc_low_vol_factor(self, data: Dict[str, Any]) -> Optional[float]:
-        """
-        Low Volatility factor: inverse of annualized volatility.
-        Lower volatility = higher score (low-vol anomaly).
-        """
         price_data = data.get("price_data")
-        if price_data is None or price_data.empty or len(price_data) < 60:
+        if price_data is None or price_data.empty:
             return None
-
-        try:
-            daily_returns = price_data["Close"].pct_change().dropna()
-            if daily_returns.empty:
-                return None
-
-            annualized_vol = float(daily_returns.std()) * np.sqrt(252)
-
-            if annualized_vol <= 0:
-                return None
-
-            # Inverse: lower vol = higher factor value
-            return 1.0 / annualized_vol
-
-        except Exception as e:
-            logger.warning(f"Low-vol calculation failed: {e}")
-            return None
+        return inverse_volatility(price_data["Close"])
 
     def format_rankings(self, results: List[FactorScore]) -> str:
         """Format factor rankings as a readable table"""
@@ -378,6 +330,34 @@ class FactorRanker:
             }
             for i, r in enumerate(results)
         ]
+
+
+def momentum_12_1(close: pd.Series) -> Optional[float]:
+    """
+    Momentum factor: the 12-minus-1-month return. Skipping the most recent
+    month removes short-term reversal noise. Higher = better.
+    """
+    if len(close) < 60:
+        return None
+    price_end = float(close.iloc[-22])  # ~1 month ago
+    # Go back as far as possible (up to 252 days for 12-month)
+    price_start = float(close.iloc[-min(len(close) - 1, 252)])
+    if not price_start > 0:
+        return None
+    return (price_end - price_start) / price_start
+
+
+def inverse_volatility(close: pd.Series) -> Optional[float]:
+    """
+    Low-volatility factor: 1 / annualized volatility of daily returns.
+    Lower volatility = higher value (the low-vol anomaly).
+    """
+    if len(close) < 60:
+        return None
+    annualized_vol = float(close.pct_change().dropna().std()) * np.sqrt(252)
+    if not annualized_vol > 0:
+        return None
+    return 1.0 / annualized_vol
 
 
 def _single(name: str, value: Optional[float]) -> Dict[str, float]:

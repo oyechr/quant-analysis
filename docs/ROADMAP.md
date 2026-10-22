@@ -14,12 +14,12 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 2d | DCF fix: two-stage fade, standard WACC, reverse DCF | Done (live-checked on AAPL and EQNR.OL, 2026-10-22) |
 | 3 | Review: portfolio file -> exit / review / trim / hold / add advice | Done (live run on the user's portfolio, 2026-10-22; tuning after first use) |
 | 4 | Track: watchlist, score history, `quant changes` | Done (first live `changes` run OK, 2026-10-22; second-day deltas not yet seen live) |
-| 5 | Trust: price-only backtest, calibrate signal thresholds | Planned |
+| 5 | Trust: price-only backtest, calibrate signal thresholds | Backtest built offline (2026-10-22); live sp100 run and calibration pending |
 | 6 | Cleanup (do alongside the others) | Planned |
 
 ## Current state and next session (updated 2026-10-22)
 
-Everything through 2d and `quant import-portfolio` is committed and pushed (d885f5b). Phase 3 (`quant review`) is committed on `main` (ec9e262, not pushed). Phase 4 (Track) was built on 2026-10-22 and is uncommitted; all tests pass offline (511 passed, 27 skipped). Claude's shell still can't reach Yahoo (TLS interception in the sandbox), so live checks are for the user to run. Next: the user's live check of Phase 4 (see "Phase 4 as built"), then Phase 5 (Trust).
+Everything through 2d and `quant import-portfolio` is committed and pushed (d885f5b). Phase 3 (`quant review`) is committed on `main` (ec9e262, not pushed). Phase 4 (Track) is on `main` (0cfc2f9, not pushed). The FCF-yield scoring fix and the Phase 5 backtest were built on 2026-10-22 and are uncommitted; all tests pass offline (531 passed, 27 skipped). Claude's shell still can't reach Yahoo (TLS interception in the sandbox), so live checks are for the user to run. Next: the user runs `quant backtest sp100` (and `obx`), then Phase 5 task 4: calibrate or document the signal thresholds from those results. Still open from Phase 4: seeing the second-day `changes` deltas live.
 
 **Portfolio input:** Nordnet's API is closed to retail customers (paid partner access only), and there is no API code in this repo. The supported input is the holdings export downloaded from Nordnet's web app, one file per account, combined with `quant import-portfolio`. Rerun the import whenever holdings change.
 
@@ -264,6 +264,22 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 
 **Done when:** the backtest runs offline on synthetic prices in tests, and live on sp100. The signal thresholds are either justified by results or documented as heuristics.
 
+**As built (2026-10-22, tasks 1-3 and 5; task 4 waits for the live run)**
+
+- `src/backtest/engine.py`: `run_backtest(tickers, fetcher, years, horizons, config, ...)`. Prices are fetched once per ticker with the shortest Yahoo period covering the test plus a lookback year (`history_period`: 2y, 5y, 10y or max), and each home benchmark (`benchmark_for`) once. For each of the last `years*12` complete months (`backtest_months`), the last bar of the month (`month_end_positions`, which uses `trading_dates` because cached prices come back in UTC) ends a `LOOKBACK_BARS` (252) window. `score_window` runs `TechnicalAnalyzer` and `RiskMetrics.calculate_scoring_metrics` (new: only the six metrics `RiskScorer` reads, a tenth of the cost of `calculate_all_metrics`, which now builds on it). It then calls the real `StockScorer` on a report with only those two sections, so the composite and signal use the preset's weights and `SignalThresholds`. Momentum and low volatility come from `momentum_12_1` / `inverse_volatility`, now module functions in `discovery/factor_ranking.py` that the ranker also uses. Forward returns run month-end to month-end, raw (`ret_Hm`) and minus the benchmark (`excess_Hm`), only up to the last complete month.
+- `src/backtest/stats.py`: per-month cross-sections first (at least `MIN_CROSS_SECTION`, 10 tickers), then the mean over months with Newey-West errors (h-1 lags). Rank IC (Spearman), top-minus-bottom quintile spread, hit rate (months the top fifth beat the bottom fifth), and `band_table` (per signal band: per-month mean excess return with CI, plus the share of ticker-months beating the benchmark, with an "All" baseline row). `summarize` computes everything for excess and raw returns; the text shows excess.
+- `src/backtest/render.py`: text/Markdown through `vetting.render`, with the caveats always printed (no fundamentals/valuation, survivorship, close-to-close with no costs, overlapping windows). `save_backtest` writes `data/_backtests/backtest_<universe>_<N>y_<stamp>.json/.md` and `_observations.csv`.
+- CLI: `quant backtest UNIVERSE... [--years 5] [--horizons 1,3,6] [--config] [--workers] [--json] [--save/--no-save]`. The universe resolves as in `screen`.
+- Speed: about 54 ms per ticker-month, about 80% of it `TechnicalAnalyzer` (spread over finta indicators, ADX the largest). Threads don't help (CPU-bound), so sp100 x 5 years is about 5 minutes after the download. If that's too slow for sp500, use a process pool for the scoring.
+- Tests: `tests/test_backtest.py`: UTC month-ends, exact forward and excess returns, no look-ahead (crashing later prices leaves earlier signals unchanged), statistics against hand-computed answers, an end-to-end fake-market run, and the CLI.
+- **Live run for the user:**
+  ```
+  quant backtest sp100
+  quant backtest obx --years 5
+  quant backtest sp100 --config growth --no-save
+  ```
+- **Task 4 next:** from the band table, check whether returns rise from Strong Sell to Strong Buy and whether Sell vs Hold vs Buy differ outside their intervals. If they do, keep or move the thresholds; if not, say in the README and `SignalThresholds` that the bands are heuristics. Momentum/low-vol ICs say whether the screen's factor weights hold up.
+
 ## Phase 6: Cleanup (do alongside the other phases)
 
 - Split `src/reporting/generator.py` (~900 lines of Markdown formatting) into `reporting/markdown.py`.
@@ -279,4 +295,4 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 
 Paste something like:
 
-> Read docs/ROADMAP.md, starting with "Current state and next session". Go through my live results of Phase 4 (`quant changes`, `quant watchlist`), fix what they show, then start Phase 5 (Trust). Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings or the watchlist.
+> Read docs/ROADMAP.md, starting with "Current state and next session". Go through my live `quant backtest` results (Phase 5) and do task 4: calibrate or document the signal thresholds. Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings or the watchlist.

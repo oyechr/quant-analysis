@@ -853,6 +853,24 @@ class RiskMetrics:
             logger.error(f"Error calculating regime: {e}")
             return {}
 
+    def calculate_scoring_metrics(
+        self, price_data: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None
+    ) -> Dict[str, Any]:
+        """
+        The metrics the risk score reads (scoring.dimensions.RiskScorer).
+
+        A tenth of the cost of calculate_all_metrics, which matters when
+        scoring every month-end in a backtest.
+        """
+        return {
+            "volatility": self.calculate_volatility(price_data),
+            "sharpe_ratio": self.calculate_sharpe_ratio(price_data),
+            "sortino_ratio": self.calculate_sortino_ratio(price_data),
+            "drawdown": self.calculate_drawdown(price_data),
+            "market_risk": self.calculate_beta_alpha(price_data, benchmark_data),
+            "var_95": self.calculate_var(price_data, confidence_level=0.95),
+        }
+
     def calculate_all_metrics(
         self,
         price_data: Optional[pd.DataFrame] = None,
@@ -882,15 +900,10 @@ class RiskMetrics:
 
         try:
             metrics = {
+                **self.calculate_scoring_metrics(price_data, benchmark_data),
                 "returns": self.calculate_returns(price_data),
-                "volatility": self.calculate_volatility(price_data),
-                "sharpe_ratio": self.calculate_sharpe_ratio(price_data),
-                "sortino_ratio": self.calculate_sortino_ratio(price_data),
                 "information_ratio": self.calculate_information_ratio(price_data, benchmark_data),
                 "calmar_ratio": self.calculate_calmar_ratio(price_data),
-                "drawdown": self.calculate_drawdown(price_data),
-                "market_risk": self.calculate_beta_alpha(price_data, benchmark_data),
-                "var_95": self.calculate_var(price_data, confidence_level=0.95),
                 "var_99": self.calculate_var(price_data, confidence_level=0.99),
                 "rolling_ratios": self.calculate_rolling_ratios(price_data),
                 "distribution": self.calculate_distribution_stats(price_data),

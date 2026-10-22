@@ -92,6 +92,14 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 - Valuation weighs DCF, P/E, PEG, FCF yield, dividend sustainability and earnings quality. Banks and insurers skip the cash-flow measures (DCF, FCF yield)
 - Configurable presets: ``default``, ``value``, ``growth``, ``income``
 - Scorecard output with strengths and concerns
+- Buy/Hold/Sell bands: Strong Buy 80+, Buy 65-80, Hold 50-65, Sell 35-50, Strong Sell below 35. ``quant backtest`` shows how the price-based part of these has done
+
+### Backtest
+
+- **Walk-forward test** of the signals that can be computed from prices alone: the technical and risk scores, their composite (with the real Buy/Hold/Sell bands), 12-1 momentum and low volatility
+- At each month-end, only prices up to that day are used. Forward returns over 1, 3 and 6 months are measured against each ticker's home benchmark
+- **Rank IC, quintile spread, hit rate** and **returns per signal band**, with 95% intervals (Newey-West, for the overlapping windows)
+- Fundamental and valuation scores are not tested: Yahoo's statements are restated and undated, so they can't be used as of a past date
 
 ### Report Generation
 
@@ -451,6 +459,33 @@ Rescores each ticker, records it in the score history, and compares it with the 
 
 The table shows every ticker's score, signal and price change; a ticker seen for the first time gets a baseline. The history (``data/_history/scores.csv``) holds the date, ticker, preset, command, composite and dimension scores, signal, confidence, price, and red flags. Running the same ticker and preset twice in a day keeps the later run. ``vet`` judges P/E against peers, but the history stores its score with the standard cutoffs, so rows from every command compare like with like.
 
+### ``quant backtest`` -- How well did the signals predict?
+
+```bash
+quant backtest sp100                      # 5 years, horizons 1, 3 and 6 months
+quant backtest obx --years 3 --horizons 1,3
+quant backtest sp100 --config growth --no-save
+quant backtest watchlist --json
+```
+
+At every month-end of the last ``--years`` years, each ticker is scored using only the prices up to that day: the technical and risk dimensions, the composite of the two (the real scorer, with the preset's weights over the dimensions it has), 12-1 momentum and low volatility. The returns over the next ``--horizons`` months are then measured against the ticker's home benchmark (S&P 500, OSEBX, ...).
+
+| Table | What it says |
+|-------|--------------|
+| Rank IC | Spearman correlation between the signal and the next return, averaged over months. Above about 0.03 is typical for a useful equity signal |
+| Quintile spread | Return of the top fifth minus the bottom fifth |
+| Hit rate | Share of months the top fifth beat the bottom fifth |
+| Signal bands | Mean return vs the benchmark, and the share of stocks beating it, for each Buy/Hold/Sell band of the composite. Useful bands rise from Strong Sell to Strong Buy |
+
+Each statistic is computed across tickers within a month, then averaged over months. Intervals are 95% with Newey-West errors, since monthly samples of 3- and 6-month returns overlap; ``*`` marks an interval that excludes zero (50% for the hit rate).
+
+Limits, also printed with the results:
+- Fundamental and valuation scores are not tested. Yahoo serves the latest restated statements with no publication dates, so using them at a past date would leak the future.
+- Survivorship bias: the universe is today's constituents.
+- Trades at the signal day's close, with no costs. Prices are adjusted, so returns include dividends.
+
+The first run downloads up to 10 years of prices per ticker. Scoring sp100 over 5 years (about 6,000 ticker-months) then takes about 5 minutes. Results go to ``data/_backtests/``: a JSON summary, a Markdown report, and a CSV with every ticker-month's signals and returns for your own analysis.
+
 ### Global options
 
 All options below must be placed **before** the subcommand:
@@ -508,6 +543,7 @@ Optional ``config.json`` in the working directory (gitignored). All keys are opt
 | Compare two candidates | ``quant compare T1 T2`` |
 | Keep a list of names to follow | ``quant watchlist add TICKER --thesis "..."`` |
 | What moved since last time | ``quant changes`` |
+| How much to trust the signals | ``quant backtest sp100`` |
 | Monitor during market hours | ``quant watch T1 T2`` |
 
 ### Recommended Workflow: Discovery → Analysis
@@ -564,7 +600,7 @@ data/TICKER/
     +-- valuation_analysis.md
 ```
 
-The score history is ``data/_history/scores.csv`` (see ``quant changes``). Screen results are written to ``data/_screens/`` (``screen_<universe>_<timestamp>.csv/json/toon`` plus ``latest.*``). Index constituent lists are cached in ``data/_universes/``.
+The score history is ``data/_history/scores.csv`` (see ``quant changes``). Backtests are written to ``data/_backtests/``. Screen results are written to ``data/_screens/`` (``screen_<universe>_<timestamp>.csv/json/toon`` plus ``latest.*``). Index constituent lists are cached in ``data/_universes/``.
 
 Discovery results are written to ``data/_discovery/``:
 
@@ -626,6 +662,10 @@ quant-analysis/
 |   +-- screening/
 |   |   +-- universe.py              # Index lists, ticker files, discover picks
 |   |   +-- screener.py              # Two-stage factor rank -> full score
+|   +-- backtest/
+|   |   +-- engine.py                # run_backtest(): point-in-time signals + forward returns
+|   |   +-- stats.py                 # Rank IC, quintile spread, hit rate, bands (Newey-West)
+|   |   +-- render.py                # Terminal + Markdown output, saving
 |   +-- tracking/
 |   |   +-- watchlist.py             # watchlist.toml read/write
 |   |   +-- history.py               # Score history (data/_history/scores.csv)
@@ -659,6 +699,7 @@ quant-analysis/
 |   +-- 08_test_valuation.py
 +-- tests/
     +-- conftest.py                  # Offline fake Yahoo market fixture
+    +-- test_backtest.py
     +-- test_cli.py
     +-- test_comparator.py
     +-- test_discovery.py
