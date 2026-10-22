@@ -20,6 +20,7 @@ from src.data_fetcher import DataFetcher
 from src.pipeline import AnalysisOptions, analyze_ticker, pead_history
 from src.scoring import ScoringConfig, StockScorer
 from src.scoring.dimensions import ValuationScorer
+from src.tracking import load_history
 from src.vetting import (
     compare_to_peers,
     fair_value_range,
@@ -720,6 +721,9 @@ class TestVetEndToEnd:
         assert result.report["scoring"]["composite_score"] == pytest.approx(
             result.bundle.scoring.composite_score, abs=0.1
         )
+        # The score history records the score before P/E is judged against peers
+        base_pe = next(s for s in result.base_scoring.valuation.sub_scores if s.name == "P/E Ratio")
+        assert "vs peers" not in base_pe.label
 
     def test_vet_writes_no_report_files(self, vet_market):
         _, tmp_path = vet_market
@@ -761,6 +765,8 @@ class TestVetEndToEnd:
         assert data["ticker"] == "AAPL"
         assert data["peer_valuation"]["basis"] == "yahoo_industry"
         assert "red_flags" in data and "signal_flips" in data
+        (row,) = load_history(str(tmp_path), "AAPL")
+        assert row["source"] == "vet" and row["score"] is not None
 
     def test_cli_vet_save(self, vet_market):
         _, tmp_path = vet_market

@@ -66,6 +66,13 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 - **What would change the verdict:** analyst price targets, Monte Carlo/DCF/DDM fair value range, the price at which the signal moves one band up or down, and trade levels
 - **Currency-safe valuation:** when a company reports in another currency than it trades in (EQNR.OL: USD vs NOK), statements are converted at the latest Yahoo FX rate before any analysis
 
+### Tracking
+
+- **Watchlist** in ``watchlist.toml`` (gitignored): ticker, a one-line thesis, the date added, and an optional target and stop price. Add by hand, with ``quant watchlist add``, or straight from a screen with ``--add-to-watchlist N``
+- **Score history:** every ``report``, ``score``, ``vet``, ``screen`` (stage 2) and ``changes`` run adds one row per ticker to ``data/_history/scores.csv`` (one row per ticker, preset and day)
+- **What changed:** ``quant changes`` rescores the watchlist and compares it with the last run from an earlier day: score and signal, red flags that appeared or cleared, price move, price against target/stop, and earnings in the next 14 days
+- ``quant chat`` sees the ticker's score history, so you can ask why a score dropped
+
 ### Portfolio Discovery
 
 - **Cross-portfolio pattern detection** from SEC EDGAR 13F filings (free, no API key)
@@ -161,12 +168,15 @@ quant screen obx --exclude-sector Energy
 quant screen nasdaq100 --sector Technology --min-mcap 50B
 quant screen discover                         # score the whales' consensus picks
 quant screen my_tickers.txt EQNR.OL DNB.OL    # ticker file + literal tickers
+quant screen watchlist                        # the tickers in watchlist.toml
+quant screen sp100 --add-to-watchlist 5       # put the 5 best on the watchlist
 quant screen --list                           # show built-in universes
 ```
 
 UNIVERSE can be any mix of:
 - a built-in index: ``sp500``, ``sp100``, ``nasdaq100``, ``obx``
 - ``discover``: overlap tickers from the last ``quant discover`` run
+- ``watchlist``: the tickers in ``watchlist.toml``
 - a ticker file: one or more per line (comma/space separated, ``#`` comments) or a CSV with a ``ticker``/``symbol`` column
 - literal tickers
 
@@ -185,6 +195,7 @@ Options:
 - ``--min-volume`` -- average daily volume in shares, e.g. ``500K``
 - ``--workers N`` -- parallel downloads (default 4; Yahoo rate-limits aggressive clients)
 - ``--no-save`` -- print only
+- ``--add-to-watchlist N`` -- add the N best-scoring results to ``watchlist.toml`` (the thesis notes the screen; tickers already listed keep theirs)
 
 **Performance:** the first ``sp500`` screen downloads info and prices for about 500 tickers, which takes a few minutes. Later runs within the cache TTL take seconds.
 
@@ -252,7 +263,7 @@ Options:
 - ``--no-intro`` -- skip the automatic opening investment brief
 - ``--debug-context`` -- print the context sent to the LLM and exit (useful for debugging)
 
-Peer valuation is included when ``quant vet TICKER --save`` has been run, since chat reads the peers from ``vet.json``.
+Peer valuation is included when ``quant vet TICKER --save`` has been run, since chat reads the peers from ``vet.json``. The last 12 rows of the ticker's score history (``data/_history/scores.csv``) are included too, so you can ask what changed.
 
 Special commands during the session:
 
@@ -356,7 +367,7 @@ SEC EDGAR requires a User-Agent with contact info. No API key needed — all dat
 
 ### ``quant watch`` -- Continuous refresh
 
-Re-scores tickers on a timer with fresh data. Useful for monitoring during market hours. Nothing is written to disk.
+Re-scores tickers on a timer with fresh data. Useful for monitoring during market hours. Nothing is written to disk. For a daily check of what moved, use ``quant changes``.
 
 ```bash
 quant watch AAPL MSFT --interval 60
@@ -398,6 +409,46 @@ quant review --json
 | Check | No price data, usually a wrong ticker in ``portfolio/tickers.csv`` |
 
 ETFs and funds have no statements to vet, so they are only ever Trim or Hold. Taxes are ignored, except for a note when a sale at a gain would happen in AF (label your accounts ASK/AF with ``import-portfolio --label``). These are rule-based suggestions, not advice. The first run fetches every holding and its peers, which takes a few minutes; later runs use the cache.
+
+### ``quant watchlist`` -- Tickers you follow
+
+```bash
+quant watchlist add EQNR.OL --thesis "Cheap vs peers if oil holds" --target 450 --stop 380
+quant watchlist add AAPL MSFT
+quant watchlist add EQNR.OL --stop 390        # update one field; the rest is kept
+quant watchlist rm MSFT
+quant watchlist ls                            # with each ticker's last recorded score
+```
+
+The list is ``watchlist.toml`` in the current folder (gitignored, ``--file`` for another), one table per ticker, so it's easy to edit by hand:
+
+```toml
+["EQNR.OL"]
+thesis = "Cheap vs peers if oil holds"
+added = 2026-10-22
+target = 450.0
+stop = 380.0
+```
+
+Target and stop are prices in the listing currency.
+
+### ``quant changes`` -- What moved since the last run
+
+```bash
+quant changes                     # the watchlist
+quant changes EQNR.OL AAPL        # given tickers
+quant changes --config value      # compare value-preset scores
+quant changes --json
+```
+
+Rescores each ticker, records it in the score history, and compares it with the ticker's latest run from an earlier day (from any command, same preset). Tickers with something worth a look come first:
+
+- signal changes, and score moves of 3+ points (with dimensions that moved 5+)
+- red flags that appeared or cleared
+- price within 5% of, or past, the watchlist target or stop
+- earnings in the next 14 days
+
+The table shows every ticker's score, signal and price change; a ticker seen for the first time gets a baseline. The history (``data/_history/scores.csv``) holds the date, ticker, preset, command, composite and dimension scores, signal, confidence, price, and red flags. Running the same ticker and preset twice in a day keeps the later run. ``vet`` judges P/E against peers, but the history stores its score with the standard cutoffs, so rows from every command compare like with like.
 
 ### Global options
 
@@ -452,8 +503,10 @@ Optional ``config.json`` in the working directory (gitignored). All keys are opt
 | What to do with the stocks you own | ``quant review`` |
 | Deep dive on one stock | ``quant report TICKER`` |
 | Ask follow-up questions / interrogate a stock | ``quant chat TICKER`` |
-| Screen / rank a watchlist | ``quant score T1 T2 T3 ...`` |
+| Score a few tickers side by side | ``quant score T1 T2 T3 ...`` |
 | Compare two candidates | ``quant compare T1 T2`` |
+| Keep a list of names to follow | ``quant watchlist add TICKER --thesis "..."`` |
+| What moved since last time | ``quant changes`` |
 | Monitor during market hours | ``quant watch T1 T2`` |
 
 ### Recommended Workflow: Discovery → Analysis
@@ -478,8 +531,9 @@ quant compare NVDA AMD AVGO
 quant chat NVDA
 # > "What's the bear case? Is the valuation stretched?"
 
-# Step 6: Monitor your picks
-quant watch NVDA AAPL MSFT --interval 300
+# Step 6: Follow your picks, and check daily what moved
+quant watchlist add NVDA --thesis "AI capex cycle" --stop 150
+quant changes
 ```
 
 ## Output Files
@@ -509,7 +563,7 @@ data/TICKER/
     +-- valuation_analysis.md
 ```
 
-Screen results are written to ``data/_screens/`` (``screen_<universe>_<timestamp>.csv/json/toon`` plus ``latest.*``). Index constituent lists are cached in ``data/_universes/``.
+The score history is ``data/_history/scores.csv`` (see ``quant changes``). Screen results are written to ``data/_screens/`` (``screen_<universe>_<timestamp>.csv/json/toon`` plus ``latest.*``). Index constituent lists are cached in ``data/_universes/``.
 
 Discovery results are written to ``data/_discovery/``:
 
@@ -571,6 +625,10 @@ quant-analysis/
 |   +-- screening/
 |   |   +-- universe.py              # Index lists, ticker files, discover picks
 |   |   +-- screener.py              # Two-stage factor rank -> full score
+|   +-- tracking/
+|   |   +-- watchlist.py             # watchlist.toml read/write
+|   |   +-- history.py               # Score history (data/_history/scores.csv)
+|   |   +-- changes.py               # track_changes(): what moved since the last run
 |   +-- vetting/
 |   |   +-- red_flags.py             # Rule-based red flags over a report dict
 |   |   +-- peers.py                 # Yahoo industry/sector peers + peer-relative valuation
@@ -610,6 +668,7 @@ quant-analysis/
     +-- test_scorer.py
     +-- test_screening.py
     +-- test_toon_serializer.py
+    +-- test_tracking.py
     +-- test_vetting.py
 ```
 

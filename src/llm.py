@@ -100,6 +100,7 @@ def build_brief_context(
     report_data: Dict[str, Any],
     red_flags: Optional[List[Dict[str, Any]]] = None,
     peer_valuation: Optional[Dict[str, Any]] = None,
+    score_history: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """
     Build a focused context string (~1,500 tokens) from a full report dict.
@@ -114,6 +115,8 @@ def build_brief_context(
         red_flags: Red flags as dicts; computed from the report when omitted.
         peer_valuation: Peer comparison dict (vetting.PeerValuation.to_dict());
             defaults to the report's own `peer_valuation` if present.
+        score_history: Earlier score history rows (tracking.load_history), oldest
+            first, so the model can explain how the score has moved.
 
     Returns:
         Compact context string for the LLM prompt.
@@ -163,6 +166,21 @@ def build_brief_context(
     if concerns:
         lines.append(f"Concerns: {'; '.join(concerns)}")
     lines.append("")
+
+    # --- Score history ---
+    if score_history:
+        lines.append("=== SCORE HISTORY (oldest first; standard valuation cutoffs) ===")
+        for row in score_history:
+            dims = ", ".join(
+                f"{name[:4]} {_fmt(row.get(name), decimals=0)}"
+                for name in ("technical", "fundamental", "risk", "valuation")
+            )
+            flags = f"; red flags: {row['flags']}" if row.get("flags") else ""
+            lines.append(
+                f"  {row.get('date')} [{row.get('preset')}]: {_fmt(row.get('score'))} "
+                f"{row.get('signal')} ({dims}) price {_fmt(row.get('price'))}{flags}"
+            )
+        lines.append("")
 
     # --- Red flags ---
     lines.append("=== RED FLAGS ===")

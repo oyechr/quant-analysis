@@ -95,6 +95,7 @@ class ScreenCandidate:
     factor: Optional[FactorScore] = None
     factor_rank: Optional[int] = None
     scoring: Optional[ScoringResult] = None
+    report: Optional[Dict[str, Any]] = field(default=None, repr=False)  # stage 2 only
     warnings: List[str] = field(default_factory=list)
     error: Optional[str] = None
 
@@ -241,6 +242,7 @@ class Screener:
                 candidate.error = str(error)
                 continue
             candidate.scoring = bundle.scoring
+            candidate.report = bundle.report
             candidate.warnings = bundle.freshness_warnings
             if bundle.scoring is None:
                 candidate.error = bundle.errors.get("scoring", "scoring failed")

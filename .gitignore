@@ -57,3 +57,5 @@ config.json
 /portfolio/
 aksjelister_*.csv
 Beholdningstabell*.csv
+# Personal watchlist (quant watchlist): never commit
+/watchlist.toml

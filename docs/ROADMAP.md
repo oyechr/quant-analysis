@@ -13,13 +13,13 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 2c | Simplify peers and currency handling (standard practice) | Done (live-checked on AAPL, EQNR.OL and EQNR.OL --peers AKRBP.OL,VAR.OL, 2026-09-28) |
 | 2d | DCF fix: two-stage fade, standard WACC, reverse DCF | Done (live-checked on AAPL and EQNR.OL, 2026-10-22) |
 | 3 | Review: portfolio file -> exit / review / trim / hold / add advice | Done (live run on the user's portfolio, 2026-10-22; tuning after first use) |
-| 4 | Track: watchlist, score history, `quant changes` | Planned |
+| 4 | Track: watchlist, score history, `quant changes` | Done (first live `changes` run OK, 2026-10-22; second-day deltas not yet seen live) |
 | 5 | Trust: price-only backtest, calibrate signal thresholds | Planned |
 | 6 | Cleanup (do alongside the others) | Planned |
 
 ## Current state and next session (updated 2026-10-22)
 
-Everything through 2d and `quant import-portfolio` is committed and pushed (d885f5b). Phase 3 (`quant review`) is committed on `main` (not pushed); all tests pass offline (487 passed, 27 skipped). Claude's shell still can't reach Yahoo (TLS interception in the sandbox), so live checks are for the user to run. Once the user has run `review` live, the local `data/` cache lets Claude rerun it offline. Next: Phase 4 (Track).
+Everything through 2d and `quant import-portfolio` is committed and pushed (d885f5b). Phase 3 (`quant review`) is committed on `main` (ec9e262, not pushed). Phase 4 (Track) was built on 2026-10-22 and is uncommitted; all tests pass offline (511 passed, 27 skipped). Claude's shell still can't reach Yahoo (TLS interception in the sandbox), so live checks are for the user to run. Next: the user's live check of Phase 4 (see "Phase 4 as built"), then Phase 5 (Trust).
 
 **Portfolio input:** Nordnet's API is closed to retail customers (paid partner access only), and there is no API code in this repo. The supported input is the holdings export downloaded from Nordnet's web app, one file per account, combined with `quant import-portfolio`. Rerun the import whenever holdings change.
 
@@ -230,6 +230,28 @@ Input: the holdings you own. Output: per holding, **Exit / Trim / Hold / Add**, 
 
 **Done when:** add, change, and remove work with offline tests. After two runs on different days (simulate by editing history in a test), `changes` reports the deltas. The README is updated.
 
+**As built (2026-10-22)**
+
+- `src/tracking/`:
+  - `watchlist.py`: `load_watchlist` / `save_watchlist` / `add_to_watchlist` / `remove_from_watchlist`. `watchlist.toml` (gitignored, `DEFAULT_WATCHLIST`) has one quoted table per ticker (`["EQNR.OL"]`) with `thesis`, `added` (a TOML date), `target` and `stop`. It's read with `tomllib`; the writer is a few lines, since the layout is fixed (strings are written as JSON strings, which are valid TOML). Re-adding a ticker updates only the fields given and keeps `added`.
+  - `history.py`: `history_row(report, scoring, source, red_flags, today)`, `record_scores(rows, data_dir)`, `load_history(data_dir, ticker, preset)`. The file is `data/_history/scores.csv`, written atomically, with columns date, ticker, preset, source, score, the four dimensions, signal, confidence, price, currency, red_flags (count) and flags (titles joined by " | ", so `changes` can tell new from cleared). One row per (date, ticker, preset); the later run wins. No row is written without a score and a price: an unknown symbol still gets a meaningless score.
+  - `changes.py`: `track_changes()` runs `analyze_ticker` (no peers, no context) and `find_red_flags` per ticker, compares with the latest row for the same preset from an earlier day, then records today's rows. `TickerChange.notes()` holds the rules: a signal change, a score move of `SCORE_MOVE` (3) or more, dimensions that moved `DIMENSION_MOVE` (5) or more, new or cleared red flags, price within `NEAR_LEVEL_PCT` (5%) of or past the target/stop, and earnings within `EARNINGS_SOON_DAYS` (14). The price change is shown only when the currency is the same. `render_text` reuses `vetting.render` sections.
+- **Comparable history:** `vet` rescales P/E against peers, so `VetResult.base_scoring` keeps the score from before the peer rescore, and that is what `vet` records. Every row in the history is on the standard valuation cutoffs.
+- **Recorded by** `report`, `score`, `vet`, `screen` (stage 2: `ScreenCandidate.report` keeps the report) and `changes`. `review` doesn't record yet; it would need `base_scoring` passed through `review_portfolio`.
+- **CLI:** `quant watchlist [--file] add/rm/ls` (ls shows each ticker's last history row), `quant changes [TICKERS] [--config] [--file] [--json]`, `quant screen ... --add-to-watchlist N` (the thesis notes the screen; tickers already listed keep their thesis), and `watchlist` as a screen universe. `watch` points to `changes` for daily use. stderr is now UTF-8 too, so the progress marks (✓/✗) print on Windows.
+- **Chat:** `build_brief_context(..., score_history=rows)` adds the last `CHAT_HISTORY_ROWS` (12) rows.
+- **Tests:** `tests/test_tracking.py`. `tests/test_cli.py` now runs in a temp working directory, because commands write the history under `./data`.
+- **Live check for the user:**
+  ```
+  quant watchlist add EQNR.OL --thesis "..." --target 450 --stop 380
+  quant watchlist add AAPL MSFT
+  quant changes          # day 1: baseline
+  quant changes          # next trading day: deltas
+  quant watchlist ls
+  quant screen sp100 --top 10 --add-to-watchlist 3 --no-save
+  quant chat EQNR.OL --debug-context   # should show SCORE HISTORY
+  ```
+
 ## Phase 5: Trust (backtest & calibration)
 
 Price-only walk-forward test of the signals that can be computed point-in-time.
@@ -257,4 +279,4 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 
 Paste something like:
 
-> Read docs/ROADMAP.md, starting with "Current state and next session". Go through the live results of `quant vet` (2d) and `quant review` (Phase 3), fix what they show, then start Phase 4 (Track). Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings.
+> Read docs/ROADMAP.md, starting with "Current state and next session". Go through my live results of Phase 4 (`quant changes`, `quant watchlist`), fix what they show, then start Phase 5 (Trust). Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings or the watchlist.

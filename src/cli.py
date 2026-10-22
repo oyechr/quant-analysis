@@ -2,7 +2,7 @@
 CLI Interface for Quantitative Analysis Tool
 
 Provides subcommands: report, score, screen, vet, compare, chat, discover, watch,
-import-portfolio, review
+import-portfolio, review, watchlist, changes
 Install with: pip install -e .
 Usage: quant report AAPL
 """
@@ -32,14 +32,16 @@ from .scoring import ScoringConfig
 from .utils.concurrency import DEFAULT_WORKERS, run_concurrently
 
 PRESETS = ["default", "value", "growth", "income"]
+CHAT_HISTORY_ROWS = 12  # score history rows given to `quant chat`
 
 
 def _configure_logging(verbose: bool, quiet: bool):
     """Set up logging based on verbosity flags."""
     # Ensure UTF-8 output on Windows where the default console encoding (cp1252)
     # cannot represent the Unicode block characters used in scorecards.
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     # Progress goes through click.echo; library logging is for problems (default)
     # or diagnostics (-v).
     if quiet:
@@ -94,6 +96,16 @@ def _echo_freshness_warnings(ticker: str, report_data: dict):
     """Surface stale/expired data so scores aren't trusted blindly."""
     for warning in (report_data.get("data_freshness") or {}).get("warnings", []):
         click.echo(f"  ! {ticker}: {warning}", err=True)
+
+
+def _record_history(output_dir: str, rows: list):
+    """Append scored runs to the score history; a write failure only warns."""
+    from .tracking import record_scores
+
+    try:
+        record_scores(rows, output_dir)
+    except OSError as e:
+        click.echo(f"  ! Score history not updated: {e}", err=True)
 
 
 @click.group()
@@ -183,6 +195,9 @@ def report(
     _echo_freshness_warnings(ticker, bundle.report)
 
     if bundle.scoring:
+        from .tracking import history_row
+
+        _record_history(output_dir, [history_row(bundle.report, bundle.scoring, "report")])
         click.echo()
         click.echo(bundle.scoring.format_scorecard())
 
@@ -203,6 +218,8 @@ def score(ctx, tickers, config_name, workers):
 
     Example: quant score AAPL MSFT TSLA --config value
     """
+    from .tracking import history_row
+
     output_format = ctx.obj["output_format"]
     generator = ReportGenerator(output_dir=ctx.obj["output_dir"])
     options = AnalysisOptions(
@@ -214,6 +231,7 @@ def score(ctx, tickers, config_name, workers):
 
     click.echo(f"  Analyzing {len(tickers_list)} ticker(s)...")
     results = {}
+    history = []
     for ticker, bundle, error in run_concurrently(
         lambda t: generator.generate(t, options, output_format=output_format),
         tickers_list,
@@ -225,6 +243,8 @@ def score(ctx, tickers, config_name, workers):
             continue
         _echo_freshness_warnings(ticker, bundle.report)
         results[ticker] = bundle.scoring
+        history.append(history_row(bundle.report, bundle.scoring, "score"))
+    _record_history(ctx.obj["output_dir"], history)
 
     # Print summary table
     click.echo()
@@ -313,6 +333,11 @@ def vet(ctx, ticker, peers, config_name, brief, as_json, save):
     if not (result.report.get("info") or {}) and result.bundle.scoring is None:
         raise click.ClickException(f"No data for {ticker}. Check the symbol (e.g. EQNR.OL).")
 
+    from .tracking import history_row
+
+    _record_history(
+        output_dir, [history_row(result.report, result.base_scoring, "vet", result.red_flags)]
+    )
     data = result.to_dict()
     if as_json:
         click.echo(_json.dumps(data, indent=2, default=str))
@@ -370,6 +395,13 @@ def _parse_amount_option(ctx, param, value):
 @_workers_option()
 @click.option("--list", "list_only", is_flag=True, help="List built-in universes and exit.")
 @click.option("--save/--no-save", default=True, show_default=True, help="Write results files.")
+@click.option(
+    "--add-to-watchlist",
+    "add_top",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Add the N best-scoring results to watchlist.toml.",
+)
 @click.pass_context
 def screen(
     ctx,
@@ -384,6 +416,7 @@ def screen(
     workers,
     list_only,
     save,
+    add_top,
 ):
     """Screen an index or ticker list for the best candidates.
 
@@ -401,7 +434,9 @@ def screen(
       quant screen obx --exclude-sector Energy
       quant screen nasdaq100 --sector Technology --min-mcap 50B
       quant screen discover
-      quant screen watchlist.txt EQNR.OL DNB.OL
+      quant screen watchlist
+      quant screen sp100 --add-to-watchlist 5
+      quant screen tickers.txt EQNR.OL DNB.OL
     """
     from .screening import (
         Screener,
@@ -482,9 +517,33 @@ def screen(
             sample = [t for t, r in result.excluded.items() if not r.startswith("filtered")][:8]
             click.echo(f"    no data: {', '.join(sample)}{' ...' if unavailable > 8 else ''}")
 
+    from .tracking import DEFAULT_WATCHLIST, add_to_watchlist, history_row, load_watchlist
+
+    _record_history(
+        output_dir,
+        [history_row(c.report, c.scoring, "screen") for c in result.scored if c.report],
+    )
+
     if save:
         for path in save_screen(result, output_dir, ctx.obj["output_format"]):
             click.echo(f"  Saved: {path}")
+
+    if add_top:
+        watchlist_path = Path(DEFAULT_WATCHLIST)
+        listed = load_watchlist(watchlist_path)
+        best = [c for c in result.scored if c.scoring][:add_top]
+        new = [c for c in best if c.ticker not in listed]  # keep existing theses
+        for c in new:
+            thesis = (
+                f"screen {resolved.label} ({config_name}): "
+                f"{c.scoring.composite_score:.0f} {c.scoring.signal}"
+            )
+            add_to_watchlist(watchlist_path, [c.ticker], thesis=thesis)
+        already = len(best) - len(new)
+        click.echo(
+            f"  Watchlist: added {', '.join(c.ticker for c in new) or 'nothing'}"
+            + (f" ({already} already listed)" if already else "")
+        )
 
     if result.scored:
         best = [c.ticker for c in result.scored[:3] if c.scoring]
@@ -710,6 +769,8 @@ def chat(ctx, ticker, model, no_intro, debug_context):
         return _json.loads(json_path.read_text(encoding="utf-8"))
 
     def _build_context(report: dict) -> str:
+        from .tracking import load_history
+
         # Peers come from the last `quant vet --save`, so chat startup stays offline
         peers = None
         vet_path = Path(output_dir) / ticker / "reports" / "vet.json"
@@ -718,7 +779,8 @@ def chat(ctx, ticker, model, no_intro, debug_context):
                 peers = _json.loads(vet_path.read_text(encoding="utf-8")).get("peer_valuation")
             except (OSError, ValueError) as e:
                 logging.getLogger(__name__).warning(f"Peer context unavailable: {e}")
-        return build_brief_context(report, peer_valuation=peers)
+        history = load_history(output_dir, ticker)[-CHAT_HISTORY_ROWS:]
+        return build_brief_context(report, peer_valuation=peers, score_history=history)
 
     report_data = _load_report()
     context = _build_context(report_data)
@@ -1049,10 +1111,11 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
 @_config_option()
 @click.pass_context
 def watch(ctx, tickers, interval, count, config_name):
-    """Continuously watch and score tickers at regular intervals.
+    """Continuously watch and score tickers at regular intervals (intraday).
 
     Re-fetches data every iteration; nothing is written to disk.
-    Press Ctrl-C to stop.
+    Press Ctrl-C to stop. For a daily check of what moved since the last
+    run, use `quant changes` instead.
 
     Example: quant watch AAPL MSFT --interval 60 --count 5
     """
@@ -1266,6 +1329,184 @@ def review(ctx, portfolio_file, config_name, workers, base, as_json, save):
         )
         (out_dir / "review.md").write_text(render_markdown(data), encoding="utf-8")
         click.echo(f"  Saved: {out_dir / 'review.json'}, {out_dir / 'review.md'}", err=True)
+
+
+def _watchlist_file_option():
+    from .tracking import DEFAULT_WATCHLIST
+
+    return click.option(
+        "--file",
+        "watchlist_file",
+        default=DEFAULT_WATCHLIST,
+        show_default=True,
+        type=click.Path(dir_okay=False, path_type=Path),
+        help="Watchlist file.",
+    )
+
+
+@cli.group()
+@_watchlist_file_option()
+@click.pass_context
+def watchlist(ctx, watchlist_file):
+    """Keep a list of tickers to follow, with a thesis and price levels.
+
+    The list lives in watchlist.toml (gitignored; edit it by hand if you
+    like). `quant changes` checks it, and `quant screen watchlist` screens it.
+
+    \b
+    Examples:
+      quant watchlist add EQNR.OL --thesis "Cheap vs peers" --target 450 --stop 380
+      quant watchlist add AAPL MSFT
+      quant watchlist rm MSFT
+      quant watchlist ls
+    """
+    ctx.obj["watchlist_file"] = watchlist_file
+
+
+@watchlist.command("add")
+@click.argument("tickers", nargs=-1, required=True)
+@click.option("--thesis", default=None, help="One line on why you're watching it.")
+@click.option("--target", type=float, default=None, help="Target price (listing currency).")
+@click.option("--stop", type=float, default=None, help="Stop price (listing currency).")
+@click.pass_context
+def watchlist_add(ctx, tickers, thesis, target, stop):
+    """Add TICKERS, or update the thesis/target/stop of ones already listed."""
+    from .tracking import add_to_watchlist
+
+    path = ctx.obj["watchlist_file"]
+    try:
+        added, updated = add_to_watchlist(path, tickers, thesis=thesis, target=target, stop=stop)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+    if added:
+        click.echo(f"  Added {', '.join(added)} to {path}")
+    if updated:
+        click.echo(f"  Updated {', '.join(updated)}")
+
+
+@watchlist.command("rm")
+@click.argument("tickers", nargs=-1, required=True)
+@click.pass_context
+def watchlist_rm(ctx, tickers):
+    """Remove TICKERS from the watchlist."""
+    from .tracking import remove_from_watchlist
+
+    path = ctx.obj["watchlist_file"]
+    try:
+        removed, missing = remove_from_watchlist(path, tickers)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+    if removed:
+        click.echo(f"  Removed {', '.join(removed)} from {path}")
+    if missing:
+        click.echo(f"  Not on the watchlist: {', '.join(missing)}")
+
+
+@watchlist.command("ls")
+@click.pass_context
+def watchlist_ls(ctx):
+    """List the watchlist with each ticker's last recorded score."""
+    from .tracking import load_history, load_watchlist
+    from .vetting.render import Section, Table, sections_to_text
+
+    path = ctx.obj["watchlist_file"]
+    try:
+        items = load_watchlist(path)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+    if not items:
+        click.echo(f"  {path} is empty. Add tickers with: quant watchlist add T --thesis '...'")
+        return
+
+    last = {row["ticker"]: row for row in load_history(ctx.obj["output_dir"])}
+    rows = []
+    for item in items.values():
+        row = last.get(item.ticker) or {}
+        rows.append(
+            [
+                item.ticker,
+                f"{row['score']:.0f} {row['signal']}" if row.get("score") is not None else "",
+                f"{row['price']:,.2f}" if row.get("price") else "",
+                f"{item.target:g}" if item.target is not None else "",
+                f"{item.stop:g}" if item.stop is not None else "",
+                row.get("date") or "",
+                item.added.isoformat(),
+                item.thesis or "",
+            ]
+        )
+    table = Table(
+        ["Ticker", "Last score", "Price", "Target", "Stop", "Scored", "Added", "Thesis"],
+        rows,
+        "llrrrlll",
+    )
+    click.echo(sections_to_text([Section(f"WATCHLIST  {path}  ({len(items)})", [table])]))
+
+
+@cli.command()
+@click.argument("tickers", nargs=-1)
+@_config_option()
+@_workers_option()
+@_watchlist_file_option()
+@click.option("--json", "as_json", is_flag=True, help="Print the result as JSON.")
+@click.pass_context
+def changes(ctx, tickers, config_name, workers, watchlist_file, as_json):
+    """What moved since the last run, for the watchlist or TICKERS.
+
+    Rescores each ticker, records it in the score history
+    (<output-dir>/_history/scores.csv), and compares it with its latest run
+    from an earlier day: score and signal, red flags that appeared or
+    cleared, the price move, price against the watchlist target/stop, and
+    earnings in the next 14 days. Every report/score/vet/screen run also
+    feeds the history.
+
+    \b
+    Examples:
+      quant changes
+      quant changes EQNR.OL AAPL
+      quant changes --config value
+    """
+    import json as _json
+
+    from .tracking import load_watchlist, render_text, track_changes
+
+    output_dir = ctx.obj["output_dir"]
+    try:
+        watched = load_watchlist(watchlist_file)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+    tickers_list = [t.upper() for t in tickers] or list(watched)
+    if not tickers_list:
+        raise click.ClickException(
+            f"No tickers given and {watchlist_file} is empty. "
+            "Add some with: quant watchlist add T --thesis '...'"
+        )
+
+    def progress(ticker, error):
+        if not as_json:
+            mark = "✗" if error else "✓"
+            click.echo(f"  {mark} {ticker}" + (f": {error}" if error else ""), err=True)
+
+    if not as_json:
+        click.echo(f"  Checking {len(tickers_list)} ticker(s)...", err=True)
+    result = track_changes(
+        tickers_list,
+        fetcher=DataFetcher(cache_dir=output_dir),
+        options=AnalysisOptions(
+            period=ctx.obj["period"],
+            use_cache=ctx.obj["use_cache"],
+            include_context=False,
+            scoring_config=_get_scoring_config(config_name),
+        ),
+        watchlist=watched,
+        data_dir=output_dir,
+        workers=workers,
+        progress=progress,
+    )
+    data = result.to_dict()
+    if as_json:
+        click.echo(_json.dumps(data, indent=2, default=str))
+    else:
+        click.echo(render_text(data))
 
 
 if __name__ == "__main__":

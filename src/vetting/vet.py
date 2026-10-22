@@ -17,6 +17,7 @@ from ..data_fetcher import DataFetcher
 from ..markets import ticker_suffix
 from ..pipeline import AnalysisBundle, AnalysisOptions, analyze_ticker
 from ..scoring import ScoringConfig, StockScorer
+from ..scoring.scorer import ScoringResult
 from ..utils.fx import normalize_info
 from .ownership import FundActivity, fund_activity
 from .peers import PeerValuation, peer_valuation
@@ -33,6 +34,8 @@ class VetResult:
     ticker: str
     bundle: AnalysisBundle
     preset: str
+    # The score before P/E is judged against peers (what the score history records)
+    base_scoring: Optional[ScoringResult] = None
     red_flags: List[RedFlag] = field(default_factory=list)
     peers: Optional[PeerValuation] = None
     funds: Optional[FundActivity] = None
@@ -100,7 +103,9 @@ def vet_ticker(
     bundle = analyze_ticker(ticker, fetcher, options)
     report = bundle.report
     info = report.get("info") or {}
-    result = VetResult(ticker=ticker, bundle=bundle, preset=config.name)
+    result = VetResult(
+        ticker=ticker, bundle=bundle, preset=config.name, base_scoring=bundle.scoring
+    )
 
     # Peer valuation, then rescore so P/E is judged against the peers
     def fx_lookup(symbol: str) -> Optional[float]:

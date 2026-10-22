@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -15,6 +16,12 @@ from src.cli import cli
 from src.pipeline import AnalysisBundle
 from src.scoring import ScoringConfig
 from src.scoring.scorer import ScoringResult
+
+
+@pytest.fixture(autouse=True)
+def _isolated_cwd(tmp_path, monkeypatch):
+    """Commands write the score history under ./data; keep it out of the repo."""
+    monkeypatch.chdir(tmp_path)
 
 
 def _mock_scoring_result(ticker: str = "AAPL") -> ScoringResult:

@@ -19,6 +19,7 @@ import pandas as pd
 import requests
 
 from ..config import get_config
+from ..tracking.watchlist import DEFAULT_WATCHLIST, load_watchlist
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,7 @@ BUILTIN_INDEXES: Dict[str, IndexSource] = {
 }
 
 DISCOVER_UNIVERSE = "discover"
+WATCHLIST_UNIVERSE = "watchlist"
 
 
 @dataclass
@@ -110,6 +112,7 @@ def list_universes() -> Dict[str, str]:
     """Built-in universe names and descriptions (for --help / listings)."""
     names = {name: src.description for name, src in BUILTIN_INDEXES.items()}
     names[DISCOVER_UNIVERSE] = "Consensus picks from the latest `quant discover` run"
+    names[WATCHLIST_UNIVERSE] = f"Tickers in {DEFAULT_WATCHLIST} (`quant watchlist add`)"
     return names
 
 
@@ -125,6 +128,7 @@ def resolve_universe(
     Each spec is one of:
       - a built-in index name (sp500, sp100, nasdaq100, obx)
       - "discover": overlap tickers from data/_discovery/discovery_result.json
+      - "watchlist": the tickers in watchlist.toml
       - a path to a ticker file (one per line or comma-separated; '#' comments;
         CSV with a ticker/symbol column also works)
       - otherwise, a literal ticker symbol
@@ -145,6 +149,14 @@ def resolve_universe(
             sources.append(key)
         elif key == DISCOVER_UNIVERSE:
             tickers.extend(load_discover_tickers(data_dir))
+            sources.append(key)
+        elif key == WATCHLIST_UNIVERSE:
+            watched = list(load_watchlist(Path(DEFAULT_WATCHLIST)))
+            if not watched:
+                raise ValueError(
+                    f"No tickers in {DEFAULT_WATCHLIST}. Add some with `quant watchlist add`."
+                )
+            tickers.extend(watched)
             sources.append(key)
         elif Path(spec).is_file():
             tickers.extend(load_ticker_file(Path(spec)))
