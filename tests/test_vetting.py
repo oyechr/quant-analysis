@@ -119,6 +119,10 @@ class TestAltman:
         report = make_report(quality={"altman_z": 0.3}, info={"sector": "Financial Services"})
         assert check_altman(report, TODAY) == []
 
+    def test_skipped_for_utilities(self):
+        report = make_report(quality={"altman_z": 0.5}, info={"sector": "Utilities"})
+        assert check_altman(report, TODAY) == []
+
 
 class TestNegativeFCF:
     def test_two_of_three_negative(self):
@@ -137,6 +141,12 @@ class TestNegativeFCF:
 
     def test_only_last_three_years_count(self):
         report = make_report(history={"free_cash_flow": [5.0, 10.0, -3.0, -8.0]})
+        assert check_negative_fcf(report, TODAY) == []
+
+    def test_skipped_for_financials(self):
+        report = make_report(
+            history={"free_cash_flow": [-5.0, -1.0, -3.0]}, info={"sector": "Financial Services"}
+        )
         assert check_negative_fcf(report, TODAY) == []
 
 
@@ -183,6 +193,14 @@ class TestDividendCoverage:
         )
         [flag] = check_dividend_coverage(report, TODAY)
         assert "0.80x" in flag.detail
+
+    def test_financials_judged_on_payout_only(self):
+        report = make_report(
+            info={"payout_ratio": 0.6, "sector": "Financial Services"},
+            dividend={"pays_dividends": True},
+            history={"free_cash_flow": [-80.0], "dividends_paid": [-100.0]},
+        )
+        assert check_dividend_coverage(report, TODAY) == []
 
     def test_covered_dividend_passes(self):
         report = make_report(

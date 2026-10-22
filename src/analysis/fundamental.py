@@ -485,7 +485,7 @@ class FundamentalAnalyzer:
         x1 = working_capital / total_assets
         x2 = retained_earnings / total_assets
         x3 = ebit / total_assets
-        x4 = market_cap / total_assets
+        x4 = market_cap / total_liabilities
         x5 = revenue / total_assets
 
         z_score = 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
@@ -782,7 +782,7 @@ class FundamentalAnalyzer:
 
         # Need at least 5 of 8 components for a meaningful score
         if available_count < 5:
-            logger.warning(f"Beneish M-Score: Only {available_count}/8 components available")
+            logger.info(f"Beneish M-Score: Only {available_count}/8 components available")
             return None
 
         # Calculate M-Score using available components (use 1.0 for missing indices)

@@ -19,7 +19,28 @@ from .utils.serialization import dataframe_to_json_dict, dataframe_to_records, s
 logger = logging.getLogger(__name__)
 
 # Bump when get_ticker_info extracts new fields, so older cached info is refetched
-INFO_CACHE_VERSION = 2
+INFO_CACHE_VERSION = 3
+
+_PRICE_COLUMNS = ("Open", "High", "Low", "Adj Close")
+
+
+def clean_price_bars(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Daily bars with Yahoo's placeholder prices treated as missing.
+
+    Yahoo sometimes returns a zero Open/High/Low (common for funds, which only
+    have a NAV). A non-positive price is missing data: such Open/High/Low
+    values take the Close, and bars without a positive Close are dropped.
+    """
+    if data is None or data.empty or "Close" not in data.columns:
+        return data
+    out = data[pd.to_numeric(data["Close"], errors="coerce") > 0].copy()
+    for column in _PRICE_COLUMNS:
+        if column in out.columns:
+            bad = ~(pd.to_numeric(out[column], errors="coerce") > 0)
+            if bad.any():
+                out.loc[bad, column] = out.loc[bad, "Close"]
+    return out
 
 
 class DataFetcher:
@@ -159,6 +180,7 @@ class DataFetcher:
             else:
                 data = stock.history(period=period, interval=interval)
 
+            data = clean_price_bars(data)
             if data.empty:
                 raise ValueError(
                     f"No data returned for ticker {ticker}. "
@@ -291,6 +313,8 @@ class DataFetcher:
                 "cache_version": INFO_CACHE_VERSION,
                 "symbol": ticker,
                 "name": info.get("longName", "N/A"),
+                # EQUITY, ETF, MUTUALFUND, ...: funds have no statements to vet
+                "quote_type": info.get("quoteType"),
                 "sector": info.get("sector", "N/A"),
                 "industry": info.get("industry", "N/A"),
                 # Yahoo's slugs for yf.Sector / yf.Industry (e.g. "consumer-electronics")
@@ -760,7 +784,7 @@ class DataFetcher:
             df.index = pd.to_datetime(df.index, utc=True)
             ticker = cache_file.parent.parent.name
             self._record_fetch(ticker, "prices", datetime.fromtimestamp(cache_file.stat().st_mtime))
-            return df
+            return clean_price_bars(df)
         except Exception as e:
             logger.warning(f"Failed to load price cache {cache_file}: {e}")
             return None
@@ -870,7 +894,12 @@ class DataFetcher:
         try:
             logger.info(f"Fetching {resource_name} for {ticker}")
             stock = yf.Ticker(ticker)
-            result = fetch_fn(stock)
+            # yfinance returns None instead of an empty frame for some resources
+            # (earnings dates of funds and new listings)
+            result = {
+                k: v if v is not None else empty_result.get(k, pd.DataFrame())
+                for k, v in fetch_fn(stock).items()
+            }
             cache_data = serialize_fn(result)
             self._save_json_cache(cache_file, cache_data)
             return result

@@ -5,6 +5,7 @@ from .comparator import (
     TickerComparator,
     calculate_risk_parity_weights,
     identify_correlation_flags,
+    return_correlations,
 )
 from .formatters import (
     format_comparison_json,
@@ -19,6 +20,7 @@ __all__ = [
     "PortfolioView",
     "calculate_risk_parity_weights",
     "identify_correlation_flags",
+    "return_correlations",
     "format_comparison_table",
     "format_comparison_markdown",
     "format_comparison_json",

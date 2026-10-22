@@ -74,8 +74,17 @@ def build_sections(data: Dict[str, Any], brief: bool = False) -> List[Section]:
 
 
 def render_text(data: Dict[str, Any], brief: bool = False) -> str:
+    return sections_to_text(build_sections(data, brief))
+
+
+def render_markdown(data: Dict[str, Any]) -> str:
+    return sections_to_markdown(build_sections(data))
+
+
+def sections_to_text(sections: List[Section]) -> str:
+    """Terminal layout: the first section is the boxed title, the rest are ruled."""
     out: List[str] = []
-    for i, section in enumerate(build_sections(data, brief)):
+    for i, section in enumerate(sections):
         if i == 0:
             out += ["=" * WIDTH, f"  {section.title}", "=" * WIDTH]
         else:
@@ -89,9 +98,9 @@ def render_text(data: Dict[str, Any], brief: bool = False) -> str:
     return "\n".join(out)
 
 
-def render_markdown(data: Dict[str, Any]) -> str:
+def sections_to_markdown(sections: List[Section]) -> str:
     out: List[str] = []
-    for i, section in enumerate(build_sections(data)):
+    for i, section in enumerate(sections):
         out += [f"# {section.title}" if i == 0 else f"## {section.title.title()}", ""]
         for block in section.blocks:
             if isinstance(block, Table):

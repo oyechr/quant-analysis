@@ -333,3 +333,29 @@ class TestKellyCriterion:
     def test_half_kelly_is_half(self, sample_price_data):
         result = calculate_kelly_criterion(sample_price_data)
         assert abs(result["half_kelly_pct"] - result["kelly_pct"] / 2) < 0.001
+
+
+class TestAltmanZ:
+    def test_textbook_formula(self, default_config):
+        """Z = 1.2 WC/TA + 1.4 RE/TA + 3.3 EBIT/TA + 0.6 MV/TL + 1.0 Sales/TA."""
+        from src.analysis.fundamental import FundamentalAnalyzer
+
+        balance = pd.DataFrame(
+            {
+                "2025-12-31": {
+                    "Current Assets": 400.0,
+                    "Current Liabilities": 200.0,
+                    "Total Assets": 1000.0,
+                    "Retained Earnings": 300.0,
+                    "Total Liabilities Net Minority Interest": 500.0,
+                }
+            }
+        )
+        income = pd.DataFrame({"2025-12-31": {"EBIT": 100.0, "Total Revenue": 800.0}})
+        analyzer = FundamentalAnalyzer(
+            {"market_cap": 1500.0},
+            {"balance_sheet_annual": balance, "income_stmt_annual": income},
+        )
+
+        expected = 1.2 * 0.2 + 1.4 * 0.3 + 3.3 * 0.1 + 0.6 * (1500 / 500) + 1.0 * 0.8
+        assert analyzer.calculate_altman_z_score() == pytest.approx(expected)

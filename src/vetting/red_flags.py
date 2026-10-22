@@ -29,6 +29,9 @@ DATA_COVERAGE_MIN = 0.60
 # Altman Z and interest cover are built for industrial companies; for banks
 # and insurers leverage and interest are the business model.
 _FINANCIAL_SECTORS = ("financial services", "financial")
+# Altman's samples left out financials and utilities: regulated utilities run
+# on heavy debt and negative working capital without being distressed
+_ALTMAN_EXCLUDED_SECTORS = (*_FINANCIAL_SECTORS, "utilities")
 
 
 @dataclass
@@ -76,7 +79,7 @@ def check_beneish(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
 
 def check_altman(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
     z = _num(_quality(report).get("altman_z"))
-    if z is None or z >= ALTMAN_DISTRESS or _is_financial(report):
+    if z is None or z >= ALTMAN_DISTRESS or _sector(report) in _ALTMAN_EXCLUDED_SECTORS:
         return []
     return [
         RedFlag(
@@ -89,6 +92,10 @@ def check_altman(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
 
 
 def check_negative_fcf(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+    # A bank's or insurer's operating cash flow is mostly deposits, loans and
+    # float moving through, so its FCF says little about the business
+    if _is_financial(report):
+        return []
     fcf = [v for v in _history(report).get("free_cash_flow", [])[:3] if v is not None]
     if len(fcf) < 2:
         return []
@@ -138,7 +145,7 @@ def check_dividend_coverage(report: Dict[str, Any], today: datetime) -> List[Red
     history = _history(report)
     fcf = _first(history.get("free_cash_flow", []))
     paid = _first(history.get("dividends_paid", []))
-    if fcf is not None and paid:
+    if fcf is not None and paid and not _is_financial(report):  # payout ratio only for financials
         coverage = fcf / abs(paid)
         if coverage < 1.0:
             problems.append(f"FCF covers the dividend {coverage:.2f}x")
@@ -328,9 +335,12 @@ def _history(report: Dict[str, Any]) -> Dict[str, Any]:
     return _analysis(report).get("annual_history") or {}
 
 
+def _sector(report: Dict[str, Any]) -> str:
+    return str((report.get("info") or {}).get("sector") or "").lower()
+
+
 def _is_financial(report: Dict[str, Any]) -> bool:
-    sector = str((report.get("info") or {}).get("sector") or "").lower()
-    return sector in _FINANCIAL_SECTORS
+    return _sector(report) in _FINANCIAL_SECTORS
 
 
 def _first(values: List[Optional[float]]) -> Optional[float]:

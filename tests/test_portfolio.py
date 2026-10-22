@@ -10,6 +10,7 @@ from click.testing import CliRunner
 from src.cli import cli
 from src.portfolio import (
     PORTFOLIO_COLUMNS,
+    account_from_filename,
     combine_holdings,
     load_ticker_map,
     read_nordnet_holdings,
@@ -97,6 +98,42 @@ def test_combines_accounts_and_reports_unmapped(exports):
     assert len(holdings) == 4  # the same instrument in two accounts stays two rows
     assert (holdings["ticker"] == "SMB.OL").sum() == 2
     assert unmapped == ["Test Corp"]
+
+
+def test_reads_2026_export_layout(tmp_path):
+    # "Beholdningstabell" export: the name column is "Handel", the account
+    # number follows "kontono." in the file name
+    header = [
+        "Handel",
+        "Valuta",
+        "Antall",
+        "GAV",
+        "% i dag",
+        "siste kurs",
+        "Belåningsverdi",
+        "Verdi NOK",
+        "Avkast.",
+        "Avkast.\xa0NOK",
+    ]
+    row = ["Example Energy", "NOK", "1\xa0200", "31,5", "0", "51,1", "0", "61320", "1", "1"]
+    path = tmp_path / "Beholdningstabell eksport, kontono. 33330000, 22.10.2026.csv"
+    path.write_text("\t".join(header) + "\n" + "\t".join(row) + "\n", encoding="utf-16")
+
+    holdings = read_nordnet_holdings(path)
+
+    assert list(holdings["name"]) == ["Example Energy"]
+    assert holdings.loc[0, "shares"] == 1200
+    assert holdings.loc[0, "cost_basis"] == pytest.approx(31.5)
+    assert set(holdings["account"]) == {"33330000"}
+
+
+def test_account_from_filename():
+    assert account_from_filename("aksjelister_konto-11110000_1.1.2026.csv") == "11110000"
+    assert (
+        account_from_filename("Beholdningstabell eksport, kontono. 33330000, 22.10.2026.csv")
+        == "33330000"
+    )
+    assert account_from_filename("holdings.csv") is None
 
 
 def test_rejects_other_files(tmp_path):

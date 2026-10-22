@@ -278,3 +278,24 @@ def test_run_concurrently_captures_per_item_errors():
 
     assert outcomes[2] == (4, None)
     assert isinstance(outcomes[3][1], ValueError)
+
+
+def test_zero_price_bars_are_cleaned(fake_market, price_factory, tmp_path):
+    # Yahoo fund NAV series sometimes carry a bar with Open/High/Low = 0
+    prices = price_factory("FUND.IR", days=60)
+    prices.iloc[10, prices.columns.get_loc("Low")] = 0.0
+    prices.iloc[20, prices.columns.get_loc("Close")] = 0.0
+    fake_market.price_overrides["FUND.IR"] = prices
+    fetcher = DataFetcher(cache_dir=str(tmp_path))
+
+    for use_cache in (False, True):  # fresh, then from the cache file
+        cleaned = fetcher.fetch_ticker("FUND.IR", period="1y", use_cache=use_cache)
+        assert len(cleaned) == 59  # the zero-Close bar is dropped
+        assert (cleaned[["Open", "High", "Low", "Close"]] > 0).all().all()
+        assert cleaned["Low"].iloc[10] == cleaned["Close"].iloc[10]
+
+
+def test_none_from_yfinance_is_an_empty_resource(fake_market, tmp_path):
+    fake_market.attribute_overrides["NEW"] = {"earnings_dates": None}
+    earnings = DataFetcher(cache_dir=str(tmp_path)).fetch_earnings("NEW", use_cache=False)
+    assert earnings["earnings_dates"].empty

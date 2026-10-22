@@ -56,3 +56,4 @@ config.json
 # Personal holdings (Nordnet exports, combined portfolio, ticker map): never commit
 /portfolio/
 aksjelister_*.csv
+Beholdningstabell*.csv

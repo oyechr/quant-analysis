@@ -212,21 +212,7 @@ class TickerComparator:
         Returns:
             DataFrame correlation matrix (tickers × tickers).
         """
-        # Align on trading date: bars from different exchanges carry midnight
-        # stamps in their own timezone and would otherwise never overlap
-        price_frames: Dict[str, pd.Series] = {}
-        for ticker, prices in self.price_data(use_cache).items():
-            close = prices["Close"].copy()
-            close.index = trading_dates(pd.DatetimeIndex(close.index))
-            price_frames[ticker] = close[~close.index.duplicated(keep="last")]
-
-        if len(price_frames) < 2:
-            logger.warning("Need at least 2 tickers with price data for correlation")
-            return pd.DataFrame()
-
-        combined = pd.DataFrame(price_frames)
-        returns = combined.pct_change(fill_method=None).dropna()
-        return returns.corr()
+        return return_correlations(self.price_data(use_cache))
 
     def key_metrics_table(self) -> pd.DataFrame:
         """
@@ -310,7 +296,7 @@ class PortfolioView:
         # Weighted composite score
         weighted_score = 0.0
         score_available = 0
-        for ticker, weight in zip(self.tickers, self.weights):
+        for ticker, weight in zip(self.tickers, self.weights, strict=True):
             if ticker in scores:
                 weighted_score += scores[ticker].composite_score * weight
                 score_available += 1
@@ -318,7 +304,7 @@ class PortfolioView:
         # Weighted beta
         weighted_beta = 0.0
         beta_available = 0
-        for ticker, weight in zip(self.tickers, self.weights):
+        for ticker, weight in zip(self.tickers, self.weights, strict=True):
             if ticker in reports and "error" not in reports[ticker]:
                 info = reports[ticker].get("info", {})
                 beta = info.get("beta")
@@ -342,7 +328,7 @@ class PortfolioView:
             "holdings": [],
         }
 
-        for ticker, weight in zip(self.tickers, self.weights):
+        for ticker, weight in zip(self.tickers, self.weights, strict=True):
             holding: Dict[str, Any] = {
                 "ticker": ticker,
                 "weight": weight,
@@ -384,6 +370,38 @@ class PortfolioView:
 
 
 # ==================== Risk Parity & Portfolio Construction ====================
+
+
+def return_correlations(
+    price_data_map: Dict[str, pd.DataFrame], pairwise: bool = False, min_days: int = 60
+) -> pd.DataFrame:
+    """
+    Daily-return correlation matrix (ticker x ticker) from 'Close' prices.
+
+    Bars are aligned on trading date: bars from different exchanges carry
+    midnight stamps in their own timezone and would otherwise never overlap.
+    By default only days where every ticker traded are used. With `pairwise`,
+    each pair uses the days both traded (at least `min_days`, else NaN), so
+    one short history or foreign holiday calendar doesn't shrink every pair.
+    Empty with fewer than 2 tickers.
+    """
+    price_frames: Dict[str, pd.Series] = {}
+    for ticker, prices in price_data_map.items():
+        if prices is None or prices.empty or "Close" not in prices.columns:
+            continue
+        close = prices["Close"].copy()
+        close.index = trading_dates(pd.DatetimeIndex(close.index))
+        price_frames[ticker] = close[~close.index.duplicated(keep="last")]
+
+    if len(price_frames) < 2:
+        logger.warning("Need at least 2 tickers with price data for correlation")
+        return pd.DataFrame()
+
+    combined = pd.DataFrame(price_frames)
+    returns = combined.pct_change(fill_method=None)
+    if pairwise:
+        return returns.corr(min_periods=min_days)
+    return returns.dropna().corr()
 
 
 def calculate_risk_parity_weights(
@@ -482,6 +500,8 @@ def identify_correlation_flags(
     for i in range(n):
         for j in range(i + 1, n):
             corr = float(correlation_matrix.iloc[i, j])
+            if not np.isfinite(corr):
+                continue  # too little shared history (see return_correlations)
             all_correlations.append(corr)
             pair = (tickers[i], tickers[j])
 

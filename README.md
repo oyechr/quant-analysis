@@ -369,12 +369,35 @@ Options:
 
 ### ``quant import-portfolio`` -- Nordnet holdings to a portfolio file
 
-Combines Nordnet holdings exports (``aksjelister_konto-<account>_<date>.csv``, one per account) into ``portfolio/portfolio.csv`` with the columns ``ticker,name,account,shares,cost_basis,currency``. Nordnet's export has names but no tickers, so ``portfolio/tickers.csv`` (``name,ticker``) maps names to Yahoo tickers. Unmapped names are listed so you can add them and rerun. ``portfolio/`` and ``aksjelister_*.csv`` are gitignored: holdings never go into git.
+Combines Nordnet holdings exports (``Beholdningstabell eksport, kontono. <account>, <date>.csv``, or the older ``aksjelister_konto-<account>_<date>.csv``; one per account) into ``portfolio/portfolio.csv`` with the columns ``ticker,name,account,shares,cost_basis,currency``. Nordnet's export has names but no tickers, so ``portfolio/tickers.csv`` (``name,ticker``) maps names to Yahoo tickers. Unmapped names are listed so you can add them and rerun. ``portfolio/`` and the export file names are gitignored: holdings never go into git.
 
 ```bash
-quant import-portfolio ~/Downloads/aksjelister_konto-*.csv --label 12345678=ASK --label 87654321=AF
-quant import-portfolio ~/Downloads/aksjelister_konto-*.csv --verify   # show Yahoo's name/currency per ticker
+quant import-portfolio "~/Downloads/Beholdningstabell eksport*.csv" --label 12345678=ASK --label 87654321=AF   # quote: the names have spaces
+quant import-portfolio "~/Downloads/Beholdningstabell eksport*.csv" --verify   # show Yahoo's name/currency per ticker
 ```
+
+Nordnet's API is closed to retail customers (paid partner access only), so the export is the supported input: in Nordnet's web app, download the holdings list for each account, then run ``import-portfolio`` on the files. Repeat whenever your holdings change.
+
+### ``quant review`` -- Exit / Review / Trim / Hold / Add for each holding
+
+Runs ``vet`` on every holding in ``portfolio/portfolio.csv``, values the holdings in one currency (NOK by default, using Yahoo FX rates), and compares each weight with a risk-parity (inverse-volatility) target. The output starts with one row per holding: action, weight, target, gain, score, verdict and the main reason. The portfolio view follows (beta, sector and currency mix, holdings that move together), then details for every holding that isn't a Hold.
+
+```bash
+quant review                           # portfolio/portfolio.csv
+quant review --config value --save     # also writes portfolio/review.json + review.md (gitignored)
+quant review --json
+```
+
+| Action | Rule |
+|--------|------|
+| Exit | A Sell or Strong Sell signal |
+| Review | A high-severity red flag (e.g. Altman Z distress, Beneish M) with a Hold or Buy signal: look into the flag before selling. These models have known false positives, so they don't trigger an Exit for a stock you own; ``vet`` still says Pass for a new candidate |
+| Trim | Weight is at least 1.5x its target and at least 2 points above it, or the holding moves with a larger one (daily-return correlation >= 0.80) |
+| Add | ``vet`` verdict is Look deeper, the weight is below target, and there's no overlap |
+| Hold | Everything else |
+| Check | No price data, usually a wrong ticker in ``portfolio/tickers.csv`` |
+
+ETFs and funds have no statements to vet, so they are only ever Trim or Hold. Taxes are ignored, except for a note when a sale at a gain would happen in AF (label your accounts ASK/AF with ``import-portfolio --label``). These are rule-based suggestions, not advice. The first run fetches every holding and its peers, which takes a few minutes; later runs use the cache.
 
 ### Global options
 
@@ -426,6 +449,7 @@ Optional ``config.json`` in the working directory (gitignored). All keys are opt
 | Find candidates in an index | ``quant screen sp500`` |
 | Discover new investment ideas | ``quant discover`` |
 | Quick verdict on one stock | ``quant vet TICKER`` |
+| What to do with the stocks you own | ``quant review`` |
 | Deep dive on one stock | ``quant report TICKER`` |
 | Ask follow-up questions / interrogate a stock | ``quant chat TICKER`` |
 | Screen / rank a watchlist | ``quant score T1 T2 T3 ...`` |
@@ -537,6 +561,10 @@ quant-analysis/
 |   |   +-- sources/
 |   |       +-- base.py              # PortfolioSource ABC (pluggable)
 |   |       +-- edgar_13f.py         # SEC EDGAR 13F source (free)
+|   +-- portfolio/
+|   |   +-- nordnet.py               # Nordnet holdings export -> portfolio.csv
+|   |   +-- review.py                # review_portfolio(): Exit / Trim / Hold / Add rules
+|   |   +-- render.py                # Terminal + Markdown output for review
 |   +-- reporting/
 |   |   +-- generator.py             # Report file writing (runs the pipeline)
 |   |   +-- sections.py              # Modular section handlers
@@ -576,7 +604,9 @@ quant-analysis/
     +-- test_comparator.py
     +-- test_discovery.py
     +-- test_pipeline.py
+    +-- test_portfolio.py
     +-- test_quant_methods.py
+    +-- test_review.py
     +-- test_scorer.py
     +-- test_screening.py
     +-- test_toon_serializer.py

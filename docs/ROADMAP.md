@@ -11,21 +11,30 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 2 | Vet: `quant vet TICKER` | Done (live-checked on EQNR.OL and AAPL, 2026-09-28) |
 | 2b | Vet follow-ups: established data sources, verdict summary | Done; the live run showed Yahoo's micro-cap peer lists and mixed-currency ratios, both handled but over-engineered (see 2c) |
 | 2c | Simplify peers and currency handling (standard practice) | Done (live-checked on AAPL, EQNR.OL and EQNR.OL --peers AKRBP.OL,VAR.OL, 2026-09-28) |
-| 2d | DCF fix: two-stage fade, standard WACC, reverse DCF | Done offline (2026-09-28); live check pending |
-| 3 | Review: portfolio file -> exit / hold / add advice | Next. Input is ready: `quant import-portfolio` built, the user's file is imported (ticker map and account labels still to confirm) |
+| 2d | DCF fix: two-stage fade, standard WACC, reverse DCF | Done (live-checked on AAPL and EQNR.OL, 2026-10-22) |
+| 3 | Review: portfolio file -> exit / review / trim / hold / add advice | Done (live run on the user's portfolio, 2026-10-22; tuning after first use) |
 | 4 | Track: watchlist, score history, `quant changes` | Planned |
 | 5 | Trust: price-only backtest, calibrate signal thresholds | Planned |
 | 6 | Cleanup (do alongside the others) | Planned |
 
-## Current state and next session (updated 2026-09-28)
+## Current state and next session (updated 2026-10-22)
 
-Everything through 2c is committed. The 2d DCF fix and the portfolio importer are uncommitted on `main`, and all tests pass offline (454 passed, 27 skipped).
+Everything through 2d and `quant import-portfolio` is committed and pushed (d885f5b). Phase 3 (`quant review`) is committed on `main` (not pushed); all tests pass offline (483 passed, 27 skipped). Claude's shell still can't reach Yahoo (TLS interception in the sandbox), so live checks are for the user to run. Once the user has run `review` live, the local `data/` cache lets Claude rerun it offline. Next: the open items under 3 below, then Phase 4 (Track).
+
+**Portfolio input:** Nordnet's API is closed to retail customers (paid partner access only), and there is no API code in this repo. The supported input is the holdings export downloaded from Nordnet's web app, one file per account, combined with `quant import-portfolio`. Rerun the import whenever holdings change.
 
 **Next session, in order:**
 
-1. **Live-check 2d.** Ask the user to run `quant vet AAPL` and `quant vet EQNR.OL`. Offline, on their cached data, the new model gave AAPL a DCF of $90 (was $60; price $341; the price implies 33% starting FCF growth) and EQNR.OL 244 NOK (was 32; price 405; implies 0.2%). EQNR.OL's Monte Carlo 10/50/90 was 182/268/480 NOK with P(undervalued) 17% (was 1%). Then commit 2d and the importer.
-2. **Confirm the portfolio input.** The user runs `quant import-portfolio <both Nordnet files> --verify` and checks the Yahoo names. The least certain tickers are listed in `portfolio/NOTES.md`, which is gitignored. Ask which account is ASK and which is AF, then rerun with `--label <number>=ASK --label <number>=AF`.
-3. **Build Phase 3** (`quant review portfolio/portfolio.csv`). Design notes below.
+1. **2d live check: done (2026-10-22).** AAPL: DCF $91, price $348; the price implies +33% starting growth. EQNR.OL: DCF 235 NOK, price 432; implies +2.4%. Both match the offline numbers. EQNR's starting growth hits the -10% floor (the known cyclical-FCF limit), and its DDM (69 NOK) means little.
+2. **Portfolio input confirmed (2026-10-22).** Every ticker was verified against Yahoo, and the accounts are labelled ASK and AF. Nordnet's 2026 export ("Beholdningstabell eksport, kontono. N, date.csv", name column "Handel") is now supported alongside the old one. Funds that Yahoo lists under Morningstar IDs (`0P...`) can be mapped like any ticker.
+3. **Phase 3 first live run (2026-10-22).** About a third of the holdings came out as Exit, mostly on one model-based red flag. Fixes:
+   - **Altman Z bug:** X4 was market cap / total *assets* instead of / total *liabilities*. That pulled every Z down, so companies with Z well into the safe zone (7 to 17) read as distressed. There is now a formula test (`tests/test_quant_methods.py::TestAltmanZ`).
+   - **Utilities:** the Altman flag now skips them, as it does financials, since Altman's samples excluded both.
+   - **Bad price bars:** Yahoo sometimes returns a bar with Open/High/Low = 0 (seen on a mutual fund's NAV series). `data_fetcher.clean_price_bars` now cleans fresh and cached prices: a non-positive Open/High/Low takes the Close, and a bar with no positive Close is dropped. This fixed a division by zero in support/resistance.
+   - **`None` from yfinance:** for earnings dates of funds and new listings, `_fetch_resource` now turns `None` into an empty frame.
+   - **Financials:** the negative-FCF flag and the FCF test for dividend cover now skip banks and insurers (their payout ratio is still checked), as the Altman and interest-cover rules already did. The "Only n/8 Beneish components" message is now info-level, not a warning.
+   - **Exit rule (the user's choice):** Exit now needs a Sell or Strong Sell signal. A high-severity red flag with a Hold or Buy signal becomes the new **Review** action ("look into the flag before selling"), because Altman and Beneish have known false positives: large investment-grade telecoms read as distressed on Altman, and acquisitive companies trip Beneish. `vet` still says Pass for these.
+   - **Still open:** Beneish on a tiny revenue base gives nonsense (M in the hundreds when sales grow several hundredfold from almost nothing). Consider skipping Beneish when prior-year revenue is too small, or winsorizing the indices like Beneish (1999). The risk-parity targets are low for volatile names (a ~2% target next to a ~9% weight), so `review` trims them; decide whether that's the overweight rule to keep. Banks still pick up FCF-based weakness in the fundamental *score* (only the red flags skip financials now).
 
 **Portfolio input as built:**
 - `src/portfolio/nordnet.py` provides `read_nordnet_holdings`, `load_ticker_map`, `combine_holdings` and `write_portfolio`. The CLI command is `quant import-portfolio EXPORTS... [--map] [--out] [--label N=NAME] [--verify]`.
@@ -184,6 +193,28 @@ Input: the holdings you own. Output: per holding, **Exit / Trim / Hold / Add**, 
 
 **Done when:** a synthetic portfolio in tests gets the expected action per holding for each rule, and `quant review` on the user's real file renders from live data. The README is updated.
 
+**As built (2026-10-22)**
+
+- `src/portfolio/review.py`:
+  - `load_portfolio(path)` aggregates the rows by ticker across accounts. Shares are summed, cost basis is share-weighted, and the account labels are kept. Rows with no ticker are reported as unmapped.
+  - `review_portfolio(holdings, fetcher, options, base_currency="NOK", workers)` runs `vet_ticker` per holding (concurrently) and values each holding in the base currency with `utils.fx.conversion_rate`, which also handles GBp-style minor units.
+  - Gain is computed in the cost currency.
+  - Targets are inverse-volatility weights from `calculate_risk_parity_weights`, computed from local-currency prices, so FX volatility is ignored.
+  - The overlap check uses `return_correlations(prices, pairwise=True)`, a new function in `comparison/comparator.py` that the comparator now calls too. In pairwise mode a short history or a foreign holiday calendar doesn't shrink every pair (60 shared days minimum).
+- `decide_action(review)` is a pure function holding all the rules. The thresholds are module constants:
+  - `OVERWEIGHT_RATIO` 1.5 and `OVERWEIGHT_MIN_GAP` 2 points.
+  - `REDUNDANT_CORRELATION` 0.80, compared against a *larger* holding only, so only the smaller of a pair is trimmed.
+  - `SECTOR_LIMIT` 35%.
+  - Order: Check (no price or no score) > Exit (Pass) > Trim (overweight or overlap) > Add (Look deeper, below target) > Hold.
+  - Reasons omit the verdict itself, since it has its own column. An Exit leads with its red flag when there is one.
+- **Funds:** `info["quote_type"]` was added (`INFO_CACHE_VERSION` 3), with the name as a fallback ("ETF"/"UCITS"). A fund is never Exit or Add, and its "Fund" sector isn't flagged as concentration.
+- **Tax note:** when an Exit or Trim would sell at a gain, the reasons say "sell from the ASK first" if the holding is in ASK and another account, or "selling realizes X% gain in AF". This only works once the accounts are labelled.
+- `src/portfolio/render.py` reuses the vet layout through the new `vetting.render.sections_to_text/markdown`. Sections: summary table, portfolio (beta, diversification, sector/currency mix, correlated pairs), details for non-Hold holdings, notes/caveats.
+- `identify_correlation_flags` now skips NaN pairs instead of failing.
+- **Known limits:**
+  - Every holding is vetted with peers, so the first run makes many Yahoo calls. Add a `--no-peers` option if that's too slow.
+  - The risk-parity target treats every holding alike. A broad ETF probably deserves a larger target than a single stock (possible option: a per-ticker target column in the portfolio file).
+
 ## Phase 4: Track
 
 1. **Watchlist.** `watchlist.toml` in the repo root (gitignored, since it's personal). Each entry has a ticker, an optional one-line thesis, the date added, and an optional target/stop.
@@ -223,4 +254,4 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 
 Paste something like:
 
-> Read docs/ROADMAP.md, starting with "Current state and next session". Live-check the 2d DCF fix, confirm the portfolio ticker map and account labels, then build Phase 3 (`quant review`). Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings.
+> Read docs/ROADMAP.md, starting with "Current state and next session". Go through the live results of `quant vet` (2d) and `quant review` (Phase 3), fix what they show, then start Phase 4 (Track). Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings.
