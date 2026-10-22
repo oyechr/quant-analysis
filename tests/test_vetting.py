@@ -553,6 +553,18 @@ class TestVerdict:
         assert report["info"]["pe_ratio"] == 30.0
         assert report["valuation_analysis"]["dcf_valuation"]["discount_premium_pct"] == 50.0
 
+    def test_reprice_scales_fcf_yield(self):
+        report = {
+            **_valuation_report(),
+            "fundamental_analysis": {"analysis": {"fcf_metrics": {"fcf_yield": 4.0, "fcf": 1e9}}},
+        }
+        repriced = reprice_report(report, 0.5)
+        assert repriced["fundamental_analysis"]["analysis"]["fcf_metrics"] == {
+            "fcf_yield": 8.0,
+            "fcf": 1e9,
+        }
+        assert report["fundamental_analysis"]["analysis"]["fcf_metrics"]["fcf_yield"] == 4.0
+
     def test_fair_value_range(self):
         fv = fair_value_range(_valuation_report())
         assert fv["monte_carlo"]["ci_50"] == 80

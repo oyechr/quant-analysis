@@ -1196,6 +1196,7 @@ class ValuationScorer:
         valuation_data: Dict[str, Any],
         ticker_info: Optional[Dict[str, Any]] = None,
         peer_valuation: Optional[Dict[str, Any]] = None,
+        fcf_yield: Optional[float] = None,
     ) -> DimensionResult:
         """
         Score valuation analysis data.
@@ -1206,6 +1207,8 @@ class ValuationScorer:
             ticker_info: Optional ticker info dict for P/E, P/B, PEG, etc.
             peer_valuation: Optional peer comparison (see vetting.peers); with
                            enough peers, P/E is scored against the peer median
+            fcf_yield: FCF / market cap in percent, from the fundamental
+                           analysis (fcf_metrics)
 
         Returns:
             DimensionResult with valuation dimension score
@@ -1238,10 +1241,7 @@ class ValuationScorer:
         sub_scores.append(self._score_peg(peg, strengths, concerns))
 
         # 4. FCF Yield (weight: 0.15)
-        # Try to get from fundamental data embedded in valuation or directly
-        fcf_yield = None
-        if "fcf_metrics" in valuation_data:
-            fcf_yield = _safe_float(valuation_data["fcf_metrics"].get("fcf_yield"))
+        fcf_yield = None if financial else _safe_float(fcf_yield)
         sub_scores.append(self._score_fcf_yield(fcf_yield, strengths, concerns))
 
         # 5. Dividend Sustainability (weight: 0.10)

@@ -380,8 +380,14 @@ class StockScorer:
         valuation_result = None
         if valuation_data:
             try:
+                fcf_metrics = ((fundamental_data or {}).get("analysis") or {}).get(
+                    "fcf_metrics"
+                ) or {}
                 valuation_result = self.valuation_scorer.score(
-                    valuation_data, ticker_info, peer_valuation
+                    valuation_data,
+                    ticker_info,
+                    peer_valuation,
+                    fcf_yield=fcf_metrics.get("fcf_yield"),
                 )
                 dimensions.append(("valuation", valuation_result))
                 all_strengths.extend(valuation_result.strengths)

@@ -592,6 +592,30 @@ class TestValuationScorer:
         assert not subs["DCF Valuation"].available
         assert subs["Earnings Quality"].score == 80.0  # beat rate 75% -> 80, cash ratio ignored
 
+    def test_fcf_yield_scored_when_given(self):
+        result = ValuationScorer().score(
+            self._make_val_data(), self._make_ticker_info(), fcf_yield=6.0
+        )
+        fcf = next(s for s in result.sub_scores if s.name == "FCF Yield")
+        assert fcf.available and fcf.raw_value == 6.0 and fcf.score == 82.0
+
+    def test_financials_skip_fcf_yield(self):
+        info = {**self._make_ticker_info(), "sector": "Financial Services"}
+        result = ValuationScorer().score(self._make_val_data(), info, fcf_yield=6.0)
+        assert not next(s for s in result.sub_scores if s.name == "FCF Yield").available
+
+    def test_stock_scorer_reads_fcf_yield_from_fundamentals(self):
+        """FCF yield is computed in the fundamental analysis, not the valuation one."""
+        report = {
+            "ticker": "T",
+            "info": self._make_ticker_info(),
+            "fundamental_analysis": {"analysis": {"fcf_metrics": {"fcf_yield": 4.0}}},
+            "valuation_analysis": self._make_val_data(),
+        }
+        result = StockScorer().score(report)
+        fcf = next(s for s in result.valuation.sub_scores if s.name == "FCF Yield")
+        assert fcf.available and fcf.raw_value == 4.0
+
     def test_score_is_bounded(self):
         scorer = ValuationScorer()
         result = scorer.score(self._make_val_data(), self._make_ticker_info())

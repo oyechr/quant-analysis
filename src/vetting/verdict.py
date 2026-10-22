@@ -132,10 +132,18 @@ def reprice_report(report: Dict[str, Any], factor: float) -> Dict[str, Any]:
     premium = _num(dcf.get("discount_premium_pct"))
     if premium is not None:
         dcf["discount_premium_pct"] = ((1 + premium / 100) * factor - 1) * 100
-    fcf_metrics = valuation.get("fcf_metrics") or {}
-    if _num(fcf_metrics.get("fcf_yield")) is not None:
-        fcf_metrics["fcf_yield"] = fcf_metrics["fcf_yield"] / factor
     repriced["valuation_analysis"] = valuation
+
+    # FCF yield lives in the fundamental section; copy only the path we change
+    fundamental = report.get("fundamental_analysis") or {}
+    analysis = fundamental.get("analysis") or {}
+    fcf_yield = _num((analysis.get("fcf_metrics") or {}).get("fcf_yield"))
+    if fcf_yield is not None:
+        fcf_metrics = {**analysis["fcf_metrics"], "fcf_yield": fcf_yield / factor}
+        repriced["fundamental_analysis"] = {
+            **fundamental,
+            "analysis": {**analysis, "fcf_metrics": fcf_metrics},
+        }
     return repriced
 
 

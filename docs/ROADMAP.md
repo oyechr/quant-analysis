@@ -87,7 +87,7 @@ Everything through 2d and `quant import-portfolio` is committed and pushed (d885
 - Pipeline: `report["signals"] = {pead, relative_strength}`. PEAD uses `earnings_dates` (announcement dates), sorted newest first. `fundamental_analysis.analysis.annual_history` has per-year FCF, shares, dividends paid, EBIT, interest, interest cover (feeds red flags; useful for Phase 4 history too). `FundamentalAnalyzer.calculate_all()` is now memoized (Phase 6 item done).
 - Info now includes `ev_to_ebitda`, `enterprise_value`, `current_price`, `shares_outstanding`, `free_cashflow`, `financial_currency`. Older cached info.json files lack them until refreshed (info TTL).
 - Fixed along the way: 13F values were multiplied by 1000 (SEC reports whole dollars since 2023); `compare` correlation now aligns cross-exchange prices by trading date.
-- Known gaps: the DCF growth problem (EQNR: -43%/yr projected for 5 years) was fixed in 2d. `ValuationScorer` looks for `fcf_metrics` in `valuation_analysis`, where it never is, so FCF yield never scores. The FCF-yield lookup is a Phase 6 item.
+- Known gaps: the DCF growth problem (EQNR: -43%/yr projected for 5 years) was fixed in 2d. FCF yield never scored, because `ValuationScorer` looked for `fcf_metrics` in `valuation_analysis`; fixed 2026-10-22: `StockScorer` passes `fundamental_analysis.analysis.fcf_metrics.fcf_yield` in, banks and insurers skip it, and `verdict.reprice_report` scales that field. On the cached data it moved composites by about a point (AAPL, EQNR.OL and MSFT all score Low, 0.6-1.9%).
 
 ## Phase 2: `quant vet TICKER`
 

@@ -89,6 +89,7 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 ### Composite Scoring
 
 - 0-100 score across four dimensions: Technical, Fundamental, Risk, Valuation
+- Valuation weighs DCF, P/E, PEG, FCF yield, dividend sustainability and earnings quality. Banks and insurers skip the cash-flow measures (DCF, FCF yield)
 - Configurable presets: ``default``, ``value``, ``growth``, ``income``
 - Scorecard output with strengths and concerns
 
