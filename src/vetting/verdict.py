@@ -12,6 +12,7 @@ import math
 from typing import Any, Callable, Dict, List, Optional
 
 from ..scoring import ScoringConfig, StockScorer
+from ..scoring.dimensions import is_financial
 
 SIGNAL_BANDS: List[str] = ["Strong Sell", "Sell", "Hold", "Buy", "Strong Buy"]
 
@@ -44,9 +45,15 @@ def fair_value_range(report: Dict[str, Any]) -> Dict[str, Any]:
         "currency_note": _currency_note(report),
     }
 
+    # Monte Carlo and DCF value free cash flow, which means little for banks
+    # and insurers; analyst targets and the DDM still apply
+    financial = is_financial(info)
+    if financial:
+        result["model_note"] = "Bank/insurer: FCF-based DCF and Monte Carlo left out"
+
     mc = valuation.get("monte_carlo_valuation") or {}
     intervals = mc.get("confidence_intervals") or {}
-    if intervals and not mc.get("error"):
+    if intervals and not mc.get("error") and not financial:
         result["monte_carlo"] = {
             **{k: _num(v) for k, v in intervals.items()},
             "probability_undervalued": _num(mc.get("probability_undervalued")),
@@ -57,13 +64,15 @@ def fair_value_range(report: Dict[str, Any]) -> Dict[str, Any]:
         result["analysts"] = analysts
 
     for key, name in (("dcf_valuation", "dcf"), ("ddm_valuation", "ddm")):
+        if financial and name == "dcf":
+            continue
         model = valuation.get(key) or {}
         value = _num(model.get("intrinsic_value_per_share"))
         if value is not None and not model.get("error"):
             result[name] = value
 
     dcf = valuation.get("dcf_valuation") or {}
-    if not dcf.get("error") and dcf.get("growth_rate_used") is not None:
+    if not financial and not dcf.get("error") and dcf.get("growth_rate_used") is not None:
         # The reverse DCF reads better than a bare value: "the price implies X% growth"
         result["dcf_assumptions"] = {
             "growth_start": _num(dcf.get("growth_rate_used")),

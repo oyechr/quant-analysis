@@ -14,6 +14,10 @@ from ..utils.financial import calculate_cagr, calculate_growth_rate, safe_divide
 
 logger = logging.getLogger(__name__)
 
+# Beneish's manipulators averaged a sales growth index of 1.6 (Beneish 1999);
+# past 3x (sales tripled) the base year is too small for the model to mean anything
+BENEISH_MAX_SGI = 3.0
+
 
 class FundamentalAnalyzer:
     """
@@ -731,6 +735,13 @@ class FundamentalAnalyzer:
         # SGI: Sales Growth Index
         # Revenue_t / Revenue_t-1
         sgi = revenue_t / revenue_t1
+        if sgi > BENEISH_MAX_SGI:
+            # From a near-zero revenue base the year-over-year indices are
+            # meaningless (an SGI of 300 alone adds ~270 to the score)
+            logger.info(
+                f"Beneish M-Score skipped: sales grew {sgi:.1f}x (above {BENEISH_MAX_SGI:.0f}x)"
+            )
+            return None
         components["sgi"] = sgi
         available_count += 1
 

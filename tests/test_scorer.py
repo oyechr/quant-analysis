@@ -421,6 +421,14 @@ class TestFundamentalScorer:
         assert z_sub.score <= 40.0
         assert "Distress" in z_sub.label
 
+    def test_financials_skip_altman(self):
+        result = FundamentalScorer().score(
+            self._make_fund_data(z_score=0.5), {"sector": "Financial Services"}
+        )
+        subs = {s.name: s for s in result.sub_scores}
+        assert not subs["Altman Z-Score"].available
+        assert subs["Piotroski F-Score"].available
+
     def test_strong_growth(self):
         scorer = FundamentalScorer()
         result = scorer.score(self._make_fund_data(rev_growth=25.0, earn_growth=30.0))
@@ -575,6 +583,14 @@ class TestValuationScorer:
         result = scorer.score(self._make_val_data(), self._make_ticker_info())
         assert isinstance(result, DimensionResult)
         assert result.dimension == "Valuation"
+
+    def test_financials_skip_cash_flow_measures(self):
+        """Banks/insurers: no FCF DCF; earnings quality from beat rate only."""
+        info = {**self._make_ticker_info(), "sector": "Financial Services"}
+        result = ValuationScorer().score(self._make_val_data(earnings_quality=10.0), info)
+        subs = {s.name: s for s in result.sub_scores}
+        assert not subs["DCF Valuation"].available
+        assert subs["Earnings Quality"].score == 80.0  # beat rate 75% -> 80, cash ratio ignored
 
     def test_score_is_bounded(self):
         scorer = ValuationScorer()

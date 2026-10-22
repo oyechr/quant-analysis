@@ -15,6 +15,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
+from ..scoring.dimensions import FINANCIAL_SECTORS
+
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 BENEISH_THRESHOLD = -1.78  # above = likely manipulator (Beneish 1999)
@@ -28,7 +30,7 @@ DATA_COVERAGE_MIN = 0.60
 
 # Altman Z and interest cover are built for industrial companies; for banks
 # and insurers leverage and interest are the business model.
-_FINANCIAL_SECTORS = ("financial services", "financial")
+_FINANCIAL_SECTORS = FINANCIAL_SECTORS
 # Altman's samples left out financials and utilities: regulated utilities run
 # on heavy debt and negative working capital without being distressed
 _ALTMAN_EXCLUDED_SECTORS = (*_FINANCIAL_SECTORS, "utilities")

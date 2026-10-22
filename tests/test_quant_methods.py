@@ -359,3 +359,53 @@ class TestAltmanZ:
 
         expected = 1.2 * 0.2 + 1.4 * 0.3 + 3.3 * 0.1 + 0.6 * (1500 / 500) + 1.0 * 0.8
         assert analyzer.calculate_altman_z_score() == pytest.approx(expected)
+
+
+class TestBeneish:
+    def _analyzer(self, revenue_now, revenue_before):
+        from src.analysis.fundamental import FundamentalAnalyzer
+
+        def frame(rows):
+            return pd.DataFrame(
+                {
+                    "2025-12-31": {k: v[0] for k, v in rows.items()},
+                    "2024-12-31": {k: v[1] for k, v in rows.items()},
+                }
+            )
+
+        income = frame(
+            {
+                "Total Revenue": (revenue_now, revenue_before),
+                "Cost Of Revenue": (revenue_now * 0.6, revenue_before * 0.6),
+                "Net Income": (10.0, 8.0),
+                "Selling General And Administration": (20.0, 18.0),
+                "Reconciled Depreciation": (5.0, 5.0),
+            }
+        )
+        balance = frame(
+            {
+                "Accounts Receivable": (30.0, 28.0),
+                "Total Assets": (1000.0, 950.0),
+                "Current Assets": (300.0, 290.0),
+                "Net PPE": (400.0, 390.0),
+                "Current Liabilities": (200.0, 190.0),
+                "Long Term Debt": (100.0, 100.0),
+            }
+        )
+        cash = frame({"Operating Cash Flow": (12.0, 11.0)})
+        return FundamentalAnalyzer(
+            {},
+            {
+                "income_stmt_annual": income,
+                "balance_sheet_annual": balance,
+                "cash_flow_annual": cash,
+            },
+        )
+
+    def test_scores_normal_growth(self, default_config):
+        result = self._analyzer(330.0, 300.0).calculate_beneish_m_score()
+        assert result is not None
+        assert result["components"]["sgi"] == pytest.approx(1.1)
+
+    def test_skipped_when_sales_more_than_tripled(self, default_config):
+        assert self._analyzer(310.0, 1.0).calculate_beneish_m_score() is None

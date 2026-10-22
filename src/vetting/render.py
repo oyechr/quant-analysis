@@ -329,6 +329,8 @@ def _verdict_section(data: Dict[str, Any], sym: str) -> Section:
             blocks.append(line)
         if fv.get("currency_note"):
             blocks.append(fv["currency_note"])
+        if fv.get("model_note"):
+            blocks.append(fv["model_note"])
     else:
         blocks.append("No model valuations available")
 

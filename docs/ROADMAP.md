@@ -19,7 +19,7 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 
 ## Current state and next session (updated 2026-10-22)
 
-Everything through 2d and `quant import-portfolio` is committed and pushed (d885f5b). Phase 3 (`quant review`) is committed on `main` (not pushed); all tests pass offline (483 passed, 27 skipped). Claude's shell still can't reach Yahoo (TLS interception in the sandbox), so live checks are for the user to run. Once the user has run `review` live, the local `data/` cache lets Claude rerun it offline. Next: the open items under 3 below, then Phase 4 (Track).
+Everything through 2d and `quant import-portfolio` is committed and pushed (d885f5b). Phase 3 (`quant review`) is committed on `main` (not pushed); all tests pass offline (487 passed, 27 skipped). Claude's shell still can't reach Yahoo (TLS interception in the sandbox), so live checks are for the user to run. Once the user has run `review` live, the local `data/` cache lets Claude rerun it offline. Next: Phase 4 (Track).
 
 **Portfolio input:** Nordnet's API is closed to retail customers (paid partner access only), and there is no API code in this repo. The supported input is the holdings export downloaded from Nordnet's web app, one file per account, combined with `quant import-portfolio`. Rerun the import whenever holdings change.
 
@@ -34,7 +34,10 @@ Everything through 2d and `quant import-portfolio` is committed and pushed (d885
    - **`None` from yfinance:** for earnings dates of funds and new listings, `_fetch_resource` now turns `None` into an empty frame.
    - **Financials:** the negative-FCF flag and the FCF test for dividend cover now skip banks and insurers (their payout ratio is still checked), as the Altman and interest-cover rules already did. The "Only n/8 Beneish components" message is now info-level, not a warning.
    - **Exit rule (the user's choice):** Exit now needs a Sell or Strong Sell signal. A high-severity red flag with a Hold or Buy signal becomes the new **Review** action ("look into the flag before selling"), because Altman and Beneish have known false positives: large investment-grade telecoms read as distressed on Altman, and acquisitive companies trip Beneish. `vet` still says Pass for these.
-   - **Still open:** Beneish on a tiny revenue base gives nonsense (M in the hundreds when sales grow several hundredfold from almost nothing). Consider skipping Beneish when prior-year revenue is too small, or winsorizing the indices like Beneish (1999). The risk-parity targets are low for volatile names (a ~2% target next to a ~9% weight), so `review` trims them; decide whether that's the overweight rule to keep. Banks still pick up FCF-based weakness in the fundamental *score* (only the red flags skip financials now).
+   - **Follow-ups (done 2026-10-22):**
+     - **Beneish** is skipped when sales more than tripled (`BENEISH_MAX_SGI` 3.0 in `analysis/fundamental.py`; Beneish's manipulators averaged 1.6). From a near-zero base the score ran into the hundreds.
+     - **Banks and insurers in the score:** `scoring.dimensions.is_financial(info)` drops the inputs built on cash flow. That means the FCF DCF and the cash-backed part of Earnings Quality in valuation, and Altman, Beneish and Accruals in fundamentals. They're judged on Piotroski, growth, ROE, P/E, PEG, dividends and earnings beats. `vet`'s fair value table leaves out the DCF and Monte Carlo for them (it keeps analyst targets and the DDM) and says why. The red flags use the same sector list.
+     - **Risk-parity targets:** kept. On the live portfolio, equal weight (1/N) would only have changed one thing, wrongly trimming a broad ETF, and inverse-volatility capped at 0.5-2x of 1/N changed nothing.
 
 **Portfolio input as built:**
 - `src/portfolio/nordnet.py` provides `read_nordnet_holdings`, `load_ticker_map`, `combine_holdings` and `write_portfolio`. The CLI command is `quant import-portfolio EXPORTS... [--map] [--out] [--label N=NAME] [--verify]`.

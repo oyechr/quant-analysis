@@ -85,6 +85,21 @@ def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
 
 
+FINANCIAL_SECTORS = ("financial services", "financial")
+
+
+def is_financial(ticker_info: Optional[Dict[str, Any]]) -> bool:
+    """
+    Banks and insurers. Their operating cash flow is mostly deposits, loans
+    and float moving through, so cash-flow-based measures (FCF DCF, OCF vs
+    earnings, accruals) and the industrial models built on them (Altman Z,
+    Beneish M) say little about them; they're judged on earnings, returns,
+    P/E, P/B and dividends instead.
+    """
+    sector = str((ticker_info or {}).get("sector") or "").lower()
+    return sector in FINANCIAL_SECTORS
+
+
 def _linear_scale(value: float, worst: float, best: float, invert: bool = False) -> float:
     """
     Linearly scale a value to 0-100.
@@ -482,6 +497,9 @@ class FundamentalScorer:
 
         # 1. Piotroski F-Score (weight: 0.25)
         quality = analysis.get("quality_scores", {})
+        if is_financial(ticker_info):
+            # Altman, Beneish and accruals don't apply (see is_financial)
+            quality = {k: v for k, v in quality.items() if k == "piotroski_f"}
         f_score = _safe_float(quality.get("piotroski_f"))
         sub_scores.append(self._score_piotroski(f_score, strengths, concerns))
 
@@ -1196,9 +1214,13 @@ class ValuationScorer:
         strengths: List[str] = []
         concerns: List[str] = []
 
+        # A free-cash-flow DCF and cash-backed earnings don't apply to banks
+        # and insurers (see is_financial)
+        financial = is_financial(ticker_info)
+
         # 1. DCF Valuation (weight: 0.25)
         dcf = valuation_data.get("dcf_valuation", {})
-        dcf_premium = _safe_float(dcf.get("discount_premium_pct"))
+        dcf_premium = None if financial else _safe_float(dcf.get("discount_premium_pct"))
         dcf_error = dcf.get("error")
         sub_scores.append(self._score_dcf(dcf_premium, dcf_error, strengths, concerns))
 
@@ -1234,7 +1256,11 @@ class ValuationScorer:
 
         # 6. Earnings Quality (weight: 0.15)
         earnings = valuation_data.get("earnings_analysis", {})
-        earnings_quality_score = _safe_float((earnings.get("earnings_quality") or {}).get("score"))
+        earnings_quality_score = (
+            None
+            if financial
+            else _safe_float((earnings.get("earnings_quality") or {}).get("score"))
+        )
         beat_rate = _safe_float((earnings.get("surprise_stats") or {}).get("beat_rate"))
         sub_scores.append(
             self._score_earnings_quality(earnings_quality_score, beat_rate, strengths, concerns)
