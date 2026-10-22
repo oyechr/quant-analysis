@@ -32,7 +32,17 @@ class DimensionWeight:
 
 @dataclass
 class SignalThresholds:
-    """Score thresholds for signal classification"""
+    """
+    Score thresholds for signal classification.
+
+    These are rules of thumb, not calibrated cut-offs. `quant backtest` found
+    no edge in the price-only part of the score (technical + risk): over
+    2021-10 to 2026-09 on sp100 and OBX, the bands' 1-6 month returns against
+    the benchmark did not rise from Sell to Buy, and Buy did worst on sp100.
+    Fundamental and valuation scores, most of the composite's weight, can't
+    be backtested with Yahoo's restated statements. Read a signal as a
+    summary of the score, not a forecast.
+    """
 
     strong_buy: float = 80.0
     buy: float = 65.0

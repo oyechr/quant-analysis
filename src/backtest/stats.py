@@ -146,16 +146,20 @@ def band_table(
     return rows
 
 
+RETURN_KINDS = ("excess", "alpha", "ret")  # vs benchmark, beta-adjusted, raw
+
+
 def summarize(
     obs: pd.DataFrame,
     horizons: Sequence[int],
     thresholds: Optional[SignalThresholds] = None,
 ) -> Dict[str, Any]:
-    """Every table, on returns relative to the benchmark and on raw returns."""
+    """Every table, for each kind of return the observations have."""
     return {
         kind: {
             "signals": signal_stats(obs, horizons, kind),
             "bands": band_table(obs, horizons, thresholds, kind),
         }
-        for kind in ("excess", "ret")
+        for kind in RETURN_KINDS
+        if f"{kind}_{horizons[0]}m" in obs
     }

@@ -92,7 +92,7 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 - Valuation weighs DCF, P/E, PEG, FCF yield, dividend sustainability and earnings quality. Banks and insurers skip the cash-flow measures (DCF, FCF yield)
 - Configurable presets: ``default``, ``value``, ``growth``, ``income``
 - Scorecard output with strengths and concerns
-- Buy/Hold/Sell bands: Strong Buy 80+, Buy 65-80, Hold 50-65, Sell 35-50, Strong Sell below 35. ``quant backtest`` shows how the price-based part of these has done
+- Buy/Hold/Sell bands: Strong Buy 80+, Buy 65-80, Hold 50-65, Sell 35-50, Strong Sell below 35. **These are rules of thumb, not forecasts:** the backtest found no edge in the price-based part of the score, and the fundamental and valuation parts can't be backtested (see ``quant backtest``). Read a signal as a summary of the score
 
 ### Backtest
 
@@ -478,6 +478,14 @@ At every month-end of the last ``--years`` years, each ticker is scored using on
 | Signal bands | Mean return vs the benchmark, and the share of stocks beating it, for each Buy/Hold/Sell band of the composite. Useful bands rise from Strong Sell to Strong Buy |
 
 Each statistic is computed across tickers within a month, then averaged over months. Intervals are 95% with Newey-West errors, since monthly samples of 3- and 6-month returns overlap; ``*`` marks an interval that excludes zero (50% for the hit rate).
+
+A beta-adjusted section repeats the IC and spread on returns net of market exposure, ``(return - rf) - beta x (benchmark - rf)``, with each stock's beta from the same one-year window as its signals. When the market rises, a low-volatility (low-beta) tilt trails it for that reason alone; this section separates that from stock picking. The band table's "All" row is the baseline to compare bands with: the average stock beat its benchmark, partly from survivorship and partly because ``^GSPC`` leaves out dividends.
+
+**What it found (October 2021 to September 2026, sp100 and OBX):**
+- The price-only composite has no edge. Its rank ICs are between -0.04 and +0.02 at every horizon, raw and beta-adjusted, and every interval includes zero. The bands don't rise from Sell to Buy; on sp100, Buy did worst (-0.5%, -0.3% and -0.1% vs the benchmark at 1, 3 and 6 months, against +0.5%, +1.5% and +3.0% for all stocks). The ``growth`` preset gives the same picture. So the Buy/Hold/Sell bands are documented as rules of thumb.
+- Strong Sell did best, but it's 1-2% of observations from a few rebounds after crashes (sp100: 2022's INTC, PLTR, AMD, META; OBX: shippers), too few to act on.
+- Low volatility lost: the calmest fifth trailed the most volatile fifth by about 5% over 3 months in both universes, beta-adjusted. About a third of the raw gap was market exposure (low-beta stocks trail a rising market). The rest suits this window's rally in volatile stocks (AI names on sp100, shipping and energy on OBX). It runs against the long-run evidence for the low-volatility anomaly, so it isn't a reason to change the risk score yet.
+- Momentum (12-1) leaned positive (IC +0.01 to +0.05) but within noise.
 
 Limits, also printed with the results:
 - Fundamental and valuation scores are not tested. Yahoo serves the latest restated statements with no publication dates, so using them at a past date would leak the future.

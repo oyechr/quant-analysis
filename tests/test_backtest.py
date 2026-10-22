@@ -86,6 +86,19 @@ class TestObservations:
         assert row["composite"] is not None and row["signal"] is not None
         assert row["momentum"] > 0 and row["low_vol"] is not None
 
+    def test_beta_adjusted_return(self, default_config):
+        prices = make_prices("T", days=600, end=pd.Timestamp("2026-10-21"), seed=5)
+        bench = make_prices("^GSPC", days=600, end=pd.Timestamp("2026-10-21"), seed=6)
+
+        row = {r["month"]: r for r in self._rows(prices, bench, horizons=(3,))}["2026-03"]
+
+        rf = (1 + default_config.risk_free_rate) ** (3 / 12) - 1
+        bench_ret = row["ret_3m"] - row["excess_3m"]
+        assert row["beta"] is not None
+        assert row["alpha_3m"] == pytest.approx(
+            (row["ret_3m"] - rf) - row["beta"] * (bench_ret - rf)
+        )
+
     def test_no_return_past_the_last_complete_month(self):
         rows = {r["month"]: r for r in self._rows(_steady("T"), _steady("^GSPC"))}
         assert rows["2026-08"]["ret_1m"] is not None
@@ -195,9 +208,18 @@ class TestRunBacktest:
             excess["signals"]["momentum"]["1m"]["ic"]["n"] == 11
         )  # the last month has no 1m return
         assert {row["band"] for row in excess["bands"]} >= {"Hold", "All"}
+        assert set(data["summary"]) == {"excess", "alpha", "ret"}
 
         text = render_text(data)
-        for title in ("RANK IC", "QUINTILE SPREAD", "HIT RATE", "SIGNAL BANDS", "CAVEATS"):
+        titles = (
+            "RANK IC",
+            "QUINTILE SPREAD",
+            "HIT RATE",
+            "BETA-ADJUSTED",
+            "SIGNAL BANDS",
+            "CAVEATS",
+        )
+        for title in titles:
             assert title in text
         assert "Not tested: BAD" in text
 

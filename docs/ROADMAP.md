@@ -14,12 +14,12 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 2d | DCF fix: two-stage fade, standard WACC, reverse DCF | Done (live-checked on AAPL and EQNR.OL, 2026-10-22) |
 | 3 | Review: portfolio file -> exit / review / trim / hold / add advice | Done (live run on the user's portfolio, 2026-10-22; tuning after first use) |
 | 4 | Track: watchlist, score history, `quant changes` | Done (first live `changes` run OK, 2026-10-22; second-day deltas not yet seen live) |
-| 5 | Trust: price-only backtest, calibrate signal thresholds | Backtest built offline (2026-10-22); live sp100 run and calibration pending |
+| 5 | Trust: price-only backtest, calibrate signal thresholds | Done (live on sp100 and OBX, 2026-10-23; thresholds documented as heuristics) |
 | 6 | Cleanup (do alongside the others) | Planned |
 
 ## Current state and next session (updated 2026-10-22)
 
-Everything through 2d and `quant import-portfolio` is committed and pushed (d885f5b). Phase 3 (`quant review`) is committed on `main` (ec9e262, not pushed). Phase 4 (Track) is on `main` (0cfc2f9, not pushed). The FCF-yield scoring fix and the Phase 5 backtest were built on 2026-10-22 and are uncommitted; all tests pass offline (531 passed, 27 skipped). Claude's shell still can't reach Yahoo (TLS interception in the sandbox), so live checks are for the user to run. Next: the user runs `quant backtest sp100` (and `obx`), then Phase 5 task 4: calibrate or document the signal thresholds from those results. Still open from Phase 4: seeing the second-day `changes` deltas live.
+Everything through 2d and `quant import-portfolio` is committed and pushed (d885f5b). Phase 3 (`quant review`) is committed on `main` (ec9e262, not pushed). Phase 4 (Track) is on `main` (0cfc2f9, not pushed). The FCF-yield scoring fix (c925113) and Phase 5 (backtest and threshold calibration) are on `main`; all tests pass offline (532 passed, 27 skipped). Claude's shell still can't reach Yahoo (TLS interception in the sandbox), so live checks are for the user to run, but the backtest can be rerun offline from the cached 10-year prices. Still open from Phase 4: seeing the second-day `changes` deltas live. Next: Phase 6 cleanup, or the smaller follow-ups listed under Phase 3, Phase 4 and Phase 5.
 
 **Portfolio input:** Nordnet's API is closed to retail customers (paid partner access only), and there is no API code in this repo. The supported input is the holdings export downloaded from Nordnet's web app, one file per account, combined with `quant import-portfolio`. Rerun the import whenever holdings change.
 
@@ -278,7 +278,9 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
   quant backtest obx --years 5
   quant backtest sp100 --config growth --no-save
   ```
-- **Task 4 next:** from the band table, check whether returns rise from Strong Sell to Strong Buy and whether Sell vs Hold vs Buy differ outside their intervals. If they do, keep or move the thresholds; if not, say in the README and `SignalThresholds` that the bands are heuristics. Momentum/low-vol ICs say whether the screen's factor weights hold up.
+- **Live results (2026-10-23, sp100 and OBX, 2021-10 to 2026-09; growth preset on sp100 the same):** the price-only composite has no edge. ICs are -0.04 to +0.02 raw and beta-adjusted, with every CI spanning zero. The bands aren't monotone, and Buy is the worst band on sp100. Strong Sell's large returns are 1-2% of observations from 2022 crash rebounds. Low volatility lost by about 5% (top minus bottom fifth over 3 months) beta-adjusted; about a third of the raw gap was beta. The average stock beat its benchmark (+0.5%/month sp100, +1.0% OBX: survivorship, and `^GSPC` has no dividends), so compare bands with the "All" row. GOGL.OL is in Wikipedia's OBX list but no longer on Yahoo.
+- **Task 4 outcome (the user's choice):** (a) the thresholds are documented as heuristics in the README and the `SignalThresholds` docstring, and the weights are unchanged (one 5-year window is too little to reweight on); (b) the backtest also records `beta` and `alpha_Hm = (ret - rf) - beta x (bench - rf)`, with beta from the signal's own one-year window, and prints a beta-adjusted IC/spread section. Not done: (c) lowering the technical weight.
+- **Possible follow-ups:** a total-return S&P benchmark (`^SP500TR`) for the backtest; a process pool if sp500 runs are too slow; rerunning yearly to see whether low volatility keeps losing.
 
 ## Phase 6: Cleanup (do alongside the other phases)
 
@@ -295,4 +297,4 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 
 Paste something like:
 
-> Read docs/ROADMAP.md, starting with "Current state and next session". Go through my live `quant backtest` results (Phase 5) and do task 4: calibrate or document the signal thresholds. Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings or the watchlist.
+> Read docs/ROADMAP.md, starting with "Current state and next session". Check my second-day `quant changes` output, then pick up Phase 6 cleanup or the listed follow-ups. Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings or the watchlist.

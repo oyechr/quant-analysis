@@ -68,9 +68,9 @@ def build_sections(data: Dict[str, Any]) -> List[Section]:
     if not summary:
         sections.append(Section("RESULTS", ["No observations: check the errors below."]))
     else:
-        signals = summary["signals"]
 
-        def table(stat: str, fmt) -> Table:
+        def table(stat: str, fmt, kind: str = "excess") -> Table:
+            signals = data["summary"][kind]["signals"]
             rows = [
                 [SIGNAL_LABELS.get(name, name), *(fmt(by_h[h][stat]) for h in horizons)]
                 for name, by_h in signals.items()
@@ -90,6 +90,24 @@ def build_sections(data: Dict[str, Any]) -> List[Section]:
                 "HIT RATE (months the top fifth beat the bottom fifth)",
                 [table("hit_rate", lambda ci: _ci(ci, "{:.0%}", centre=0.5))],
             ),
+        ]
+        if "alpha" in data["summary"]:
+            sections.append(
+                Section(
+                    "BETA-ADJUSTED (returns net of each stock's beta x benchmark)",
+                    [
+                        "Rank IC",
+                        table("ic", lambda ci: _ci(ci, "{:+.3f}"), "alpha"),
+                        "",
+                        "Quintile spread",
+                        table("spread", lambda ci: _ci(ci, "{:+.1%}"), "alpha"),
+                        "",
+                        "Where this differs from the tables above, the signal mostly picks",
+                        "stocks that move more or less than the market, not better ones.",
+                    ],
+                )
+            )
+        sections += [
             Section(
                 "SIGNAL BANDS (price-only composite)",
                 [

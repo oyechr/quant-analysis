@@ -17,6 +17,14 @@ Fundamental and valuation scores are left out on purpose: Yahoo serves the
 latest restated statements with no publication dates, so scoring a past date
 with them would use information nobody had then.
 
+Returns are recorded three ways:
+  - ret_Hm: the raw return over the next H months
+  - excess_Hm: minus the benchmark's return
+  - alpha_Hm: net of market exposure, (ret - rf) - beta * (benchmark - rf),
+    with beta from the same one-year window as the signals. Without this, a
+    low-volatility (low-beta) tilt looks like a losing signal whenever the
+    market rises.
+
 Prices are Yahoo's adjusted closes (splits and dividends), so returns are
 total returns. A signal is assumed to be traded at the close it was computed
 from, with no costs.
@@ -31,6 +39,7 @@ import pandas as pd
 
 from ..analysis.risk import RiskMetrics
 from ..analysis.technical import TechnicalAnalyzer
+from ..config import get_config
 from ..data_fetcher import DataFetcher
 from ..discovery.factor_ranking import inverse_volatility, momentum_12_1
 from ..markets import benchmark_for
@@ -90,7 +99,7 @@ def score_window(
     benchmark_ticker: str,
     config: ScoringConfig,
 ) -> Dict[str, Any]:
-    """Every signal from one lookback window of prices."""
+    """Every signal from one lookback window of prices, plus the window's beta."""
     technical = TechnicalAnalyzer(window)
     technical.calculate_all_indicators()
     risk = RiskMetrics(benchmark_ticker=benchmark_ticker).calculate_scoring_metrics(
@@ -112,6 +121,7 @@ def score_window(
         "risk": result.risk.score if result.risk else None,
         "momentum": momentum_12_1(close),
         "low_vol": inverse_volatility(close),
+        "beta": (risk.get("market_risk") or {}).get("beta"),
     }
 
 
@@ -131,6 +141,7 @@ def ticker_observations(
     bench_dates = trading_dates(pd.DatetimeIndex(benchmark.index))
     bench_ends = month_end_positions(pd.DatetimeIndex(benchmark.index))
     last_month = months[-1]
+    risk_free = get_config().risk_free_rate
 
     rows: List[Dict[str, Any]] = []
     for month in months:
@@ -150,9 +161,10 @@ def ticker_observations(
             "benchmark": benchmark_ticker,
             **score_window(window, benchmark_window, benchmark_ticker, config),
         }
+        beta = row.get("beta")
         for h in horizons:
             target = month + h
-            ret = excess = None
+            ret = excess = alpha = None
             # Only complete months: the current month's last bar isn't its month-end
             if target <= last_month and target in ends.index:
                 ret = float(close.iloc[int(ends[target])] / close.iloc[i] - 1)
@@ -163,8 +175,12 @@ def ticker_observations(
                         - 1
                     )
                     excess = ret - bench_ret
+                    if beta is not None:
+                        rf = (1 + risk_free) ** (h / 12) - 1
+                        alpha = (ret - rf) - beta * (bench_ret - rf)
             row[f"ret_{h}m"] = ret
             row[f"excess_{h}m"] = excess
+            row[f"alpha_{h}m"] = alpha
         rows.append(row)
     return rows
 
