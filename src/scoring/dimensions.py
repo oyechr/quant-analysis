@@ -9,6 +9,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from ..analysis.fundamental import altman_zones
 from .config import ScoringConfig
 
 logger = logging.getLogger(__name__)
@@ -509,7 +510,8 @@ class FundamentalScorer:
 
         # 2. Altman Z-Score (weight: 0.20)
         z_score = _safe_float(quality.get("altman_z"))
-        sub_scores.append(self._score_altman_z(z_score, strengths, concerns))
+        model = quality.get("altman_model") or "Z"
+        sub_scores.append(self._score_altman_z(z_score, model, strengths, concerns))
 
         # 3. Revenue Growth (weight: 0.15)
         growth = analysis.get("growth_rates", {})
@@ -582,26 +584,38 @@ class FundamentalScorer:
         )
 
     def _score_altman_z(
-        self, z_score: Optional[float], strengths: List[str], concerns: List[str]
+        self,
+        z_score: Optional[float],
+        model: str,
+        strengths: List[str],
+        concerns: List[str],
     ) -> SubScore:
         if z_score is None:
             return SubScore(name="Altman Z-Score", score=50.0, weight=0.20, available=False)
 
-        if z_score > self.params.z_score_safe:
+        # The original Z uses the configured cut-offs; Z'' (non-manufacturers) its own
+        if model == "Z":
+            grey, safe = self.params.z_score_grey, self.params.z_score_safe
+        else:
+            grey, safe = altman_zones(model)
+        if z_score > safe:
             # Safe zone: score 70-100 based on how far above threshold
-            score = 70.0 + min((z_score - self.params.z_score_safe) * 5, 30.0)
+            score = 70.0 + min((z_score - safe) * 5, 30.0)
             label = "Safe zone"
-            strengths.append(f"Altman Z-Score {z_score:.2f}  -  safe zone (low bankruptcy risk)")
-        elif z_score > self.params.z_score_grey:
+            strengths.append(
+                f"Altman {model}-Score {z_score:.2f}  -  safe zone (low bankruptcy risk)"
+            )
+        elif z_score > grey:
             # Grey zone: 40-70
-            range_size = self.params.z_score_safe - self.params.z_score_grey
-            score = 40.0 + ((z_score - self.params.z_score_grey) / range_size) * 30.0
+            score = 40.0 + ((z_score - grey) / (safe - grey)) * 30.0
             label = "Grey zone"
         else:
             # Distress zone: 0-40
-            score = max(z_score / self.params.z_score_grey * 40.0, 0.0)
+            score = max(z_score / grey * 40.0, 0.0)
             label = "Distress zone"
-            concerns.append(f"Altman Z-Score {z_score:.2f}  -  financial distress risk")
+            concerns.append(f"Altman {model}-Score {z_score:.2f}  -  financial distress risk")
+        if model != "Z":
+            label += f" ({model})"
 
         return SubScore(
             name="Altman Z-Score",

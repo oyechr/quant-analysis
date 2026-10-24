@@ -315,12 +315,12 @@ Every live run so far has turned up a calculation bug the tests didn't catch (Al
 6. Risk (2b54d12): Sortino used the standard deviation of the losing days instead of the standard downside deviation; parametric VaR used a random z-score.
 7. Composite (2731fd4): a dimension with no usable data scored 50 at full weight.
 8. Williams %R (93a5118): the same jump at the overbought line that MFI had.
+9. After the live check (the user's choice): Altman's original Z (fitted on manufacturers) is used only for Industrials, Basic Materials and Energy; everything else uses Altman's Z'' (6.56 X1 + 3.26 X2 + 6.72 X3 + 1.05 book equity / liabilities; distress below 1.10, safe above 2.60). The model is recorded as `quality_scores.altman_model`; reports without it are read as Z. On the user's portfolio, two telecom/packaging Review flags went away (Telenor 1.80 -> Z'' 1.91, Amcor) and two stayed (AT&T, SoftwareONE). AAPL's Altman sub-score drops from 100 to 64 (small book equity after buybacks), taking it from Buy 65 to Hold 63. Also: "minor red flags" in the verdict counts medium flags only (8fe8663).
 
 **Noted, not changed:**
 
 - The DCF discounts Yahoo's free cash flow (operating cash flow minus capex) at WACC, then subtracts net debt. Under US GAAP operating cash flow is after interest, so leveraged companies come out slightly low; adding back after-tax interest would double-count for IFRS reporters that put interest paid under financing, and Yahoo doesn't say which. A proper FCFF (from EBIT) is a model change; consider it in Phase 8.
 - `review`'s weighted beta uses Yahoo's beta (vs the S&P 500; EQNR -0.73), and the risk-parity targets use local-currency returns rather than NOK returns. Both belong in Phase 7's portfolio exposure work.
-- Altman's original Z is calibrated on manufacturers; Z'' would suit non-manufacturers better. A model choice, left as is.
 - Not reviewed in depth (display and context more than verdicts): trade levels, peers, and the finta indicator calculations.
 
 ## Phase 7: Construct (portfolio exposure and rebalancing), outline

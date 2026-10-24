@@ -268,7 +268,7 @@ def build_brief_context(
         f"Net margin: {_fmt(margins.get('net_margin'))}%",
         f"ROE: {_fmt(dupont.get('roe_reported'))}%  Asset turnover: {_fmt(dupont.get('asset_turnover'))}",
         f"Piotroski F-Score: {quality.get('piotroski_f', 'N/A')}/9  "
-        f"Altman Z-Score: {_fmt(quality.get('altman_z'))}",
+        f"Altman {quality.get('altman_model') or 'Z'}-Score: {_fmt(quality.get('altman_z'))}",
         "",
     ]
 

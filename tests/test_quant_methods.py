@@ -353,12 +353,53 @@ class TestAltmanZ:
         )
         income = pd.DataFrame({"2025-12-31": {"EBIT": 100.0, "Total Revenue": 800.0}})
         analyzer = FundamentalAnalyzer(
-            {"market_cap": 1500.0},
+            {"market_cap": 1500.0, "sector": "Industrials"},
             {"balance_sheet_annual": balance, "income_stmt_annual": income},
         )
 
         expected = 1.2 * 0.2 + 1.4 * 0.3 + 3.3 * 0.1 + 0.6 * (1500 / 500) + 1.0 * 0.8
+        assert analyzer.altman_model() == "Z"
         assert analyzer.calculate_altman_z_score() == pytest.approx(expected)
+
+    def test_non_manufacturers_use_z_double_prime(self, default_config):
+        """Z'' = 6.56 WC/TA + 3.26 RE/TA + 6.72 EBIT/TA + 1.05 book equity/TL."""
+        from src.analysis.fundamental import FundamentalAnalyzer, altman_zones
+
+        balance = pd.DataFrame(
+            {
+                "2025-12-31": {
+                    "Current Assets": 400.0,
+                    "Current Liabilities": 200.0,
+                    "Total Assets": 1000.0,
+                    "Retained Earnings": 300.0,
+                    "Total Liabilities Net Minority Interest": 500.0,
+                    "Stockholders Equity": 500.0,
+                }
+            }
+        )
+        income = pd.DataFrame({"2025-12-31": {"EBIT": 100.0}})  # no sales needed
+        analyzer = FundamentalAnalyzer(
+            {"sector": "Communication Services"},
+            {"balance_sheet_annual": balance, "income_stmt_annual": income},
+        )
+
+        expected = 6.56 * 0.2 + 3.26 * 0.3 + 6.72 * 0.1 + 1.05 * (500 / 500)
+        assert analyzer.altman_model() == "Z''"
+        assert analyzer.calculate_altman_z_score() == pytest.approx(expected)
+        assert altman_zones("Z''") == (1.10, 2.60)
+        assert altman_zones(None) == (1.81, 2.99)  # reports from before Z''
+
+    def test_red_flag_uses_the_models_distress_line(self):
+        from src.vetting.red_flags import check_altman
+
+        def report(z, model):
+            quality = {"altman_z": z, "altman_model": model}
+            return {"info": {}, "fundamental_analysis": {"analysis": {"quality_scores": quality}}}
+
+        today = pd.Timestamp("2026-10-24").to_pydatetime()
+        assert check_altman(report(1.5, "Z''"), today) == []  # grey for Z''
+        assert check_altman(report(1.5, "Z"), today)  # distress for Z
+        assert check_altman(report(1.0, "Z''"), today)
 
 
 class TestBeneish:

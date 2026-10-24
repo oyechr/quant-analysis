@@ -4,7 +4,7 @@ Analyzes financial statements and calculates fundamental metrics
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -18,6 +18,18 @@ logger = logging.getLogger(__name__)
 # Beneish's manipulators averaged a sales growth index of 1.6 (Beneish 1999);
 # past 3x (sales tripled) the base year is too small for the model to mean anything
 BENEISH_MAX_SGI = 3.0
+
+# Altman's original Z was fitted on manufacturers; its sales/assets and market
+# cap terms misjudge asset-heavy service companies (telecoms), for which Altman's
+# Z'' (1995) drops sales and uses book equity. Yahoo sector names, lower case.
+ALTMAN_MANUFACTURING_SECTORS = ("industrials", "basic materials", "energy")
+# Model -> (distress below, safe above)
+ALTMAN_ZONES: Dict[str, Tuple[float, float]] = {"Z": (1.81, 2.99), "Z''": (1.10, 2.60)}
+
+
+def altman_zones(model: Optional[str]) -> Tuple[float, float]:
+    """(distress below, safe above) for a model; reports from before Z'' mean Z."""
+    return ALTMAN_ZONES.get(model or "Z", ALTMAN_ZONES["Z"])
 
 
 class FundamentalAnalyzer:
@@ -399,23 +411,26 @@ class FundamentalAnalyzer:
 
     # ==================== Quality Scores ====================
 
+    def altman_model(self) -> str:
+        """The Altman model for this company's sector (see ALTMAN_MANUFACTURING_SECTORS)."""
+        sector = str(self.info.get("sector") or "").lower()
+        return "Z" if sector in ALTMAN_MANUFACTURING_SECTORS else "Z''"
+
     def calculate_altman_z_score(self) -> Optional[float]:
         """
-        Calculate Altman Z-Score for bankruptcy prediction
+        Altman Z-Score for bankruptcy risk, in the model that fits the sector
+        (`altman_model`; zones in `altman_zones`).
 
-        Z = 1.2*X1 + 1.4*X2 + 3.3*X3 + 0.6*X4 + 1.0*X5
+        Original Z (manufacturers, Altman 1968):
+            1.2*X1 + 1.4*X2 + 3.3*X3 + 0.6*X4 + 1.0*X5
+        Z'' (non-manufacturers, Altman 1995):
+            6.56*X1 + 3.26*X2 + 6.72*X3 + 1.05*X4''
 
-        Where:
         X1 = Working Capital / Total Assets
         X2 = Retained Earnings / Total Assets
         X3 = EBIT / Total Assets
-        X4 = Market Cap / Total Liabilities
+        X4 = Market Cap / Total Liabilities;  X4'' = Book Equity / Total Liabilities
         X5 = Sales / Total Assets
-
-        Interpretation:
-        > 2.99: Safe zone
-        1.81 - 2.99: Grey zone
-        < 1.81: Distress zone
 
         Returns:
             Z-Score value or None if insufficient data
@@ -428,73 +443,43 @@ class FundamentalAnalyzer:
             )
             return None
 
-        # Get balance sheet items
-        current_assets = self._get_value(self.balance_sheet_a, "Current Assets", 0)
-        current_liabilities = self._get_value(self.balance_sheet_a, "Current Liabilities", 0)
-        total_assets = self._get_value(self.balance_sheet_a, "Total Assets", 0)
-        retained_earnings = self._get_value(self.balance_sheet_a, "Retained Earnings", 0)
-        total_liabilities = self._get_value(
-            self.balance_sheet_a, "Total Liabilities Net Minority Interest", 0
-        )
+        model = self.altman_model()
+        balance, income = self.balance_sheet_a, self.income_stmt_a
+        inputs: Dict[str, Optional[float]] = {
+            "Current Assets": self._get_value(balance, "Current Assets", 0),
+            "Current Liabilities": self._get_value(balance, "Current Liabilities", 0),
+            "Total Assets": self._get_value(balance, "Total Assets", 0),
+            "Retained Earnings": self._get_value(balance, "Retained Earnings", 0),
+            "Total Liabilities": self._get_value(
+                balance, "Total Liabilities Net Minority Interest", 0
+            ),
+            "EBIT": self._get_value(income, "EBIT", 0),
+        }
+        if model == "Z":
+            inputs["Revenue"] = self._get_value(income, "Total Revenue", 0)
+            # Market cap in the statements' units (pence for a GBp listing)
+            inputs["Market Cap"] = market_cap_in_listing_units(self.info)
+        else:
+            inputs["Book Equity"] = self._get_value(
+                balance, "Stockholders Equity", 0
+            ) or self._get_value(balance, "Common Stock Equity", 0)
 
-        # Get income statement items
-        ebit = self._get_value(self.income_stmt_a, "EBIT", 0)
-        revenue = self._get_value(self.income_stmt_a, "Total Revenue", 0)
-
-        # Market cap in the statements' units (pence for a GBp listing)
-        market_cap = market_cap_in_listing_units(self.info)
-
-        # Calculate components
-        if not all(
-            [
-                current_assets,
-                current_liabilities,
-                total_assets,
-                retained_earnings,
-                total_liabilities,
-                ebit,
-                revenue,
-                market_cap,
-            ]
-        ):
-            missing = []
-            if not current_assets:
-                missing.append("Current Assets")
-            if not current_liabilities:
-                missing.append("Current Liabilities")
-            if not total_assets:
-                missing.append("Total Assets")
-            if not retained_earnings:
-                missing.append("Retained Earnings")
-            if not total_liabilities:
-                missing.append("Total Liabilities")
-            if not ebit:
-                missing.append("EBIT")
-            if not revenue:
-                missing.append("Revenue")
-            if not market_cap:
-                missing.append("Market Cap")
-
-            logger.info(f"Altman Z-Score incomplete: Missing {', '.join(missing)}")
+        missing = [name for name, value in inputs.items() if not value]
+        if missing:
+            logger.info(f"Altman {model}-Score incomplete: Missing {', '.join(missing)}")
             return None
+        v: Dict[str, float] = {name: float(value or 0.0) for name, value in inputs.items()}
 
-        # Type assertions for narrowing Optional[float] -> float
-        assert current_assets is not None and current_liabilities is not None
-        assert total_assets is not None and retained_earnings is not None
-        assert total_liabilities is not None and ebit is not None
-        assert revenue is not None and market_cap is not None
-
-        working_capital = current_assets - current_liabilities
-
-        x1 = working_capital / total_assets
-        x2 = retained_earnings / total_assets
-        x3 = ebit / total_assets
-        x4 = market_cap / total_liabilities
-        x5 = revenue / total_assets
-
-        z_score = 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
-
-        return float(z_score)
+        total_assets = v["Total Assets"]
+        x1 = (v["Current Assets"] - v["Current Liabilities"]) / total_assets
+        x2 = v["Retained Earnings"] / total_assets
+        x3 = v["EBIT"] / total_assets
+        if model == "Z":
+            x4 = v["Market Cap"] / v["Total Liabilities"]
+            x5 = v["Revenue"] / total_assets
+            return float(1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5)
+        x4 = v["Book Equity"] / v["Total Liabilities"]
+        return float(6.56 * x1 + 3.26 * x2 + 6.72 * x3 + 1.05 * x4)
 
     def calculate_piotroski_f_score(self) -> Optional[int]:
         """
@@ -1041,6 +1026,7 @@ class FundamentalAnalyzer:
             "dupont": self.calculate_dupont_analysis(),
             "quality_scores": {
                 "altman_z": self.calculate_altman_z_score(),
+                "altman_model": self.altman_model(),
                 "piotroski_f": self.calculate_piotroski_f_score(),
                 "beneish_m": self.calculate_beneish_m_score(),
                 "accruals_quality": self.calculate_accruals_quality(),
@@ -1240,15 +1226,19 @@ class FundamentalAnalyzer:
         # Altman Z-Score
         z_score = quality.get("altman_z")
         if z_score:
-            if z_score > self.config.z_score_safe:
+            model = quality.get("altman_model") or "Z"
+            distress, safe = altman_zones(model)
+            if z_score > safe:
                 z_interp = "Safe — low bankruptcy risk"
-            elif z_score > self.config.z_score_distress:
+            elif z_score > distress:
                 z_interp = "Grey zone — some financial stress"
             else:
                 z_interp = "Distress — elevated bankruptcy risk"
-            md.append(f"**Altman Z-Score: {z_score:.2f}** — {z_interp}")
+            md.append(f"**Altman {model}-Score: {z_score:.2f}** — {z_interp}")
             md.append("")
-            md.append("> *Predicts bankruptcy risk. Above 2.99 = safe, below 1.81 = danger.*")
+            md.append(
+                f"> *Predicts bankruptcy risk. Above {safe} = safe, below {distress} = danger.*"
+            )
             md.append("")
 
         # Piotroski F-Score

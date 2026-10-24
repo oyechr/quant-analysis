@@ -2,6 +2,7 @@
 
 from typing import Any, Dict, Optional
 
+from ..analysis.fundamental import altman_zones
 from ..markets import benchmark_name
 from ..scoring.scorer import ScoringResult
 from ..utils.report import format_number, get_currency_symbol
@@ -434,14 +435,16 @@ def render_report_markdown(
 
             z = quality.get("altman_z")
             if z:
+                model = quality.get("altman_model") or "Z"
+                distress, safe = altman_zones(model)
                 z_note = (
                     "Safe zone — low bankruptcy risk"
-                    if z > 2.99
+                    if z > safe
                     else "Grey zone — some financial stress"
-                    if z > 1.81
+                    if z > distress
                     else "DISTRESS zone — elevated bankruptcy risk"
                 )
-                md.append(f"- **Altman Z-Score: {z:.2f}** — {z_note}")
+                md.append(f"- **Altman {model}-Score: {z:.2f}** — {z_note}")
 
             f_score = quality.get("piotroski_f")
             if f_score is not None:

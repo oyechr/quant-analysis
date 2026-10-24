@@ -15,13 +15,13 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
+from ..analysis.fundamental import altman_zones
 from ..scoring.dimensions import FINANCIAL_SECTORS
 
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 BENEISH_THRESHOLD = -1.78  # above = likely manipulator (Beneish 1999)
 BENEISH_MIN_COMPONENTS = 5  # fewer inputs and the score is mostly defaults
-ALTMAN_DISTRESS = 1.81
 DILUTION_PCT_PER_YEAR = 3.0
 HEAVY_DILUTION_PCT_PER_YEAR = 10.0
 INTEREST_COVERAGE_MIN = 2.0
@@ -80,14 +80,17 @@ def check_beneish(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
 
 
 def check_altman(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
-    z = _num(_quality(report).get("altman_z"))
-    if z is None or z >= ALTMAN_DISTRESS or _sector(report) in _ALTMAN_EXCLUDED_SECTORS:
+    quality = _quality(report)
+    z = _num(quality.get("altman_z"))
+    model = quality.get("altman_model") or "Z"
+    distress, _ = altman_zones(model)
+    if z is None or z >= distress or _sector(report) in _ALTMAN_EXCLUDED_SECTORS:
         return []
     return [
         RedFlag(
             severity="high",
             title="Altman Z-Score in distress zone",
-            detail=f"Z = {z:.2f} (below {ALTMAN_DISTRESS}: elevated bankruptcy risk)",
+            detail=f"{model} = {z:.2f} (below {distress}: elevated bankruptcy risk)",
             rule="altman",
         )
     ]
