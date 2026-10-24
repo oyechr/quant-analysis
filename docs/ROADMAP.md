@@ -16,8 +16,8 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 4 | Track: watchlist, score history, `quant changes` | Done (second-day `changes` deltas verified live, 2026-10-24) |
 | 5 | Trust: price-only backtest, calibrate signal thresholds | Done (live on sp100 and OBX, 2026-10-23; thresholds documented as heuristics) |
 | 6 | Cleanup (do alongside the others) | Done (2026-10-24) |
-| 6b | Correctness review of the decision code | Done (2026-10-24; 10 fixes, live check pending) |
-| 7 | Construct: portfolio exposure and rebalance proposals | Planned (outline only) |
+| 6b | Correctness review of the decision code | Done (2026-10-24; 10 fixes, live-checked) |
+| 7 | Construct: portfolio exposure and rebalance proposals | Planned in detail (2026-10-24); next: 7a |
 | 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
 | - | Side items: decision journal, automation, quick wins | Planned (outline only) |
 
@@ -27,7 +27,7 @@ Phases 0-6 are done and on `main`. All tests pass offline (578 passed, none skip
 
 On 2026-10-24 the second-day `quant changes` run was verified live, which closed Phase 4. That session also fixed `chat`: it now rebuilds a report from an earlier day, prints the report date, and reads the right DDM, dividend and EPS fields. The chat quirks were fixed too: MFI is scored like RSI (it used to jump from about 2 to 20 at MFI 80), the ADX labels match the technical signals, the earnings strength states the beat rate, and the context no longer shows Yahoo's S&P beta. Then Phase 6 cleanup was completed (see Phase 6 below).
 
-Next (agreed 2026-10-24): Phase 6b, a correctness review of the code that drives decisions, then Phases 7 and 8. The side items can be done alongside. Phases 7, 8 and the side items are outlines, to be planned in detail before they're built.
+Phase 6b (the correctness review) is done and live-checked. Phase 7 was planned in detail on 2026-10-24 (see Phase 7 below). Build it in three parts, 7a, 7b and 7c, with a live check after each. Phase 8 and the side items are still outlines, to be planned in detail before they're built.
 
 **Portfolio input:** Nordnet's API is closed to retail customers (paid partner access only), and there is no API code in this repo. The supported input is the holdings export downloaded from Nordnet's web app, one file per account, combined with `quant import-portfolio`. Rerun the import whenever holdings change.
 
@@ -324,13 +324,88 @@ Every live run so far has turned up a calculation bug the tests didn't catch (Al
 - `review`'s weighted beta uses Yahoo's beta (vs the S&P 500; EQNR -0.73), and the risk-parity targets use local-currency returns rather than NOK returns. Both belong in Phase 7's portfolio exposure work.
 - Not reviewed in depth (display and context more than verdicts): trade levels, peers, and the finta indicator calculations.
 
-## Phase 7: Construct (portfolio exposure and rebalancing), outline
+## Phase 7: Construct (portfolio exposure and rebalancing)
 
-For restructuring the portfolio. `review` judges each holding alone and suggests risk-parity weights; this phase looks at the portfolio as a whole.
+For restructuring the portfolio. `review` judges each holding alone and suggests inverse-volatility weights; this phase looks at the portfolio as a whole. It has three parts, each with a live check before the next starts: **7a** exposure (in `review`), **7b** targets and limits (in `review`), and **7c** trade proposals (`quant rebalance`).
 
-- Exposure: by sector, country, currency and factor (value, quality, momentum, low volatility), concentration (top holdings, effective number of positions), portfolio beta and volatility, and groups of highly correlated holdings.
-- Rebalance proposal: from the holdings, `review` actions and candidates (screen output or watchlist), suggest concrete trades within user limits (maximum position, sector caps, cash to keep), with before/after risk and exposure.
-- Possibly a per-ticker target or cap in the portfolio file (a broad ETF deserves a larger weight than a single stock; see the Phase 3 follow-ups).
+**Decisions (the user's choices, 2026-10-24)**
+
+- Factor exposure is **holdings-based**: weighted averages of each holding's own characteristics and vet dimension scores. A returns-based Fama-French regression was not chosen: it needs a new download, lags 1-2 months, and a year of data gives noisy loadings. It could come back in Phase 8.
+- Targets are **equal risk contribution** (ERC): every holding contributes the same share of portfolio risk, with correlations. This replaces inverse volatility, which ignores correlations and so gives a correlated cluster as much as unrelated holdings. Per-ticker overrides in a targets file win.
+- Proposals may **resize holdings and buy candidates**: sell Exits, trim, add, and spend spare cash on the best watchlist or `--candidates` names that fit the limits.
+- Trades are **account-aware (basic)**: sell from ASK first when a holding is in both accounts; buys of non-EEA shares are AF-only (ASK only takes shares in EEA companies); show the estimated tax on gains realized in AF.
+
+**7a: Exposure (`src/portfolio/exposure.py`, shown in `review`)**
+
+1. **Returns in the base currency.** Convert each holding's closes to NOK with the daily FX series (`fx_symbol(listing, base)`, `major_currency` for GBp), forward-filling over each market's holidays. Use **weekly returns over 2 years** (about 104): daily closes in Oslo, Europe and New York happen at different times, which understates their correlation. This fixes the 6b note that targets used local-currency returns. `review`'s overlap check (`REDUNDANT_CORRELATION`) moves to the same matrix.
+2. **Covariance** with Ledoit-Wolf shrinkage towards the average-correlation target. With about 40 holdings and 104 weeks, the sample matrix is noisy. This is numpy only, with no new dependency.
+3. **Risk:** annualized portfolio volatility, and each holding's risk contribution RC_i = w_i (Σw)_i / w'Σw (these sum to 100%). Also summed by sector, country and currency, so the output can say "Energy: 15% of value, 28% of risk".
+4. **Beta**, from weekly NOK returns, against Oslo (`OSEBX.OL`) and against the world (iShares MSCI ACWI, `ACWI`, converted to NOK). It's computed per holding and for the portfolio, and replaces Yahoo's beta (against the S&P 500) in `review`. That closes the second 6b note.
+5. **Concentration:** top-5 and top-10 weight, and the effective number of positions (1 / Σw²) and of risk contributions (1 / ΣRC²).
+6. **Country:** add `country` to `get_ticker_info` (`INFO_CACHE_VERSION` 4). Funds show as "Fund". Yahoo's country is the headquarters, which is close to domicile (used for ASK in 7c), but not exactly the same.
+7. **Factor tilts (stocks only; funds are left out, and the coverage is shown):**
+   - Value: earnings yield (1 / P/E, forward if trailing is missing).
+   - Quality: ROE.
+   - Momentum: 12-1 month return (`momentum_12_1`).
+   - Low volatility: annualized volatility.
+
+   Each is the weighted average next to the four weighted vet dimension scores (50 is neutral). The holdings that contribute most to each tilt are named. These are descriptive, not statistical loadings.
+8. **Output:** the `review` Portfolio section gains a risk line (volatility, both betas, effective N), value vs risk by sector, country and currency, and the factor tilts. The summary table's Target column becomes the ERC target once 7b lands.
+
+**7b: Targets and limits**
+
+1. **`portfolio/targets.toml`** (gitignored, `--targets` to point elsewhere; read with `tomllib`, like `watchlist.toml`). Defaults apply when the file is missing:
+   ```toml
+   [limits]
+   max_position = 0.10    # of the portfolio
+   max_sector = 0.35      # today's SECTOR_LIMIT
+   cash_reserve = 0       # base currency, kept out of buys
+   min_trade = 2000       # base currency; smaller trades are dropped
+   max_new = 3            # new names per proposal
+   [ticker."XYZ.DE"]      # e.g. a broad ETF
+   target = 0.10          # fixed target weight; or max = 0.05
+   ```
+2. **`equal_risk_weights(cov, fixed)`:** ERC over the holdings without a fixed target, scaled into what the fixed ones leave. Then the position and sector caps are applied, and anything above a cap is spread over the rest pro rata. Exit holdings are left out (target 0). Review and Check holdings keep their current weight until looked into.
+3. Tests against the closed forms: with uncorrelated assets ERC equals inverse volatility; with equal volatilities and equal correlations it is equal weight. The risk contributions come out equal, and the caps hold.
+4. `review` uses these targets for Trim and Add, so its actions will shift. Compare the live output before and after.
+
+**7c: Rebalance proposals (`src/portfolio/rebalance.py`, `quant rebalance`)**
+
+1. **`propose_trades(review, exposure, limits, candidates, cash)`** is a pure function with explicit steps, testable one by one like `decide_action`:
+   1. Exit: sell all.
+   2. Review and Check: no trade.
+   3. Trim, or above `max_position`: sell down to the target or the cap.
+   4. Sector above `max_sector`: sell the lowest-scoring holdings in it until it fits.
+   5. Cash is `--cash` plus sale proceeds minus `cash_reserve`. Buy Add holdings up to their target, largest shortfall first.
+   6. Then buy candidates (`--candidates watchlist` or tickers; each is vetted). Only a Look deeper verdict qualifies, and not when it moves with a holding (correlation ≥ 0.80). Pick the best score first, at most `max_new`, each at the median target weight, cut down to fit the caps and the cash left.
+   7. Round to whole shares and drop trades below `min_trade`.
+2. **Accounts:** keep the per-account rows from `portfolio.csv` (today `load_portfolio` merges them):
+   - Sells come from ASK first.
+   - A buy is "ASK or AF" when the company's country is in the EEA, and "AF (not ASK-eligible)" otherwise. Funds are marked "check eligibility".
+   - A sale at a gain in AF shows the estimated tax at `AF_TAX_RATE` (0.3784, the 22% rate grossed up by 1.72). The shielding deduction (skjermingsfradrag) is ignored, and the output says so.
+3. **Output** leads with one line, e.g. "4 sells (82,000 NOK), 3 buys (75,000 NOK), cash left 7,000; volatility 14.2% -> 12.9%; Energy 38% -> 33%". Then:
+   - a trades table (ticker, buy/sell, shares, amount, account, reason, estimated tax);
+   - a before/after table (weights, risk contributions, sector, country and currency mix, betas, effective N);
+   - caveats: rule-based, not advice; no trading costs; covariance from 2 years of history; ASK eligibility is approximated from the headquarters country.
+4. **CLI:** `quant rebalance [PORTFOLIO] [--cash N] [--candidates watchlist|T1,T2] [--targets FILE] [--base NOK] [--config] [--workers] [--json] [--save]`. It runs `review_portfolio` (cheap on a warm cache), vets the candidates, and proposes. `--save` writes `portfolio/rebalance.md/json` (gitignored).
+
+**Also in this phase:** `review` records score history (the Phase 4 gap: pass `base_scoring` through `review_portfolio`).
+
+**Tests (offline, synthetic):**
+- NOK conversion with a synthetic FX series, including GBp.
+- Weekly resampling across different holiday calendars.
+- Shrinkage on a known matrix.
+- Risk contributions summing to 1.
+- The ERC closed forms and caps.
+- Each proposal step.
+- Account routing and tax.
+- An end-to-end `rebalance` on the fake market.
+
+**Done when:**
+- The tests above pass.
+- Live: `quant review` shows the exposure section (7a) and the ERC targets (7b).
+- Live: `quant rebalance` and `quant rebalance --cash N --candidates watchlist` give sensible trades on the user's portfolio.
+- The README and this file are updated. No real holdings go in committed files.
 
 ## Phase 8: Evidence (point-in-time fundamentals), outline
 
