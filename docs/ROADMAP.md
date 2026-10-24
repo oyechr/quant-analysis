@@ -16,7 +16,7 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 4 | Track: watchlist, score history, `quant changes` | Done (second-day `changes` deltas verified live, 2026-10-24) |
 | 5 | Trust: price-only backtest, calibrate signal thresholds | Done (live on sp100 and OBX, 2026-10-23; thresholds documented as heuristics) |
 | 6 | Cleanup (do alongside the others) | Done (2026-10-24) |
-| 6b | Correctness review of the decision code | In progress (2026-10-24) |
+| 6b | Correctness review of the decision code | Done (2026-10-24; 10 fixes, live check pending) |
 | 7 | Construct: portfolio exposure and rebalance proposals | Planned (outline only) |
 | 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
 | - | Side items: decision journal, automation, quick wins | Planned (outline only) |
@@ -304,6 +304,24 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 ## Phase 6b: Correctness review of the decision code
 
 Every live run so far has turned up a calculation bug the tests didn't catch (Altman X4, FCF yield never scored, DCF growth, MFI scoring, stale chat context). Review only the code that drives verdicts: the scoring dimensions, valuation (DCF/DDM/reverse DCF), the fundamental quality scores, the risk metrics, and the `review` actions. For each, check the formula against its standard definition, check units and currencies, and check edge cases (negative equity, banks and insurers, funds, missing data). Fix each finding with a test.
+
+**Findings, all fixed with tests (2026-10-24):**
+
+1. `calculate_cagr` into a loss: `pow()` went complex, and the `float()` from the mypy cleanup (92bbaf0) turned that into a crash of the whole fundamental analysis for any company whose earnings or FCF turned negative. No CAGR now for a non-positive start or end (dff321d).
+2. Dividends (91ec620): growth counted the unfinished current year as a full one (EQNR read -10%/yr; complete years give +40%); the sustainability score now takes the lower of the CAGR and the latest year's change (EQNR cut 40% in 2025); the Gordon DDM's perpetual growth is capped at 4%; Yahoo's yield is in percent, but values <= 1 were multiplied by 100 (AAPL showed 31%); flat dividends counted as unknown growth.
+3. London listings (d139dc1): statements are converted into pence, but Yahoo's market cap and ratios are in pounds, so FCF yield, P/S, P/B, the WACC weights and Altman X4 were 100x off (BARC.L FCF yield 3092%, P/B 0.0069). `fx.market_cap_in_listing_units`, and the ratio correction only runs for a real currency mismatch.
+4. Piotroski (39939e5): test 7 (no new shares) was never scored, so the F-Score topped out at 8 of 9; test 5 now uses leverage (debt / assets). Cash conversion is undefined for non-positive EBITDA.
+5. ROE (be2dcef): the units were guessed from the size, so AAPL's 149% scored as 1.5% ("Low"); a profitable company with negative equity was flagged as losing money.
+6. Risk (2b54d12): Sortino used the standard deviation of the losing days instead of the standard downside deviation; parametric VaR used a random z-score.
+7. Composite (2731fd4): a dimension with no usable data scored 50 at full weight.
+8. Williams %R (93a5118): the same jump at the overbought line that MFI had.
+
+**Noted, not changed:**
+
+- The DCF discounts Yahoo's free cash flow (operating cash flow minus capex) at WACC, then subtracts net debt. Under US GAAP operating cash flow is after interest, so leveraged companies come out slightly low; adding back after-tax interest would double-count for IFRS reporters that put interest paid under financing, and Yahoo doesn't say which. A proper FCFF (from EBIT) is a model change; consider it in Phase 8.
+- `review`'s weighted beta uses Yahoo's beta (vs the S&P 500; EQNR -0.73), and the risk-parity targets use local-currency returns rather than NOK returns. Both belong in Phase 7's portfolio exposure work.
+- Altman's original Z is calibrated on manufacturers; Z'' would suit non-manufacturers better. A model choice, left as is.
+- Not reviewed in depth (display and context more than verdicts): trade levels, peers, and the finta indicator calculations.
 
 ## Phase 7: Construct (portfolio exposure and rebalancing), outline
 
