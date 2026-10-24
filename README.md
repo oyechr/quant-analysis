@@ -400,7 +400,15 @@ Nordnet's API is closed to retail customers (paid partner access only), so the e
 
 ### ``quant review`` -- Exit / Review / Trim / Hold / Add for each holding
 
-Runs ``vet`` on every holding in ``portfolio/portfolio.csv``, values the holdings in one currency (NOK by default, using Yahoo FX rates), and compares each weight with a risk-parity (inverse-volatility) target. The output starts with one row per holding: action, weight, target, gain, score, verdict and the main reason. The portfolio view follows (beta, sector and currency mix, holdings that move together), then details for every holding that isn't a Hold.
+Runs ``vet`` on every holding in ``portfolio/portfolio.csv``, values the holdings in one currency (NOK by default, using Yahoo FX rates), and compares each weight with a risk-parity (inverse-volatility) target. The output starts with one row per holding: action, weight, share of the portfolio's risk, target, gain, score, verdict and the main reason. Next comes the portfolio view, then details for every holding that isn't a Hold. The portfolio view shows:
+
+- **Risk:** volatility, beta against Oslo (OSEBX) and the world (ACWI), and the effective number of positions, by value and by risk.
+- **Concentration:** the top-5 and top-10 weights.
+- **Mix:** by sector, country and currency, each as share of value / share of risk.
+- **Factor tilts:** weighted medians over the stocks of earnings yield (value), ROE (quality), 12-1 month return (momentum) and volatility, plus the weighted vet dimension scores.
+- **Overlap:** holdings that move together.
+
+The risk numbers, betas and correlations all use two years of weekly returns in the base currency. Prices are converted with the daily FX rate, because a NOK investor carries the currency risk. They're weekly because markets in different time zones close at different times, which makes daily correlations look lower than they are. The covariance is shrunk towards constant correlation (Ledoit-Wolf). A holding with less than 18 months of history is left out of the risk numbers, and the output names it.
 
 ```bash
 quant review                           # portfolio/portfolio.csv
@@ -412,7 +420,7 @@ quant review --json
 |--------|------|
 | Exit | A Sell or Strong Sell signal |
 | Review | A high-severity red flag (e.g. Altman Z distress, Beneish M) with a Hold or Buy signal: look into the flag before selling. These models have known false positives, so they don't trigger an Exit for a stock you own; ``vet`` still says Pass for a new candidate |
-| Trim | Weight is at least 1.5x its target and at least 2 points above it, or the holding moves with a larger one (daily-return correlation >= 0.80) |
+| Trim | Weight is at least 1.5x its target and at least 2 points above it, or the holding moves with a larger one (weekly-return correlation >= 0.80) |
 | Add | ``vet`` verdict is Look deeper, the weight is below target, and there's no overlap |
 | Hold | Everything else |
 | Check | No price data, usually a wrong ticker in ``portfolio/tickers.csv`` |
@@ -670,6 +678,7 @@ quant-analysis/
 |   +-- portfolio/
 |   |   +-- nordnet.py               # Nordnet holdings export -> portfolio.csv
 |   |   +-- review.py                # review_portfolio(): Exit / Trim / Hold / Add rules
+|   |   +-- exposure.py              # Risk, beta, concentration and factor tilts (weekly, base currency)
 |   |   +-- render.py                # Terminal + Markdown output for review
 |   +-- reporting/
 |   |   +-- generator.py             # Report file writing (runs the pipeline)
@@ -718,6 +727,7 @@ quant-analysis/
     +-- test_cli.py
     +-- test_comparator.py
     +-- test_discovery.py
+    +-- test_exposure.py
     +-- test_pipeline.py
     +-- test_portfolio.py
     +-- test_quant_methods.py

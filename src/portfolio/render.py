@@ -23,6 +23,8 @@ CAVEATS = [
     "Rule-based suggestions from free Yahoo data, not advice.",
     "Taxes are ignored apart from the AF/ASK note; selling outside an ASK realizes gains.",
     "Targets are inverse-volatility (risk-parity) weights over the holdings with price history.",
+    "Risk, beta and correlations use two years of weekly returns in the base currency.",
+    "Factor tilts describe the stocks held (weighted medians); they are not regression loadings.",
     "DCF limits from `quant vet` apply (cyclicals at a capex peak look expensive).",
 ]
 
@@ -78,6 +80,7 @@ def _summary_section(data: Dict[str, Any]) -> Section:
                 h["ticker"],
                 h["action"].upper(),
                 _share(h.get("weight")),
+                _share(h.get("risk_share")),
                 _share(h.get("target_weight")),
                 _pct(h.get("gain_pct"), 0),
                 f"{h['score']:.0f}" if h.get("score") is not None and checked else "",
@@ -87,9 +90,19 @@ def _summary_section(data: Dict[str, Any]) -> Section:
         )
     blocks.append(
         Table(
-            ["Ticker", "Action", "Weight", "Target", "Gain", "Score", "Verdict", "Main reason"],
+            [
+                "Ticker",
+                "Action",
+                "Weight",
+                "Risk",
+                "Target",
+                "Gain",
+                "Score",
+                "Verdict",
+                "Main reason",
+            ],
             rows,
-            "llrrrrll",
+            "llrrrrrll",
         )
     )
     return Section(title, blocks)
@@ -97,39 +110,98 @@ def _summary_section(data: Dict[str, Any]) -> Section:
 
 def _portfolio_section(data: Dict[str, Any]) -> Section:
     summary = data.get("summary") or {}
+    exposure = summary.get("exposure") or {}
     blocks: List[Block] = []
+
+    risk = []
+    if exposure.get("volatility") is not None:
+        risk.append(f"Volatility {exposure['volatility']:.1%}/yr")
+    betas = [b for b in exposure.get("betas") or [] if b.get("beta") is not None]
+    if betas:
+        risk.append("Beta " + ", ".join(f"{b['beta']:.2f} vs {b['benchmark']}" for b in betas))
+    if exposure.get("effective_positions") is not None:
+        line = f"Effective positions {exposure['effective_positions']:.0f}"
+        if exposure.get("effective_risk_positions") is not None:
+            line += f" (by risk {exposure['effective_risk_positions']:.0f})"
+        risk.append(line)
+    if risk:
+        blocks.append("   ".join(risk))
+
     facts = []
-    if summary.get("weighted_beta") is not None:
-        facts.append(f"Weighted beta {summary['weighted_beta']:.2f}")
+    if exposure.get("top5") is not None:
+        facts.append(f"Top 5 {exposure['top5']:.0%}, top 10 {exposure['top10']:.0%}")
+    largest = summary.get("largest") or {}
+    if largest.get("weight") is not None:
+        facts.append(f"Largest {largest['ticker']} {largest['weight']:.1%}")
     if summary.get("diversification_score") is not None:
         facts.append(
             f"Diversification {summary['diversification_score']}/100 "
             f"(average correlation {summary.get('average_correlation', 0):.2f})"
         )
-    largest = summary.get("largest") or {}
-    if largest.get("weight") is not None:
-        facts.append(f"Largest {largest['ticker']} {largest['weight']:.1%}")
     if facts:
         blocks.append("   ".join(facts))
 
     for flag in summary.get("concentration_flags") or []:
         blocks.append(f"!  {flag}")
 
-    sectors = summary.get("by_sector") or []
-    currencies = summary.get("by_currency") or []
-    if sectors:
-        blocks += ["", "By sector: " + _groups(sectors)]
-    if currencies:
-        blocks.append("By currency: " + _groups(currencies))
+    groups = [
+        (label, exposure.get(key) or [])
+        for label, key in (
+            ("By sector", "by_sector"),
+            ("By country", "by_country"),
+            ("By currency", "by_currency"),
+        )
+    ]
+    if any(rows for _, rows in groups):
+        blocks += ["", "Share of value / share of risk:"]
+        blocks += [f"  {label}: {_groups(rows)}" for label, rows in groups if rows]
+
+    factors = exposure.get("factors") or []
+    if factors:
+        blocks += ["", "Factor tilts (stocks only, weighted median):"]
+        blocks.append(
+            Table(
+                ["Factor", "Measure", "Median", "Lowest", "Highest", "Coverage"],
+                [
+                    [
+                        f["factor"],
+                        _MEASURES.get(f["measure"], f["measure"]),
+                        _factor_value(f["measure"], f.get("median")),
+                        f"{f['low']['ticker']} {_factor_value(f['measure'], f['low']['value'])}",
+                        f"{f['high']['ticker']} {_factor_value(f['measure'], f['high']['value'])}",
+                        f"{f['coverage']:.0%}" if f.get("coverage") is not None else "",
+                    ]
+                    for f in factors
+                ],
+                "llrllr",
+            )
+        )
+    dims = {k: v for k, v in (exposure.get("dimensions") or {}).items() if v is not None}
+    if dims:
+        blocks.append(
+            "Vet dimensions (weighted, 50 = neutral): "
+            + ", ".join(f"{name} {score:.0f}" for name, score in dims.items())
+        )
 
     pairs = summary.get("correlated_pairs") or []
     if pairs:
-        blocks += ["", f"Move together (daily-return correlation >= 0.80), {len(pairs)} pair(s):"]
+        blocks += ["", f"Move together (weekly-return correlation >= 0.80), {len(pairs)} pair(s):"]
         blocks += [
             f"  {p['pair'][0]} / {p['pair'][1]}  {p['correlation']:.2f}" for p in pairs[:TOP_PAIRS]
         ]
         if len(pairs) > TOP_PAIRS:
             blocks.append(f"  ... and {len(pairs) - TOP_PAIRS} more (see --json)")
+
+    if exposure.get("weeks"):
+        note = (
+            f"Risk numbers: {exposure['weeks']} weeks of {data.get('base_currency')} returns "
+            f"to {exposure.get('end')}, covering {exposure.get('coverage', 0):.0%} of the value"
+        )
+        if exposure.get("shrinkage") is not None:
+            note += f"; covariance shrinkage {exposure['shrinkage']:.2f}"
+        blocks += ["", note]
+    if exposure.get("excluded"):
+        blocks.append("Too little history for the risk numbers: " + ", ".join(exposure["excluded"]))
     return Section("PORTFOLIO", blocks or ["No holdings could be valued"])
 
 
@@ -181,9 +253,27 @@ def _notes_section(data: Dict[str, Any]) -> Section:
 # ==================== Formatting ====================
 
 
+_MEASURES = {
+    "earnings_yield": "earnings yield",
+    "roe": "ROE",
+    "momentum": "12-1 month return",
+    "volatility": "volatility",
+}
+
+
 def _groups(rows: List[Dict[str, Any]], limit: int = 6) -> str:
-    text = ", ".join(f"{r['name']} {r['weight']:.0%}" for r in rows[:limit])
-    return text + (", ..." if len(rows) > limit else "")
+    """'Energy 20%/31%, ...': value weight / risk share (risk left out when unknown)."""
+    parts = []
+    for r in rows[:limit]:
+        risk = f"/{r['risk']:.0%}" if r.get("risk") is not None else ""
+        parts.append(f"{r['name']} {r['weight']:.0%}{risk}")
+    return ", ".join(parts) + (", ..." if len(rows) > limit else "")
+
+
+def _factor_value(measure: str, value: Any) -> str:
+    if value is None:
+        return ""
+    return f"{float(value):+.1%}" if measure == "momentum" else f"{float(value):.1%}"
 
 
 def _share(value: Any) -> str:

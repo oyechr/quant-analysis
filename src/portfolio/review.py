@@ -13,7 +13,7 @@ testable, like the red flags (see `decide_action`):
   you own they mean "look into it", not "sell". `vet` still says Pass, since
   for a new candidate there's no cost to walking away.
 - Trim: the weight is well above its risk-parity target, or the holding moves
-  with a larger one (daily-return correlation >= 0.80).
+  with a larger one (weekly-return correlation >= 0.80, in the base currency).
 - Add: the vet verdict is Look deeper, the weight is below target, and it
   doesn't move with a larger holding.
 - Hold: everything else.
@@ -24,7 +24,8 @@ never Exit, Review or Add, only Trim (by weight or overlap) or Hold.
 
 Values are in one base currency (NOK by default), converted with Yahoo FX
 rates. Taxes are ignored except for a note when a sale would realize a gain
-outside an ASK.
+outside an ASK. The portfolio-level exposure (risk, beta, factor tilts) is in
+`exposure.py`.
 """
 
 import logging
@@ -35,18 +36,21 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from ..comparison import (
-    calculate_risk_parity_weights,
-    identify_correlation_flags,
-    return_correlations,
-)
+from ..comparison import calculate_risk_parity_weights, identify_correlation_flags
 from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisOptions
 from ..scoring import ScoringConfig
 from ..utils.concurrency import DEFAULT_WORKERS, run_concurrently
 from ..utils.financial import to_float
-from ..utils.fx import conversion_rate, major_currency
+from ..utils.fx import conversion_rate
 from ..vetting.vet import LOOK_DEEPER, vet_ticker
+from .exposure import (
+    HISTORY_PERIOD,
+    HOME_BENCHMARKS,
+    WORLD_BENCHMARK,
+    measure_exposure,
+    to_base_currency,
+)
 from .nordnet import PORTFOLIO_COLUMNS
 
 logger = logging.getLogger(__name__)
@@ -97,7 +101,11 @@ class HoldingReview:
     vet: Dict[str, Any] = field(default_factory=dict)  # VetResult.to_dict()
     is_fund: bool = False
     sector: Optional[str] = None
-    beta: Optional[float] = None
+    country: Optional[str] = None
+    # earnings_yield, roe (from Yahoo info) for the factor tilts
+    characteristics: Dict[str, Optional[float]] = field(default_factory=dict)
+    beta: Optional[float] = None  # vs the world benchmark, in the base currency
+    risk_share: Optional[float] = None  # share of portfolio risk (see exposure.py)
     price: Optional[float] = None  # listing currency
     listing_currency: Optional[str] = None
     value: Optional[float] = None  # base currency
@@ -135,7 +143,10 @@ class HoldingReview:
             "score": self.score,
             "is_fund": self.is_fund,
             "sector": self.sector,
+            "country": self.country,
+            "characteristics": self.characteristics,
             "beta": self.beta,
+            "risk_share": self.risk_share,
             "price": self.price,
             "listing_currency": self.listing_currency,
             "value": self.value,
@@ -255,7 +266,8 @@ def review_portfolio(
             review.vet = data
             review.is_fund = is_fund(info, by_ticker[ticker].name)
             review.sector = "Fund" if review.is_fund else _clean(info.get("sector"))
-            review.beta = _num(info.get("beta"))
+            review.country = _clean(info.get("country"))
+            review.characteristics = characteristics(info)
             review.price = _num((data.get("header") or {}).get("price"))
             review.listing_currency = info.get("currency") or by_ticker[ticker].currency
         if progress:
@@ -284,7 +296,8 @@ def review_portfolio(
     parity = calculate_risk_parity_weights(prices) or {}
     for ticker, weight in (parity.get("weights") or {}).items():
         reviews[ticker].target_weight = weight
-    correlations = return_correlations(prices, pairwise=True)
+
+    exposure, correlations = _exposure(list(reviews.values()), fetcher, base_currency, use_cache)
     _find_overlaps(list(reviews.values()), correlations)
 
     for review in reviews.values():
@@ -294,7 +307,7 @@ def review_portfolio(
         holdings=list(reviews.values()),
         base_currency=base_currency,
         preset=config.name,
-        summary=summarize_portfolio(list(reviews.values()), correlations, base_currency),
+        summary=summarize_portfolio(list(reviews.values()), correlations, base_currency, exposure),
     )
 
 
@@ -304,6 +317,15 @@ def is_fund(info: Dict[str, Any], name: str = "") -> bool:
     if quote_type:
         return quote_type in _FUND_TYPES
     return any(word in name.upper().split() for word in ("ETF", "UCITS"))
+
+
+def characteristics(info: Dict[str, Any]) -> Dict[str, Optional[float]]:
+    """Earnings yield (1 / P/E, forward if trailing is missing) and ROE from Yahoo info."""
+    pe = _num(info.get("pe_ratio")) or _num(info.get("forward_pe"))
+    return {
+        "earnings_yield": 1.0 / pe if pe and pe > 0 else None,
+        "roe": _num(info.get("roe")),
+    }
 
 
 def value_holding(
@@ -338,6 +360,46 @@ def _price_history(
         if frame is not None and not frame.empty and "Close" in frame.columns:
             prices[ticker] = frame
     return prices
+
+
+def _exposure(
+    reviews: List[HoldingReview], fetcher: DataFetcher, base_currency: str, use_cache: bool
+) -> Tuple[Dict[str, Any], pd.DataFrame]:
+    """Fetch two years of closes, convert them to the base currency, measure exposure."""
+    fx_cache: Dict[str, Optional[pd.Series]] = {}
+
+    def closes(symbol: str) -> Optional[pd.Series]:
+        if symbol not in fx_cache:
+            try:
+                frame = fetcher.fetch_ticker(symbol, period=HISTORY_PERIOD, use_cache=use_cache)
+                fx_cache[symbol] = frame["Close"] if "Close" in frame.columns else None
+            except Exception as e:
+                logger.warning(f"No {HISTORY_PERIOD} prices for {symbol}: {e}")
+                fx_cache[symbol] = None
+        return fx_cache[symbol]
+
+    local: Dict[str, pd.Series] = {}
+    in_base: Dict[str, pd.Series] = {}
+    for review in reviews:
+        ticker = review.holding.ticker
+        close = closes(ticker) if review.weight and review.listing_currency else None
+        if close is None or not review.listing_currency:
+            continue
+        local[ticker] = close
+        converted = to_base_currency(close, review.listing_currency, base_currency, closes)
+        if converted is not None:
+            in_base[ticker] = converted
+
+    benchmarks: Dict[str, pd.Series] = {}
+    home = HOME_BENCHMARKS.get(base_currency.upper())
+    for symbol, currency, label in [*([home] if home else []), WORLD_BENCHMARK]:
+        close = closes(symbol)
+        converted = (
+            to_base_currency(close, currency, base_currency, closes) if close is not None else None
+        )
+        if converted is not None:
+            benchmarks[label] = converted
+    return measure_exposure(reviews, in_base, benchmarks, local)
 
 
 def _find_overlaps(reviews: List[HoldingReview], correlations: pd.DataFrame) -> None:
@@ -439,8 +501,13 @@ def _with_tax_note(review: HoldingReview, reasons: List[str]) -> List[str]:
 
 
 def summarize_portfolio(
-    reviews: List[HoldingReview], correlations: pd.DataFrame, base_currency: str
+    reviews: List[HoldingReview],
+    correlations: pd.DataFrame,
+    base_currency: str,
+    exposure: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    """Portfolio totals, concentration and overlap; `exposure` from `measure_exposure`."""
+    exposure = exposure or {}
     valued = [r for r in reviews if r.value is not None and r.weight is not None]
     total = sum(r.value or 0.0 for r in valued)
 
@@ -451,8 +518,7 @@ def summarize_portfolio(
             return None
         return sum(w * (v or 0.0) for w, v in pairs) / weight_sum
 
-    by_sector = _shares(valued, lambda r: r.sector or "Unknown")
-    by_currency = _shares(valued, lambda r: major_currency(r.listing_currency or "?")[0])
+    by_sector = exposure.get("by_sector") or _shares(valued, lambda r: r.sector or "Unknown")
     flags = [
         f"{row['name']} is {row['weight']:.0%} of the portfolio (limit {SECTOR_LIMIT:.0%})"
         for row in by_sector
@@ -475,19 +541,18 @@ def summarize_portfolio(
         "valued": len(valued),
         "actions": {a: n for a, n in actions.items() if n},
         "weighted_score": _round(weighted(lambda r: r.score), 1),
-        "weighted_beta": _round(weighted(lambda r: r.beta), 2),
         "gain_pct": _round(_portfolio_gain(valued, total), 1),
         "largest": (
             {"ticker": largest.holding.ticker, "weight": largest.weight} if largest else None
         ),
         "by_sector": by_sector,
-        "by_currency": by_currency,
         "concentration_flags": flags,
         "correlated_pairs": [
             {"pair": list(p["pair"]), "correlation": p["correlation"]} for p in pairs
         ],
         "diversification_score": diversification.get("diversification_score"),
         "average_correlation": diversification.get("average_correlation"),
+        "exposure": exposure,
     }
 
 

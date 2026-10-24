@@ -19,7 +19,7 @@ from .utils.serialization import dataframe_to_json_dict, dataframe_to_records, s
 logger = logging.getLogger(__name__)
 
 # Bump when get_ticker_info extracts new fields, so older cached info is refetched
-INFO_CACHE_VERSION = 3
+INFO_CACHE_VERSION = 4
 
 _PRICE_COLUMNS = ("Open", "High", "Low", "Adj Close")
 
@@ -317,6 +317,7 @@ class DataFetcher:
                 "quote_type": info.get("quoteType"),
                 "sector": info.get("sector", "N/A"),
                 "industry": info.get("industry", "N/A"),
+                "country": info.get("country"),
                 # Yahoo's slugs for yf.Sector / yf.Industry (e.g. "consumer-electronics")
                 "sector_key": info.get("sectorKey"),
                 "industry_key": info.get("industryKey"),

@@ -17,7 +17,7 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 5 | Trust: price-only backtest, calibrate signal thresholds | Done (live on sp100 and OBX, 2026-10-23; thresholds documented as heuristics) |
 | 6 | Cleanup (do alongside the others) | Done (2026-10-24) |
 | 6b | Correctness review of the decision code | Done (2026-10-24; 10 fixes, live-checked) |
-| 7 | Construct: portfolio exposure and rebalance proposals | Planned in detail (2026-10-24); next: 7a |
+| 7 | Construct: portfolio exposure and rebalance proposals | 7a done (2026-10-24, live-checked); next: 7b |
 | 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
 | - | Side items: decision journal, automation, quick wins | Planned (outline only) |
 
@@ -351,6 +351,34 @@ For restructuring the portfolio. `review` judges each holding alone and suggests
 
    Each is the weighted average next to the four weighted vet dimension scores (50 is neutral). The holdings that contribute most to each tilt are named. These are descriptive, not statistical loadings.
 8. **Output:** the `review` Portfolio section gains a risk line (volatility, both betas, effective N), value vs risk by sector, country and currency, and the factor tilts. The summary table's Target column becomes the ERC target once 7b lands.
+
+**7a as built (2026-10-24, live-checked)**
+
+- **Live check:** the first run used only 68 weeks. With `MIN_WEEKS` at 52, one recent listing (0.8% of the value) set the common window for everyone. `MIN_WEEKS` is now 78 (three quarters of the 2 years), so short listings are left out and named, and the window is the full 104 weeks.
+- **Result on the user's portfolio:** volatility 12.3%/yr, against 12.7% for OSEBX and 16.3% for ACWI in NOK. Beta is 0.60 against Oslo and 0.47 against the world. The average weekly correlation is 0.12 (0.09 among Oslo pairs, 0.19 among US pairs). Correlations come out the same in local currency, so the low figure is real and not an FX artifact. No holding's action changed. The one highly correlated pair from the daily check is still there.
+
+- `src/portfolio/exposure.py`:
+  - `to_base_currency(close, currency, base, fx_closes)` carries the FX rate forward over days without a rate.
+  - `weekly_returns(closes, min_weeks=MIN_WEEKS)` uses Friday closes. Each series is carried forward over its own holidays, and series with fewer than `MIN_WEEKS` (78) returns are dropped, so a recent listing doesn't shorten the common window.
+  - `shrunk_covariance(returns)` is checked in a test against a loop-by-loop version of the paper's formulas.
+  - Also `risk_contributions`, `beta`, `effective_number`, `weighted_median`, and `measure_exposure(reviews, closes, benchmarks, local_closes)`, which returns the exposure dict and the weekly correlations.
+- `review_portfolio` fetches `HISTORY_PERIOD` (2y) closes per holding, the FX pairs, `OSEBX.OL` and `ACWI`.
+  - The overlap check and the diversification score now use the weekly base-currency correlations.
+  - The targets stay inverse volatility on 1y daily local prices until 7b.
+  - `HoldingReview` gains `country`, `characteristics` (earnings yield, ROE) and `risk_share`. Its `beta` is now against ACWI in NOK, not Yahoo's beta.
+  - The summary drops `weighted_beta` and `by_currency`; both now come from `summary["exposure"]`.
+- `country` is a new field in ticker info (`INFO_CACHE_VERSION` 4), so the next live run refetches info for every ticker.
+- Factor tilts use weighted medians, because ROE has outliers (negative equity, buybacks).
+- Tests: `tests/test_exposure.py`, and the end-to-end review test checks the exposure section.
+- **Live check for the user:**
+  ```
+  quant review --save    # also writes portfolio/review.json, which Claude can read
+  ```
+  Things to look for:
+  - Both betas look plausible.
+  - No real holding is listed under "Too little history" without reason (a recent listing is fine).
+  - The highly correlated pairs are still there, now on weekly NOK returns.
+  - The risk shares by sector make sense.
 
 **7b: Targets and limits**
 

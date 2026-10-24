@@ -196,11 +196,21 @@ def test_is_fund():
 
 @pytest.fixture
 def review_market(fake_market, price_factory):
-    # USDNOK = 10; TWIN.OL is an exact copy of BIG.OL's prices (correlation 1)
-    fx = price_factory("USDNOK=X", seed=1)
+    # USDNOK = 10; TWIN.OL is an exact copy of BIG.OL's prices (correlation 1).
+    # Two years of bars, so the risk numbers have their minimum history.
+    days = 520
+    fx = price_factory("USDNOK=X", days=days, seed=1)
     fx["Close"] = 10.0
-    big = price_factory("BIG.OL", seed=11)
-    fake_market.price_overrides.update({"USDNOK=X": fx, "BIG.OL": big, "TWIN.OL": big.copy()})
+    big = price_factory("BIG.OL", days=days, seed=11)
+    fake_market.price_overrides.update(
+        {
+            "USDNOK=X": fx,
+            "BIG.OL": big,
+            "TWIN.OL": big.copy(),
+            **{t: price_factory(t, days=days, seed=i) for i, t in enumerate(("TST", "ACWI"))},
+            "OSEBX.OL": price_factory("OSEBX.OL", days=days, seed=7),
+        }
+    )
     fake_market.info_overrides.update(
         {
             "BIG.OL": {"currentPrice": float(big["Close"].iloc[-1]), "sector": "Energy"},
@@ -247,12 +257,21 @@ def test_review_portfolio_end_to_end(review_market, tmp_path):
     assert by_ticker["BAD.OL"].action == CHECK
     summary = result.summary
     assert summary["correlated_pairs"][0]["pair"] == ["BIG.OL", "TWIN.OL"]
-    assert summary["by_currency"][0]["name"] in ("NOK", "USD")
     assert summary["actions"][CHECK] == 1
+
+    # Exposure, from weekly NOK returns
+    exposure = summary["exposure"]
+    assert exposure["by_currency"][0]["name"] in ("NOK", "USD")
+    assert exposure["volatility"] > 0
+    assert {b["benchmark"] for b in exposure["betas"]} == {"Oslo", "World"}
+    assert sum(r.risk_share or 0.0 for r in result.holdings) == pytest.approx(1.0)
+    assert by_ticker["TST"].beta is not None  # vs ACWI in NOK, not Yahoo's 1.2
+    assert by_ticker["TST"].beta != 1.2
 
     text = render_text(result.to_dict())
     assert text.index("PORTFOLIO REVIEW") < text.index("PORTFOLIO\n") < text.index("NOTES")
     assert "BAD.OL" in text
+    assert "Volatility" in text and "Factor tilts" in text and "By country" in text
 
 
 def test_cli_review(review_market, tmp_path):
