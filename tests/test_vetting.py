@@ -890,6 +890,11 @@ class TestVerdictSummary:
         assert verdict["call"] == "Pass"
         assert "red flag: flag high" in verdict["reasons"]
 
+    def test_minor_flags_count_only_medium_ones(self):
+        # Low-severity flags are data notes; the review lists only high and medium
+        assert "2 minor red flag(s)" in _vet_data(flags=("medium", "medium", "low"))["reasons"]
+        assert "no red flags (data notes only)" in _vet_data(flags=("low",))["reasons"]
+
     def test_sell_is_pass(self):
         assert _vet_data(signal="Sell")["call"] == "Pass"
 

@@ -181,10 +181,14 @@ def summarize_verdict(data: Dict[str, Any]) -> Dict[str, Any]:
     reasons: List[str] = []
     if score is not None:
         reasons.append(f"{signal} {score:.0f}/100 ({header.get('confidence')} confidence)")
+    # Low-severity flags are data notes (thin coverage), not findings about the company
+    medium = [f for f in flags if f.get("severity") == "medium"]
     if high:
         reasons.append(f"red flag: {high[0]['title'].lower()}")
+    elif medium:
+        reasons.append(f"{len(medium)} minor red flag(s)")
     elif flags:
-        reasons.append(f"{len(flags)} minor red flag(s)")
+        reasons.append("no red flags (data notes only)")
     else:
         reasons.append("no red flags")
 
