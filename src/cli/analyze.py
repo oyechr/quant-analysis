@@ -14,11 +14,13 @@ from ..comparison import (
     format_comparison_table,
     format_correlation_heatmap,
     format_diversification,
+    format_portfolio_view,
     identify_correlation_flags,
 )
 from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisOptions
 from ..reporting import ReportGenerator
+from ..scoring import format_score_table
 from ..utils.concurrency import run_concurrently
 from .common import (
     config_option,
@@ -140,33 +142,7 @@ def score(ctx, tickers, config_name, workers):
         history.append(history_row(bundle.report, bundle.scoring, "score"))
     record_history(ctx.obj["output_dir"], history)
 
-    # Print summary table
-    click.echo()
-    click.echo("=" * 70)
-    click.echo(f"  STOCK SCORES  (preset: {config_name})")
-    click.echo("=" * 70)
-    click.echo()
-    click.echo(
-        f"  {'Ticker':<8} {'Score':>6} {'Signal':<12} {'Confidence':<10} {'Tech':>5} "
-        f"{'Fund':>5} {'Risk':>5} {'Val':>5}"
-    )
-    click.echo("  " + "-" * 62)
-
-    for ticker in tickers_list:
-        result = results.get(ticker)
-        if result is None:
-            click.echo(f"  {ticker:<8}    ERROR")
-            continue
-        tech = f"{result.technical.score:.0f}" if result.technical else "N/A"
-        fund = f"{result.fundamental.score:.0f}" if result.fundamental else "N/A"
-        risk = f"{result.risk.score:.0f}" if result.risk else "N/A"
-        val = f"{result.valuation.score:.0f}" if result.valuation else "N/A"
-        click.echo(
-            f"  {ticker:<8} {result.composite_score:>5.0f}  {result.signal:<12} "
-            f"{result.confidence:<10} {tech:>5} {fund:>5} {risk:>5} {val:>5}"
-        )
-
-    click.echo()
+    click.echo(format_score_table({t: results.get(t) for t in tickers_list}, config_name))
 
 
 @click.command()
@@ -380,24 +356,8 @@ def compare(ctx, tickers, config_name, save_chart, weights):
             click.echo(format_correlation_heatmap(corr_df, save_path=save_chart))
         click.echo(format_diversification(correlation_flags, risk_parity))
 
-    # Portfolio summary
     if portfolio_stats:
-        click.echo()
-        click.echo("=" * 70)
-        click.echo("  PORTFOLIO VIEW")
-        click.echo("=" * 70)
-        ws = portfolio_stats.get("weighted_composite_score")
-        wb = portfolio_stats.get("weighted_beta")
-        dr = portfolio_stats.get("diversification_ratio")
-        click.echo(f"  Weighted Score: {ws}" if ws else "  Weighted Score: N/A")
-        click.echo(f"  Weighted Beta:  {wb}" if wb else "  Weighted Beta:  N/A")
-        click.echo(f"  Diversification Ratio: {dr}" if dr else "  Diversification Ratio: N/A")
-        click.echo()
-        for h in portfolio_stats.get("holdings", []):
-            sig = h.get("signal", "N/A")
-            sc = h.get("score", "N/A")
-            click.echo(f"  {h['ticker']:<8} weight={h['weight']:.1%}  score={sc}  signal={sig}")
-        click.echo()
+        click.echo(format_portfolio_view(portfolio_stats))
 
 
 @click.command()

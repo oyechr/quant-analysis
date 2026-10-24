@@ -9,6 +9,7 @@ activity convergence, and contrarian signals.
 from .analyzer import PortfolioAnalyzer
 from .factor_ranking import FactorRanker, FactorScore, FactorWeights
 from .models import DiscoverySignal, Holding, SectorCluster, TrackedPortfolio
+from .render import render_text
 
 __all__ = [
     "PortfolioAnalyzer",
@@ -19,4 +20,5 @@ __all__ = [
     "Holding",
     "SectorCluster",
     "TrackedPortfolio",
+    "render_text",
 ]

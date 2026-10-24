@@ -88,8 +88,7 @@ def watchlist_rm(ctx, tickers):
 @click.pass_context
 def watchlist_ls(ctx):
     """List the watchlist with each ticker's last recorded score."""
-    from ..tracking import load_history, load_watchlist
-    from ..vetting.render import Section, Table, sections_to_text
+    from ..tracking import load_history, load_watchlist, render_watchlist
 
     path = ctx.obj["watchlist_file"]
     try:
@@ -101,27 +100,7 @@ def watchlist_ls(ctx):
         return
 
     last = {row["ticker"]: row for row in load_history(ctx.obj["output_dir"])}
-    rows = []
-    for item in items.values():
-        row = last.get(item.ticker) or {}
-        rows.append(
-            [
-                item.ticker,
-                f"{row['score']:.0f} {row['signal']}" if row.get("score") is not None else "",
-                f"{row['price']:,.2f}" if row.get("price") else "",
-                f"{item.target:g}" if item.target is not None else "",
-                f"{item.stop:g}" if item.stop is not None else "",
-                row.get("date") or "",
-                item.added.isoformat(),
-                item.thesis or "",
-            ]
-        )
-    table = Table(
-        ["Ticker", "Last score", "Price", "Target", "Stop", "Scored", "Added", "Thesis"],
-        rows,
-        "llrrrlll",
-    )
-    click.echo(sections_to_text([Section(f"WATCHLIST  {path}  ({len(items)})", [table])]))
+    click.echo(render_watchlist(path, items, last))
 
 
 @click.command()

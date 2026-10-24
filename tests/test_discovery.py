@@ -533,6 +533,28 @@ class TestFullAnalysis:
         strengths = [s.strength for s in result.top_signals]
         assert strengths == sorted(strengths, reverse=True)
 
+    def test_render_text_shows_each_section_up_to_top(self, portfolios_with_actions):
+        from src.discovery import render_text
+
+        result = PortfolioAnalyzer(min_overlap=2, convergence_window_days=90).analyze(
+            portfolios_with_actions
+        )
+        text = render_text(result, top=1)
+
+        assert "Analyzed 3 portfolios, 9 total holdings" in text
+        assert "TICKER OVERLAP (consensus picks)" in text
+        assert "ACTIVITY CONVERGENCE" in text
+        assert "CONTRARIAN SIGNALS (disagreement)" in text
+        overlap = text.split("TICKER OVERLAP")[1].split("ACTIVITY CONVERGENCE")[0]
+        assert sum(s.ticker in overlap for s in result.overlap_signals) == 1
+
+    def test_render_text_skips_empty_sections(self):
+        from src.discovery import render_text
+
+        text = render_text(PortfolioAnalyzer().analyze([]))
+        assert "Analyzed 0 portfolios" in text
+        assert "TICKER OVERLAP" not in text
+
 
 # ============================================================
 # Test Edge Cases

@@ -26,6 +26,7 @@ from src.comparison.formatters import (
     format_comparison_table,
     format_correlation_heatmap,
     format_diversification,
+    format_portfolio_view,
 )
 from src.scoring.dimensions import DimensionResult
 from src.scoring.scorer import ScoringResult
@@ -382,6 +383,18 @@ class TestFormatters:
     def test_format_table_empty(self):
         output = format_comparison_table(pd.DataFrame())
         assert "no data" in output
+
+    def test_format_portfolio_view(self):
+        output = format_portfolio_view(
+            {
+                "weighted_composite_score": 61.2,
+                "weighted_beta": None,
+                "holdings": [{"ticker": "AAPL", "weight": 0.6, "score": 62, "signal": "Hold"}],
+            }
+        )
+        assert "Weighted Score: 61.2" in output
+        assert "Weighted Beta:  N/A" in output
+        assert "AAPL     weight=60.0%  score=62  signal=Hold" in output
 
     def test_format_markdown(self):
         output = format_comparison_markdown(self._sample_df(), title="Test")

@@ -7,11 +7,12 @@ from .dimensions import (
     TechnicalScorer,
     ValuationScorer,
 )
-from .scorer import StockScorer
+from .scorer import StockScorer, format_score_table
 from .trade_levels import TradeLevelsResult, compute_trade_levels_from_report
 
 __all__ = [
     "StockScorer",
+    "format_score_table",
     "ScoringConfig",
     "TechnicalScorer",
     "FundamentalScorer",

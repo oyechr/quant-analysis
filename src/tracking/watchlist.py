@@ -21,6 +21,9 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
+from ..vetting.render import Section, Table, sections_to_text
+from .history import Row
+
 DEFAULT_WATCHLIST = "watchlist.toml"
 
 
@@ -117,6 +120,31 @@ def remove_from_watchlist(path: Path, tickers: Iterable[str]) -> tuple[List[str]
     if removed:
         save_watchlist(items, path)
     return removed, missing
+
+
+def render_watchlist(path: Path, items: Dict[str, WatchItem], last_rows: Dict[str, Row]) -> str:
+    """The watchlist as a table, with each ticker's last history row (by ticker)."""
+    rows = []
+    for item in items.values():
+        row = last_rows.get(item.ticker) or {}
+        rows.append(
+            [
+                item.ticker,
+                f"{row['score']:.0f} {row['signal']}" if row.get("score") is not None else "",
+                f"{row['price']:,.2f}" if row.get("price") else "",
+                f"{item.target:g}" if item.target is not None else "",
+                f"{item.stop:g}" if item.stop is not None else "",
+                row.get("date") or "",
+                item.added.isoformat(),
+                item.thesis or "",
+            ]
+        )
+    table = Table(
+        ["Ticker", "Last score", "Price", "Target", "Stop", "Scored", "Added", "Thesis"],
+        rows,
+        "llrrrlll",
+    )
+    return sections_to_text([Section(f"WATCHLIST  {path}  ({len(items)})", [table])])
 
 
 def _toml_string(value: str) -> str:

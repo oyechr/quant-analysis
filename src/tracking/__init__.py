@@ -17,6 +17,7 @@ from .watchlist import (
     add_to_watchlist,
     load_watchlist,
     remove_from_watchlist,
+    render_watchlist,
     save_watchlist,
 )
 
@@ -35,6 +36,7 @@ __all__ = [
     "record_scores",
     "remove_from_watchlist",
     "render_text",
+    "render_watchlist",
     "save_watchlist",
     "track_changes",
 ]

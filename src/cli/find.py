@@ -257,7 +257,7 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
       quant discover --enrich           # Add sector/industry data (slower)
       quant discover --list-sources     # Show configured portfolio sources
     """
-    from ..discovery import PortfolioAnalyzer
+    from ..discovery import PortfolioAnalyzer, render_text
     from ..discovery.sources import Edgar13FSource
 
     output_dir = ctx.obj["output_dir"]
@@ -333,97 +333,7 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
             c for c in result.sector_clusters if sector_lower in c.sector.lower()
         ]
 
-    # Display results
-    click.echo(
-        f"\n  Analyzed {result.portfolios_analyzed} portfolios, "
-        f"{result.total_holdings} total holdings"
-    )
-    click.echo()
-
-    # Overlap signals
-    if result.overlap_signals:
-        click.echo("  " + "=" * 66)
-        click.echo("  TICKER OVERLAP (consensus picks)")
-        click.echo("  " + "=" * 66)
-        click.echo()
-        click.echo(f"  {'Ticker':<10} {'Name':<25} {'Overlap':>8} {'Strength':>9} {'Sector':<20}")
-        click.echo("  " + "-" * 74)
-
-        for signal in result.overlap_signals[:top]:
-            name = (signal.name or "")[:24]
-            sector_str = (signal.sector or "N/A")[:19]
-            click.echo(
-                f"  {signal.ticker:<10} {name:<25} "
-                f"{signal.overlap_count:>3}/{signal.total_portfolios:<4} "
-                f"{signal.strength:>6.1f}   {sector_str:<20}"
-            )
-            if signal.portfolios:
-                portfolios_str = ", ".join(signal.portfolios[:4])
-                if len(signal.portfolios) > 4:
-                    portfolios_str += f" +{len(signal.portfolios) - 4} more"
-                click.echo(f"             └─ {portfolios_str}")
-            if signal.recent_actions:
-                actions_str = ", ".join(signal.recent_actions[:4])
-                click.echo(f"             └─ Actions: {actions_str}")
-        click.echo()
-
-    # Sector clusters
-    if result.sector_clusters:
-        click.echo("  " + "=" * 66)
-        click.echo("  SECTOR/INDUSTRY CLUSTERS")
-        click.echo("  " + "=" * 66)
-        click.echo()
-        click.echo(
-            f"  {'Sector > Industry':<40} {'Holdings':>9} {'Portfolios':>11} {'Strength':>9}"
-        )
-        click.echo("  " + "-" * 71)
-
-        for cluster in result.sector_clusters[:top]:
-            label = cluster.label[:39]
-            click.echo(
-                f"  {label:<40} {cluster.holding_count:>6}    "
-                f"{len(cluster.portfolios):>5}      {cluster.strength:>6.1f}"
-            )
-            if cluster.tickers:
-                tickers_str = ", ".join(cluster.tickers[:6])
-                if len(cluster.tickers) > 6:
-                    tickers_str += f" +{len(cluster.tickers) - 6} more"
-                click.echo(f"    └─ {tickers_str}")
-        click.echo()
-
-    # Convergence events
-    if result.convergence_events:
-        click.echo("  " + "=" * 66)
-        click.echo("  ACTIVITY CONVERGENCE")
-        click.echo("  " + "=" * 66)
-        click.echo()
-        for event in result.convergence_events[:top]:
-            name = event.name or event.ticker
-            click.echo(
-                f"  {event.ticker:<8} {name:<20} "
-                f"Action: {event.action.upper():<5} "
-                f"Window: {event.window_days}d  "
-                f"Strength: {event.strength:.1f}"
-            )
-            click.echo(f"    └─ Portfolios: {', '.join(event.portfolios)}")
-        click.echo()
-
-    # Contrarian signals
-    if result.contrarian_signals:
-        click.echo("  " + "=" * 66)
-        click.echo("  CONTRARIAN SIGNALS (disagreement)")
-        click.echo("  " + "=" * 66)
-        click.echo()
-        for signal in result.contrarian_signals[:top]:
-            name = signal.name or signal.ticker
-            click.echo(
-                f"  {signal.ticker:<8} {name:<20} "
-                f"Net: {signal.net_direction.upper():<8} "
-                f"Strength: {signal.strength:.1f}"
-            )
-            click.echo(f"    └─ Buyers:  {', '.join(signal.buyers)}")
-            click.echo(f"    └─ Sellers: {', '.join(signal.sellers)}")
-        click.echo()
+    click.echo(render_text(result, top=top))
 
     # Save output if requested
     if output_format in ("json", "all"):

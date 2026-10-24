@@ -215,6 +215,29 @@ def format_diversification(
     return "\n".join(lines)
 
 
+def format_portfolio_view(portfolio_stats: Dict[str, Any]) -> str:
+    """Weighted score, beta and diversification ratio, then one line per holding."""
+    ws = portfolio_stats.get("weighted_composite_score")
+    wb = portfolio_stats.get("weighted_beta")
+    dr = portfolio_stats.get("diversification_ratio")
+    lines = [
+        "",
+        "=" * 70,
+        "  PORTFOLIO VIEW",
+        "=" * 70,
+        f"  Weighted Score: {ws}" if ws else "  Weighted Score: N/A",
+        f"  Weighted Beta:  {wb}" if wb else "  Weighted Beta:  N/A",
+        f"  Diversification Ratio: {dr}" if dr else "  Diversification Ratio: N/A",
+        "",
+    ]
+    for h in portfolio_stats.get("holdings", []):
+        sig = h.get("signal", "N/A")
+        sc = h.get("score", "N/A")
+        lines.append(f"  {h['ticker']:<8} weight={h['weight']:.1%}  score={sc}  signal={sig}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def format_correlation_heatmap(
     corr_df: pd.DataFrame,
     save_path: Optional[str] = None,

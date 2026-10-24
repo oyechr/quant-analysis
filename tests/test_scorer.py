@@ -698,6 +698,17 @@ class TestValuationScorer:
 class TestStockScorer:
     """Tests for the main StockScorer composite scorer"""
 
+    def test_format_score_table_keeps_order_and_marks_errors(self, sample_data_dir):
+        from src.scoring import format_score_table
+
+        result = StockScorer().score(_load_sample_report(sample_data_dir, "AAPL"))
+        table = format_score_table({"MSFT": None, "AAPL": result}, "value")
+
+        assert "STOCK SCORES  (preset: value)" in table
+        assert table.index("MSFT") < table.index("AAPL")
+        assert "MSFT        ERROR" in table
+        assert f"AAPL     {result.composite_score:>5.0f}  {result.signal}" in table
+
     def test_score_full_report(self, sample_data_dir):
         report = _load_sample_report(sample_data_dir, "AAPL")
         scorer = StockScorer()

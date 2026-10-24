@@ -469,3 +469,31 @@ class StockScorer:
             return "Medium"
         else:
             return "Low"
+
+
+def format_score_table(results: Dict[str, Optional[ScoringResult]], preset: str) -> str:
+    """One row per ticker (in the dict's order); None marks a ticker that failed."""
+    lines = [
+        "",
+        "=" * 70,
+        f"  STOCK SCORES  (preset: {preset})",
+        "=" * 70,
+        "",
+        f"  {'Ticker':<8} {'Score':>6} {'Signal':<12} {'Confidence':<10} {'Tech':>5} "
+        f"{'Fund':>5} {'Risk':>5} {'Val':>5}",
+        "  " + "-" * 62,
+    ]
+    for ticker, result in results.items():
+        if result is None:
+            lines.append(f"  {ticker:<8}    ERROR")
+            continue
+        tech = f"{result.technical.score:.0f}" if result.technical else "N/A"
+        fund = f"{result.fundamental.score:.0f}" if result.fundamental else "N/A"
+        risk = f"{result.risk.score:.0f}" if result.risk else "N/A"
+        val = f"{result.valuation.score:.0f}" if result.valuation else "N/A"
+        lines.append(
+            f"  {ticker:<8} {result.composite_score:>5.0f}  {result.signal:<12} "
+            f"{result.confidence:<10} {tech:>5} {fund:>5} {risk:>5} {val:>5}"
+        )
+    lines.append("")
+    return "\n".join(lines)
