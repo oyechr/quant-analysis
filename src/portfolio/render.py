@@ -324,7 +324,6 @@ REBALANCE_CAVEATS = [
     "(skjermingsfradrag).",
     "ASK eligibility is judged from Yahoo's headquarters country, which isn't always the domicile.",
 ]
-MIN_MIX_CHANGE = 0.005  # mix lines show groups that moved at least half a point
 
 
 def build_proposal_sections(data: Dict[str, Any]) -> List[Section]:
@@ -454,7 +453,8 @@ def _mix_changes(
     old = {g["name"]: g["weight"] or 0.0 for g in before}
     new = {g["name"]: g["weight"] or 0.0 for g in after}
     moves = [(n, old.get(n, 0.0), new.get(n, 0.0)) for n in {*old, *new}]
-    moves = [m for m in moves if abs(m[2] - m[1]) >= MIN_MIX_CHANGE]
+    # Only moves that show at whole percents ("11% -> 11%" says nothing)
+    moves = [m for m in moves if f"{m[1]:.0%}" != f"{m[2]:.0%}"]
     return sorted(moves, key=lambda m: abs(m[2] - m[1]), reverse=True)
 
 

@@ -358,3 +358,11 @@ def test_cli_rebalance(rebalance_market, tmp_path):
     saved = json.loads((tmp_path / "rebalance.json").read_text(encoding="utf-8"))
     assert saved["cash"] == 5000.0
     assert (tmp_path / "rebalance.md").exists()
+
+
+def test_mix_lines_skip_moves_that_round_away():
+    from src.portfolio.render import _mix_changes
+
+    before = [{"name": "Fund", "weight": 0.112}, {"name": "Energy", "weight": 0.21}]
+    after = [{"name": "Fund", "weight": 0.108}, {"name": "Energy", "weight": 0.17}]
+    assert _mix_changes(before, after) == [("Energy", 0.21, 0.17)]
