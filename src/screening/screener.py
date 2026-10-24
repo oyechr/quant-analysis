@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -25,6 +25,7 @@ from ..discovery.factor_ranking import FactorRanker, FactorScore, FactorWeights
 from ..pipeline import AnalysisOptions, analyze_ticker
 from ..scoring.scorer import ScoringResult
 from ..utils.concurrency import DEFAULT_WORKERS, run_concurrently
+from ..utils.fx import conversion_rate, major_currency
 from ..utils.toon_serializer import report_to_toon
 
 logger = logging.getLogger(__name__)
@@ -41,8 +42,9 @@ class ScreenFilters:
     """
     Universe filters applied to company info before ranking.
 
-    Market cap and volume are in the listing's own currency/shares, so mixing
-    exchanges (e.g. sp500 + obx) makes cap thresholds approximate.
+    Market cap thresholds are in `currency`; when it's None, the screen uses the
+    universe's own currency, or USD if the universe mixes currencies (see
+    `cap_currency`). Volume is in shares.
     """
 
     sectors: Tuple[str, ...] = ()
@@ -50,19 +52,30 @@ class ScreenFilters:
     min_market_cap: Optional[float] = None
     max_market_cap: Optional[float] = None
     min_avg_volume: Optional[float] = None
+    currency: Optional[str] = None
+
+    @property
+    def caps_active(self) -> bool:
+        return self.min_market_cap is not None or self.max_market_cap is not None
 
     @property
     def active(self) -> bool:
         return bool(
             self.sectors
             or self.exclude_sectors
-            or self.min_market_cap is not None
-            or self.max_market_cap is not None
+            or self.caps_active
             or self.min_avg_volume is not None
         )
 
-    def rejection_reason(self, info: Dict[str, Any]) -> Optional[str]:
-        """Why a ticker fails the filters, or None if it passes."""
+    def rejection_reason(
+        self, info: Dict[str, Any], cap_rate: Optional[float] = 1.0, cap_currency: str = ""
+    ) -> Optional[str]:
+        """
+        Why a ticker fails the filters, or None if it passes.
+
+        `cap_rate` converts the ticker's market cap into the currency of the cap
+        thresholds (`cap_currency`, named in the reason); None means no FX rate.
+        """
         if not self.active:
             return None
         if not info:
@@ -74,11 +87,16 @@ class ScreenFilters:
         if any(s.lower() in sector_text for s in self.exclude_sectors):
             return f"excluded sector {info.get('sector')}"
 
-        market_cap = info.get("market_cap")
-        if self.min_market_cap is not None and (market_cap or 0) < self.min_market_cap:
-            return f"market cap {format_amount(market_cap)} below minimum"
-        if self.max_market_cap is not None and market_cap and market_cap > self.max_market_cap:
-            return f"market cap {format_amount(market_cap)} above maximum"
+        if self.caps_active:
+            if cap_rate is None:
+                return f"no FX rate to compare its market cap in {cap_currency}"
+            market_cap = info.get("market_cap")
+            market_cap = market_cap * cap_rate if market_cap else market_cap
+            unit = f" {cap_currency}" if cap_currency else ""
+            if self.min_market_cap is not None and (market_cap or 0) < self.min_market_cap:
+                return f"market cap {format_amount(market_cap)}{unit} below minimum"
+            if self.max_market_cap is not None and market_cap and market_cap > self.max_market_cap:
+                return f"market cap {format_amount(market_cap)}{unit} above maximum"
 
         volume = info.get("avg_volume")
         if self.min_avg_volume is not None and (volume or 0) < self.min_avg_volume:
@@ -153,6 +171,7 @@ class ScreenResult:
     scored: List[ScreenCandidate]  # stage-2 candidates, best composite score first
     ranked: List[ScreenCandidate]  # every stage-1 survivor, in factor order
     excluded: Dict[str, str]  # ticker -> reason (filtered out or data unavailable)
+    cap_currency: Optional[str] = None  # currency of the market cap filters, if any were set
     generated_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -165,6 +184,7 @@ class ScreenResult:
                 "ranked": len(self.ranked),
                 "scored": len(self.scored),
                 "excluded": len(self.excluded),
+                "cap_currency": self.cap_currency,
             },
             "results": [c.to_row() for c in self.scored],
             "factor_ranking": [c.to_row() for c in self.ranked],
@@ -201,7 +221,7 @@ class Screener:
         excluded: Dict[str, str] = {}
 
         # ---- Stage 1: info + prices for everyone ----
-        stage1: Dict[str, Tuple[Dict[str, Any], pd.DataFrame]] = {}
+        fetched: Dict[str, Tuple[Dict[str, Any], pd.DataFrame]] = {}
         for i, (ticker, data, error) in enumerate(
             run_concurrently(self._fetch_stage1, tickers, workers=self.workers), 1
         ):
@@ -210,8 +230,18 @@ class Screener:
             if error is not None or data is None:
                 excluded[ticker] = f"data unavailable: {error}"
                 continue
-            info, prices = data
-            reason = filters.rejection_reason(info)
+            fetched[ticker] = data
+
+        currency = None
+        if filters.caps_active:
+            currency = major_currency(
+                filters.currency or cap_currency(info for info, _ in fetched.values())
+            )[0]
+        cap_rate = self._cap_rates(currency) if currency else None
+        stage1: Dict[str, Tuple[Dict[str, Any], pd.DataFrame]] = {}
+        for ticker, (info, prices) in fetched.items():
+            rate = cap_rate(info.get("currency") or str(currency)) if cap_rate else 1.0
+            reason = filters.rejection_reason(info, rate, currency or "")
             if reason:
                 excluded[ticker] = f"filtered: {reason}"
                 continue
@@ -259,7 +289,25 @@ class Screener:
             scored=scored,
             ranked=ranked,
             excluded=excluded,
+            cap_currency=currency,
         )
+
+    def _cap_rates(self, currency: str) -> Callable[[str], Optional[float]]:
+        """Listing currency -> multiplier taking its market caps into `currency` (memoized)."""
+        rates: Dict[str, Optional[float]] = {}
+
+        def fx_lookup(symbol: str) -> Optional[float]:
+            return self.fetcher.latest_close(symbol, use_cache=self.options.use_cache)
+
+        def rate(listing_currency: str) -> Optional[float]:
+            # Yahoo gives market cap in the major unit (GBP for a GBp listing)
+            major = major_currency(listing_currency)[0]
+            if major not in rates:
+                converted = conversion_rate(major, currency, fx_lookup)
+                rates[major] = converted[0] if converted else None
+            return rates[major]
+
+        return rate
 
     def _fetch_stage1(self, ticker: str) -> Tuple[Dict[str, Any], pd.DataFrame]:
         use_cache = self.options.use_cache
@@ -359,6 +407,12 @@ def parse_amount(text: str) -> float:
         raise ValueError(f"Can't parse amount '{text}' (examples: 500M, 10B, 1.5T)")
     number, unit = match.groups()
     return float(number) * _MULTIPLIERS[unit.lower()]
+
+
+def cap_currency(infos: Iterable[Dict[str, Any]]) -> str:
+    """Currency for market cap thresholds: the universe's own if it has one, else USD."""
+    currencies = {major_currency(info["currency"])[0] for info in infos if info.get("currency")}
+    return currencies.pop() if len(currencies) == 1 else "USD"
 
 
 def format_amount(value: Optional[float]) -> str:

@@ -44,9 +44,14 @@ def _parse_amount_option(ctx, param, value):
 @click.option(
     "--min-mcap",
     callback=_parse_amount_option,
-    help="Minimum market cap in the listing currency (e.g. 2B, 500M).",
+    help="Minimum market cap (e.g. 2B, 500M), in --currency.",
 )
 @click.option("--max-mcap", callback=_parse_amount_option, help="Maximum market cap.")
+@click.option(
+    "--currency",
+    default=None,
+    help="Currency of --min-mcap/--max-mcap (default: the universe's own; USD if it mixes).",
+)
 @click.option(
     "--min-volume",
     callback=_parse_amount_option,
@@ -72,6 +77,7 @@ def screen(
     exclude_sectors,
     min_mcap,
     max_mcap,
+    currency,
     min_volume,
     workers,
     list_only,
@@ -145,6 +151,7 @@ def screen(
         min_market_cap=min_mcap,
         max_market_cap=max_mcap,
         min_avg_volume=min_volume,
+        currency=currency,
     )
 
     stage_labels = {"rank": "  Ranking universe  ", "score": "  Scoring shortlist "}
@@ -171,6 +178,8 @@ def screen(
 
     filtered = sum(1 for r in result.excluded.values() if r.startswith("filtered"))
     unavailable = len(result.excluded) - filtered
+    if result.cap_currency:
+        click.echo(f"\n  Market caps compared in {result.cap_currency}")
     if filtered or unavailable:
         click.echo(f"\n  Excluded: {filtered} by filters, {unavailable} with no usable data")
         if unavailable:

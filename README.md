@@ -200,7 +200,7 @@ Options:
 - ``--top N`` -- candidates to fully score (default 20)
 - ``--config [default|value|growth|income]`` -- scoring preset
 - ``--sector TEXT`` / ``--exclude-sector TEXT`` -- sector or industry substring, repeatable
-- ``--min-mcap`` / ``--max-mcap`` -- market cap, e.g. ``500M``, ``10B``, ``1T`` (in the listing's own currency)
+- ``--min-mcap`` / ``--max-mcap`` -- market cap, e.g. ``500M``, ``10B``, ``1T``, in the universe's own currency (``obx``: NOK). A universe that mixes currencies (a watchlist with EQNR.OL and AAPL) is compared in USD at Yahoo's latest FX rate; ``--currency NOK`` picks another. The screen prints which currency it used
 - ``--min-volume`` -- average daily volume in shares, e.g. ``500K``
 - ``--workers N`` -- parallel downloads (default 4; Yahoo rate-limits aggressive clients)
 - ``--no-save`` -- print only

@@ -19,6 +19,7 @@ from src.screening import (
     resolve_universe,
     save_screen,
 )
+from src.screening.screener import cap_currency
 from src.screening.universe import IndexSource, load_index, load_ticker_file, parse_constituents
 
 # Test-only index so parsing/caching tests don't depend on a real index's size
@@ -267,6 +268,31 @@ class TestScreenFilters:
     def test_active_filter_rejects_missing_info(self):
         assert ScreenFilters(sectors=("Tech",)).rejection_reason({}) is not None
 
+    def test_market_cap_is_converted_before_comparing(self):
+        filters = ScreenFilters(min_market_cap=1e9)
+
+        assert filters.rejection_reason(self.INFO, cap_rate=1.0, cap_currency="USD") is None
+        reason = filters.rejection_reason(self.INFO, cap_rate=0.1, cap_currency="USD")
+        assert reason == "market cap 500.0M USD below minimum"
+
+    def test_missing_fx_rate_rejects_only_with_cap_filters(self):
+        assert "no FX rate" in ScreenFilters(min_market_cap=1e9).rejection_reason(
+            self.INFO, cap_rate=None, cap_currency="USD"
+        )
+        assert ScreenFilters(sectors=("tech",)).rejection_reason(self.INFO, cap_rate=None) is None
+
+    @pytest.mark.parametrize(
+        ("currencies", "expected"),
+        [
+            pytest.param(["NOK", "NOK"], "NOK", id="single"),
+            pytest.param(["GBp", "GBP"], "GBP", id="pence-is-pounds"),
+            pytest.param(["NOK", "USD"], "USD", id="mixed"),
+            pytest.param([], "USD", id="unknown"),
+        ],
+    )
+    def test_cap_currency(self, currencies, expected):
+        assert cap_currency({"currency": c} for c in currencies) == expected
+
 
 # ============================================================
 # Screener
@@ -315,6 +341,40 @@ class TestScreener:
 
         assert result.excluded["OIL"].startswith("filtered")
         assert "OIL" not in {c.ticker for c in result.ranked}
+
+    @staticmethod
+    def _fx(fake_market, symbol, rate):
+        prices = fake_market.ticker("X").history()
+        fake_market.price_overrides[symbol] = prices.assign(
+            Open=rate, High=rate, Low=rate, Close=rate
+        )
+
+    def test_mixed_universe_compares_caps_in_usd(self, screener, fake_market):
+        # Both have a market cap of 50B in their own currency; 50B NOK is 5B USD
+        self._fx(fake_market, "NOKUSD=X", 0.1)
+
+        result = screener.run(["AAA", "EQX.OL"], filters=ScreenFilters(min_market_cap=10e9))
+
+        assert result.cap_currency == "USD"
+        assert result.excluded["EQX.OL"] == "filtered: market cap 5.0B USD below minimum"
+        assert "AAA" not in result.excluded
+
+    def test_single_currency_universe_is_not_converted(self, screener, fake_market):
+        result = screener.run(["EQX.OL", "DNX.OL"], filters=ScreenFilters(min_market_cap=10e9))
+
+        assert result.cap_currency == "NOK"
+        assert not result.excluded
+        assert fake_market.calls[("history", "NOKUSD=X")] == 0
+
+    def test_explicit_currency_converts_every_listing(self, screener, fake_market):
+        self._fx(fake_market, "USDNOK=X", 10.0)
+
+        result = screener.run(
+            ["AAA", "BBB"], filters=ScreenFilters(max_market_cap=100e9, currency="nok")
+        )
+
+        assert result.cap_currency == "NOK"
+        assert result.excluded["AAA"] == "filtered: market cap 500.0B NOK above maximum"
 
     def test_stage_two_reuses_stage_one_prices(self, screener, fake_market):
         screener.run(["AAA", "BBB", "CCC"], top_n=3)
