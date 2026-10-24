@@ -395,6 +395,10 @@ class StockScorer:
             except Exception as e:
                 logger.warning(f"Error scoring valuation dimension: {e}")
 
+        # A dimension with no usable data (a fund's statements, say) scores a
+        # placeholder 50; keep it for display but out of the composite
+        dimensions = [(name, result) for name, result in dimensions if result.data_coverage > 0]
+
         # Calculate composite score with weight normalization
         composite_score = self._calculate_composite(dimensions)
 

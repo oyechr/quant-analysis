@@ -977,3 +977,21 @@ class TestEdgeCases:
         data = {"analysis": {}}
         result = scorer.score(data)
         assert 0 <= result.score <= 100
+
+
+def test_dimension_without_data_is_left_out_of_the_composite():
+    technical = {
+        "latest_values": {
+            "close_price": 100.0,
+            "indicators": {"RSI_14": 50.0, "SMA_50": 95.0, "SMA_200": 90.0},
+        },
+        "signals": {"MACD": "Bullish", "MA_Trend": "Bullish (Golden Cross)"},
+    }
+    alone = StockScorer().score_from_analyses(technical_data=technical)
+    with_empty = StockScorer().score_from_analyses(
+        technical_data=technical, fundamental_data={"analysis": {"quality_scores": {}}}
+    )
+
+    assert with_empty.fundamental is not None and with_empty.fundamental.data_coverage == 0
+    assert with_empty.composite_score == pytest.approx(alone.composite_score)
+    assert with_empty.dimensions_available == 1
