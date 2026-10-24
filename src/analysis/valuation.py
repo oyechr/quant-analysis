@@ -24,6 +24,9 @@ GROWTH_BOUNDS = (-10.0, 20.0)  # starting growth; 3 years of FCF history is nois
 DEFAULT_GROWTH = 5.0  # when there's too little FCF history
 DEFAULT_TAX_RATE = 0.21
 BLUME_WEIGHT = 0.67  # adjusted beta = 0.67 x raw + 0.33 x 1
+# The Gordon DDM's growth is perpetual, so it can't exceed long-run nominal
+# growth; same ceiling as the Monte Carlo terminal growth
+DDM_MAX_GROWTH = 4.0
 
 
 def dcf_enterprise_value(
@@ -167,9 +170,10 @@ class ValuationAnalyzer:
     def _calculate_cagr(
         self, ending_value: float, beginning_value: float, num_periods: int
     ) -> Optional[float]:
-        """Calculate Compound Annual Growth Rate"""
-        result = calculate_cagr(ending_value, beginning_value, num_periods)
-        return result if result != 0.0 else None
+        """Compound annual growth in %, or None when undefined (a non-positive end)"""
+        if ending_value <= 0 or beginning_value <= 0 or num_periods <= 0:
+            return None
+        return calculate_cagr(ending_value, beginning_value, num_periods)
 
     def _get_dividend_frequency(self, dividends_series: pd.Series) -> str:
         """
@@ -684,10 +688,18 @@ class ValuationAnalyzer:
 
             # Estimate growth rate if not provided
             if growth_rate is None:
-                growth_rate = self._estimate_dividend_growth_rate()
-                if growth_rate is None:
+                historical = self._estimate_dividend_growth_rate()
+                result["assumptions"]["growth_rate_historical"] = historical
+                if historical is None:
                     growth_rate = 3.0  # Default conservative growth
-                result["assumptions"]["growth_rate_source"] = "historical_dividends"
+                    result["assumptions"]["growth_rate_source"] = "default"
+                else:
+                    growth_rate = min(historical, DDM_MAX_GROWTH)
+                    result["assumptions"]["growth_rate_source"] = (
+                        "historical_dividends_capped"
+                        if historical > DDM_MAX_GROWTH
+                        else "historical_dividends"
+                    )
             else:
                 result["assumptions"]["growth_rate_source"] = "user_provided"
 
@@ -729,35 +741,33 @@ class ValuationAnalyzer:
 
         return result
 
+    def _complete_year_dividends(self) -> pd.Series:
+        """
+        Dividends per calendar year, complete years only: the current year has
+        only some of its payments so far, which would read as a cut.
+        """
+        if self.dividends_data is None or self.dividends_data.empty:
+            return pd.Series(dtype=float)
+        annual = normalize_datetime_index(self.dividends_data).resample("YE").sum()
+        years = pd.DatetimeIndex(annual.index).year
+        return annual[(annual > 0) & (years < pd.Timestamp.now().year)]
+
     def _estimate_dividend_growth_rate(self) -> Optional[float]:
-        """Estimate dividend growth rate from historical data"""
+        """Dividend CAGR over the last (up to) 5 complete years"""
         try:
-            if self.dividends_data is None or self.dividends_data.empty:
-                return None
-
-            # Normalize to timezone-naive DatetimeIndex for consistent handling
-            dividends_series = normalize_datetime_index(self.dividends_data)
-
-            # Get annual dividend totals for past years
-            annual_dividends = dividends_series.resample("YE").sum()
-            annual_dividends = annual_dividends[annual_dividends > 0]
-
-            if len(annual_dividends) < 2:
-                return None
-
-            # Use last 3-5 years if available
-            years_to_use = min(5, len(annual_dividends))
-            recent_dividends = annual_dividends.tail(years_to_use)
-
-            if len(recent_dividends) >= 2:
-                return self._calculate_cagr(
-                    recent_dividends.iloc[-1], recent_dividends.iloc[0], len(recent_dividends) - 1
-                )
-
+            recent = self._complete_year_dividends().tail(5)
+            if len(recent) >= 2:
+                return self._calculate_cagr(recent.iloc[-1], recent.iloc[0], len(recent) - 1)
         except Exception as e:
             logger.warning(f"Could not estimate dividend growth rate: {e}")
-
         return None
+
+    def _latest_dividend_change(self) -> Optional[float]:
+        """% change of the last complete year's dividends over the year before"""
+        annual = self._complete_year_dividends()
+        if len(annual) < 2:
+            return None
+        return float(annual.iloc[-1] / annual.iloc[-2] - 1) * 100
 
     # ==================== Dividend Analysis ====================
 
@@ -774,6 +784,7 @@ class ValuationAnalyzer:
             "annual_dividend": None,
             "payout_ratio": None,
             "dividend_growth_rate": None,
+            "dividend_growth_1y": None,
             "dividend_coverage_ratio": None,
             "consecutive_years": None,
             "latest_ex_dividend_date": None,
@@ -797,11 +808,9 @@ class ValuationAnalyzer:
             result["pays_dividends"] = True
 
             if dividend_yield and dividend_yield > 0:
-                # dividend_yield might be stored as percentage (3.66) or decimal (0.0366)
-                # If value > 1, it's already a percentage
-                result["dividend_yield"] = (
-                    dividend_yield if dividend_yield > 1 else dividend_yield * 100
-                )
+                # Yahoo's dividendYield is in percent (AAPL: 0.31 means 0.31%);
+                # replaced below by TTM dividends over price when there's history
+                result["dividend_yield"] = dividend_yield
 
             # Get TTM dividend
             if has_dividend_data and self.dividends_data is not None:
@@ -811,10 +820,13 @@ class ValuationAnalyzer:
                 # Calculate TTM dividend (frequency-aware)
                 ttm_dividend = self._calculate_ttm_dividend(dividends_series)
                 result["annual_dividend"] = ttm_dividend
+                if ttm_dividend > 0 and self.current_price and self.current_price > 0:
+                    result["dividend_yield"] = ttm_dividend / self.current_price * 100
 
                 # Calculate growth rate
                 growth_rate = self._estimate_dividend_growth_rate()
                 result["dividend_growth_rate"] = growth_rate
+                result["dividend_growth_1y"] = self._latest_dividend_change()
 
                 # Count consecutive years of dividend payments
                 annual_divs = dividends_series.resample("YE").sum()
@@ -889,8 +901,14 @@ class ValuationAnalyzer:
             elif payout <= 100:
                 score += 5
 
-        # Growth rate component (30 points)
-        growth = dividend_data.get("dividend_growth_rate")
+        # Growth rate component (30 points). A cut in the latest complete year
+        # outweighs a long-run rise (EQNR: +40%/yr since 2021, then -40% in 2025).
+        rates: List[float] = [
+            dividend_data[key]
+            for key in ("dividend_growth_rate", "dividend_growth_1y")
+            if dividend_data.get(key) is not None
+        ]
+        growth = min(rates) if rates else None
         if growth is not None:
             if growth >= 10:
                 score += 30

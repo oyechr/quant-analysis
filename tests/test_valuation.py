@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from src.analysis.valuation import (
+    DDM_MAX_GROWTH,
     GROWTH_BOUNDS,
     ValuationAnalyzer,
     dcf_enterprise_value,
@@ -117,6 +118,77 @@ class TestDcfValuation:
         )
         ddm = analyzer.calculate_ddm_valuation(growth_rate=3.0)
         assert ddm["required_return_used"] == pytest.approx(9.0)
+
+
+def _quarterly_dividends(per_year: dict) -> pd.Series:
+    """Quarterly payments; per_year maps a year to (payments made, amount each)."""
+    dates, amounts = [], []
+    for year, (count, amount) in per_year.items():
+        for quarter in range(count):
+            dates.append(pd.Timestamp(year=year, month=2 + 3 * quarter, day=15))
+            amounts.append(amount)
+    return pd.Series(amounts, index=pd.DatetimeIndex(dates))
+
+
+class TestDividends:
+    def test_growth_ignores_the_unfinished_year(self):
+        this_year = pd.Timestamp.now().year
+        analyzer = _analyzer()
+        # 1.00 a quarter, then 1.10: 10% growth. The current year has paid once so far.
+        analyzer.dividends_data = _quarterly_dividends(
+            {this_year - 2: (4, 1.0), this_year - 1: (4, 1.1), this_year: (1, 1.1)}
+        )
+        assert analyzer._estimate_dividend_growth_rate() == pytest.approx(10.0)
+
+    def test_ddm_caps_perpetual_growth(self):
+        this_year = pd.Timestamp.now().year
+        analyzer = _analyzer()
+        analyzer.dividends_data = _quarterly_dividends(
+            {this_year - 2: (4, 1.0), this_year - 1: (4, 1.5)}
+        )
+        ddm = analyzer.calculate_ddm_valuation()
+        assert ddm["assumptions"]["growth_rate_historical"] == pytest.approx(50.0)
+        assert ddm["growth_rate_used"] == DDM_MAX_GROWTH
+        assert ddm["intrinsic_value_per_share"] is not None
+
+    def test_yield_is_ttm_dividends_over_price(self):
+        analyzer = _analyzer(price=50.0)
+        analyzer.info["dividend_yield"] = 0.31  # Yahoo's percent: 0.31%, not 31%
+        # 0.50 a quarter for the last year: 2.00 / 50 = 4%
+        analyzer.dividends_data = pd.Series(
+            0.5, index=pd.date_range(end=pd.Timestamp.now(), periods=4, freq="90D")
+        )
+        assert analyzer.analyze_dividends()["dividend_yield"] == pytest.approx(4.0)
+
+    def test_recent_cut_outweighs_long_run_growth(self):
+        this_year = pd.Timestamp.now().year
+        analyzer = _analyzer()
+        # 1 -> 2 -> 3 a quarter, then cut to 1.8: +21%/yr over 3 years, -40% last year
+        analyzer.dividends_data = _quarterly_dividends(
+            {this_year - 4: (4, 1.0), this_year - 3: (4, 2.0), this_year - 2: (4, 3.0)}
+            | {this_year - 1: (4, 1.8)}
+        )
+        dividends = analyzer.analyze_dividends()
+        assert dividends["dividend_growth_rate"] > 20
+        assert dividends["dividend_growth_1y"] == pytest.approx(-40.0)
+        assert analyzer._calculate_dividend_sustainability_score(dividends) == (
+            analyzer._calculate_dividend_sustainability_score(
+                {**dividends, "dividend_growth_rate": None, "dividend_growth_1y": -40.0}
+            )
+        )
+
+    def test_flat_dividends_have_zero_growth(self):
+        this_year = pd.Timestamp.now().year
+        analyzer = _analyzer()
+        analyzer.dividends_data = _quarterly_dividends(
+            {this_year - 2: (4, 1.0), this_year - 1: (4, 1.0)}
+        )
+        assert analyzer._estimate_dividend_growth_rate() == pytest.approx(0.0)
+
+    def test_yahoo_yield_is_already_percent(self):
+        analyzer = _analyzer()
+        analyzer.info["dividend_yield"] = 0.31
+        assert analyzer.analyze_dividends()["dividend_yield"] == pytest.approx(0.31)
 
 
 def test_vet_shows_the_reverse_dcf():
