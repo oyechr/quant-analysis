@@ -531,14 +531,17 @@ class FundamentalScorer:
             self._score_profitability(gross_margin, operating_margin, strengths, concerns)
         )
 
-        # 6. Return on Equity (weight: 0.10)
-        roe = None
+        # 6. Return on Equity (weight: 0.10), in %. Yahoo's returnOnEquity is a
+        # decimal (AAPL 1.49 = 149%); the DuPont values are already in %.
+        roe_pct = None
         if ticker_info:
             roe = _safe_float(ticker_info.get("roe"))
-        if roe is None:
+            roe_pct = roe * 100.0 if roe is not None else None
+        if roe_pct is None:
             dupont = analysis.get("dupont", {})
-            roe = _safe_float(dupont.get("roe_reported") or dupont.get("roe_calculated"))
-        sub_scores.append(self._score_roe(roe, strengths, concerns))
+            roe_pct = _safe_float(dupont.get("roe_reported") or dupont.get("roe_calculated"))
+        net_margin = _safe_float(margins.get("net_margin"))
+        sub_scores.append(self._score_roe(roe_pct, net_margin, strengths, concerns))
 
         # 7. Beneish M-Score / Earnings Manipulation (weight: 0.05)
         beneish = quality.get("beneish_m")
@@ -824,13 +827,25 @@ class FundamentalScorer:
         )
 
     def _score_roe(
-        self, roe: Optional[float], strengths: List[str], concerns: List[str]
+        self,
+        roe_pct: Optional[float],
+        net_margin: Optional[float],
+        strengths: List[str],
+        concerns: List[str],
     ) -> SubScore:
-        if roe is None:
+        if roe_pct is None:
             return SubScore(name="ROE", score=50.0, weight=0.10, available=False)
-
-        # ROE as percentage (some APIs return as decimal, some as %)
-        roe_pct = roe * 100.0 if abs(roe) < 1.0 else roe
+        if roe_pct < 0 and net_margin is not None and net_margin > 0:
+            # Profitable with a negative ROE means negative equity (often from
+            # buybacks, e.g. MCD): the ratio says nothing about returns
+            return SubScore(
+                name="ROE",
+                score=50.0,
+                weight=0.10,
+                raw_value=roe_pct,
+                label="Negative equity",
+                available=False,
+            )
 
         if roe_pct >= self.params.roe_excellent:
             score = 80.0 + min((roe_pct - self.params.roe_excellent) * 0.3, 20.0)

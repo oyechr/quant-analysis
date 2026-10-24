@@ -398,6 +398,27 @@ class TestFundamentalScorer:
         scorer = FundamentalScorer()
         result = scorer.score(self._make_fund_data())
         assert isinstance(result, DimensionResult)
+
+    def _roe(self, info, **overrides):
+        result = FundamentalScorer().score(self._make_fund_data(**overrides), info)
+        return next(s for s in result.sub_scores if s.name == "ROE")
+
+    def test_yahoo_roe_is_a_decimal_even_above_100_percent(self):
+        roe = self._roe({"roe": 1.49})  # AAPL: 149%
+        assert roe.raw_value == pytest.approx(149.0)
+        assert roe.label == "Excellent"
+        assert self._roe({"roe": 0.21}).raw_value == pytest.approx(21.0)
+
+    def test_dupont_roe_is_already_percent(self):
+        assert self._roe(None, roe=0.5).raw_value == pytest.approx(0.5)
+
+    def test_negative_equity_roe_is_left_out(self):
+        data = self._make_fund_data()
+        data["analysis"]["margins"]["current"]["net_margin"] = 30.0
+        result = FundamentalScorer().score(data, {"roe": -1.2})  # profitable, negative equity
+        roe = next(s for s in result.sub_scores if s.name == "ROE")
+        assert not roe.available and roe.label == "Negative equity"
+        assert not any("Negative ROE" in c for c in result.concerns)
         assert result.dimension == "Fundamental"
 
     def test_score_is_bounded(self):
