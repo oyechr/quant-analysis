@@ -4,6 +4,7 @@ Uses Click's CliRunner for integration testing with mocked data fetching.
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -44,6 +45,7 @@ def _mock_report_data(ticker: str = "AAPL") -> dict:
     """Create minimal report data for testing."""
     return {
         "ticker": ticker,
+        "generated_at": datetime.now().isoformat(),
         "info": {"trailingPE": 28.5, "marketCap": 3000000000000},
         "scoring": {"composite_score": 72.5},
         "technical_analysis": {},
@@ -336,6 +338,23 @@ class TestChatCommand:
             )
 
         mock_gen_cls.return_value.generate_full_report.assert_not_called()
+
+    @patch("src.cli.ReportGenerator")
+    def test_chat_rebuilds_report_from_earlier_day(self, mock_gen_cls, tmp_path):
+        """A report from an earlier day is regenerated before the chat starts."""
+        report_dir = tmp_path / "AAPL" / "reports"
+        report_dir.mkdir(parents=True)
+        import json
+
+        stale = _mock_report_data("AAPL") | {"generated_at": "2026-01-02T10:00:00"}
+        (report_dir / "full_report.json").write_text(json.dumps(stale), encoding="utf-8")
+
+        result = CliRunner().invoke(
+            cli, ["--output-dir", str(tmp_path), "chat", "AAPL", "--debug-context"]
+        )
+
+        assert result.exit_code == 0
+        mock_gen_cls.return_value.generate_full_report.assert_called_once()
 
     @patch("src.cli.ReportGenerator")
     def test_chat_conversation_loop(self, mock_gen_cls, tmp_path):

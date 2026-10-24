@@ -829,6 +829,32 @@ def test_chat_context_without_flags_says_so():
     assert "=== RED FLAGS ===\n  None found" in context
 
 
+def test_chat_context_reads_valuation_model_fields():
+    from src.llm import build_brief_context
+
+    report = make_report()
+    report["generated_at"] = "2026-10-24T09:30:00"
+    report["valuation_analysis"] = {
+        "ddm_valuation": {"intrinsic_value_per_share": 59.2, "discount_premium_pct": 583.2},
+        "dividend_analysis": {
+            "dividend_yield": 3.61,
+            "payout_ratio": 40.7,
+            "sustainability_rating": "Good",
+        },
+        "earnings_analysis": {
+            "earnings_quality": {"assessment": "High Quality"},
+            "surprise_stats": {"beat_rate": 50.0},
+        },
+    }
+
+    context = build_brief_context(report, red_flags=[])
+
+    assert "Report date: 2026-10-24" in context
+    assert "DDM value: 59.2  Premium to DDM: 583.2%" in context
+    assert "Div yield: 3.6%  Payout ratio: 40.7%  Sustainability: Good" in context
+    assert "EPS quality: High Quality  Beat rate: 50.0%" in context
+
+
 # ============================================================
 # Verdict summary
 # ============================================================

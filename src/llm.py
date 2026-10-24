@@ -137,6 +137,7 @@ def build_brief_context(
         f"Sector: {info.get('sector', 'N/A')} | Industry: {info.get('industry', 'N/A')}",
         f"Price: {_fmt(info.get('current_price') or (report_data.get('technical_analysis') or {}).get('latest_values', {}).get('close_price'))}  "
         f"Market cap: {_fmt(info.get('market_cap'), decimals=0)}",
+        f"Report date: {str(report_data.get('generated_at') or 'N/A')[:10]}",
         "",
     ]
 
@@ -305,19 +306,21 @@ def build_brief_context(
         )
     if ddm:
         lines.append(
-            f"DDM value: {_fmt(ddm.get('intrinsic_value'))}  "
+            f"DDM value: {_fmt(ddm.get('intrinsic_value_per_share'))}  "
             f"Premium to DDM: {_fmt(ddm.get('discount_premium_pct'))}%"
         )
     if div:
         lines.append(
-            f"Div yield: {_fmt(div.get('yield_pct'))}%  "
-            f"Payout ratio: {_fmt(div.get('payout_ratio_pct'))}%  "
-            f"Sustainability: {div.get('sustainability_label', 'N/A')}"
+            f"Div yield: {_fmt(div.get('dividend_yield'), pct=True)}  "
+            f"Payout ratio: {_fmt(div.get('payout_ratio'), pct=True)}  "
+            f"Sustainability: {div.get('sustainability_rating') or 'N/A'}"
         )
     if earn:
+        quality = earn.get("earnings_quality") or {}
+        surprises = earn.get("surprise_stats") or {}
         lines.append(
-            f"EPS quality: {earn.get('quality_label', 'N/A')}  "
-            f"Beat rate: {_fmt(earn.get('beat_rate_pct'))}%"
+            f"EPS quality: {quality.get('assessment') or 'N/A'}  "
+            f"Beat rate: {_fmt(surprises.get('beat_rate'), pct=True)}"
         )
     lines.append("")
 

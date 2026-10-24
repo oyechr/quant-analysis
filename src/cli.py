@@ -10,6 +10,7 @@ Usage: quant report AAPL
 import logging
 import sys
 import time
+from datetime import date
 from pathlib import Path
 
 import click
@@ -754,8 +755,16 @@ def chat(ctx, ticker, model, no_intro, debug_context):
     use_cache = ctx.obj["use_cache"]
     json_path = Path(output_dir) / ticker / "reports" / "full_report.json"
 
+    def _read_report():
+        try:
+            return _json.loads(json_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
     def _load_report(force_refresh: bool = False):
-        if force_refresh or not json_path.exists():
+        report = None if force_refresh else _read_report()
+        # A report from an earlier day is rebuilt, so the chat never sees old prices
+        if report is None or str(report.get("generated_at", ""))[:10] < date.today().isoformat():
             click.echo(f"  Generating report for {ticker}...")
             generator = ReportGenerator(output_dir=output_dir)
             generator.generate_full_report(
@@ -764,9 +773,10 @@ def chat(ctx, ticker, model, no_intro, debug_context):
                 output_format="all",
                 use_cache=(not force_refresh) and use_cache,
             )
-        if not json_path.exists():
+            report = _read_report()
+        if report is None:
             raise click.ClickException(f"Failed to generate report for {ticker}.")
-        return _json.loads(json_path.read_text(encoding="utf-8"))
+        return report
 
     def _build_context(report: dict) -> str:
         from .tracking import load_history
