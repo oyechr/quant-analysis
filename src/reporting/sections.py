@@ -53,7 +53,8 @@ class InfoSection(ReportSection):
 
     def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
         logger.info(f"Fetching info for {ticker}")
-        return fetcher.get_ticker_info(ticker, use_cache=use_cache)
+        info: Dict[str, Any] = fetcher.get_ticker_info(ticker, use_cache=use_cache)
+        return info
 
     def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         return raw_data

@@ -16,7 +16,7 @@ from ..data_fetcher import DataFetcher
 from ..reporting import ReportGenerator
 from ..scoring import ScoringConfig, StockScorer
 from ..scoring.scorer import ScoringResult
-from ..utils.financial import trading_dates
+from ..utils.financial import to_float, trading_dates
 
 logger = logging.getLogger(__name__)
 
@@ -366,7 +366,7 @@ class PortfolioView:
         # Weighted average individual vol = sum(w_i * 1) = 1 (unit vols)
         weighted_avg_vol = float(np.sum(w))
 
-        return weighted_avg_vol / np.sqrt(port_var)
+        return float(weighted_avg_vol / np.sqrt(port_var))
 
 
 # ==================== Risk Parity & Portfolio Construction ====================
@@ -499,7 +499,7 @@ def identify_correlation_flags(
 
     for i in range(n):
         for j in range(i + 1, n):
-            corr = float(correlation_matrix.iloc[i, j])
+            corr = to_float(correlation_matrix.iloc[i, j])
             if not np.isfinite(corr):
                 continue  # too little shared history (see return_correlations)
             all_correlations.append(corr)

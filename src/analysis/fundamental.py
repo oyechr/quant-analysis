@@ -90,7 +90,7 @@ class FundamentalAnalyzer:
         Returns:
             Dictionary with growth metrics
         """
-        growth = {"revenue": {}, "earnings": {}, "fcf": {}}
+        growth: Dict[str, Dict[str, Any]] = {"revenue": {}, "earnings": {}, "fcf": {}}
 
         if self.income_stmt_a is not None and not self.income_stmt_a.empty:
             # Revenue growth
@@ -241,7 +241,7 @@ class FundamentalAnalyzer:
         Returns:
             Dictionary with margin metrics and trends
         """
-        margins = {"current": {}, "trend": {}}
+        margins: Dict[str, Dict[str, Any]] = {"current": {}, "trend": {}}
 
         if self.income_stmt_a is not None and not self.income_stmt_a.empty:
             # Get current period values
@@ -494,7 +494,7 @@ class FundamentalAnalyzer:
 
         z_score = 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
 
-        return z_score
+        return float(z_score)
 
     def calculate_piotroski_f_score(self) -> Optional[int]:
         """
@@ -857,6 +857,7 @@ class FundamentalAnalyzer:
 
         # Try average total assets for more accuracy
         total_assets_prev = self._get_value(self.balance_sheet_a, "Total Assets", 1)
+        avg_total_assets: Optional[float]
         if total_assets and total_assets_prev:
             avg_total_assets = (total_assets + total_assets_prev) / 2
         else:
@@ -1350,7 +1351,7 @@ def _value_at(df: Optional[pd.DataFrame], row_name: str, period: pd.Timestamp) -
                 continue
         except ValueError, TypeError:
             continue
-        value = df.loc[row_name, column]
+        value: Any = df.loc[row_name, column]
         if isinstance(value, pd.Series):
             value = value.iloc[0]
         try:

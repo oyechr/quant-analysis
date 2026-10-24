@@ -50,7 +50,7 @@ class TickerChange:
             return None
         if cur.get("currency") != prev.get("currency"):
             return None
-        return (cur["price"] / prev["price"] - 1) * 100
+        return float((cur["price"] / prev["price"] - 1) * 100)
 
     @property
     def signal_change(self) -> Optional[tuple[str, str]]:
@@ -206,12 +206,12 @@ def track_changes(
             bundle, flags = outcome
             info = bundle.report.get("info") or {}
             change.name = info.get("name")
-            row = history_row(bundle.report, bundle.scoring, "changes", flags, today)
-            if row is None:
+            new_row = history_row(bundle.report, bundle.scoring, "changes", flags, today)
+            if new_row is None:
                 change.error = bundle.errors.get("scoring") or "no price data (check the symbol)"
             else:
-                change.current = row
-                rows.append(row)
+                change.current = new_row
+                rows.append(new_row)
             change.next_earnings = next_earnings_date(
                 bundle.report, today=datetime.combine(today, time())
             )

@@ -44,6 +44,7 @@ from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisOptions
 from ..scoring import ScoringConfig
 from ..utils.concurrency import DEFAULT_WORKERS, run_concurrently
+from ..utils.financial import to_float
 from ..utils.fx import conversion_rate, major_currency
 from ..vetting.vet import LOOK_DEEPER, vet_ticker
 from .nordnet import PORTFOLIO_COLUMNS
@@ -357,7 +358,7 @@ def _find_overlaps(reviews: List[HoldingReview], correlations: pd.DataFrame) -> 
                 or other_ticker not in correlations.columns
             ):
                 continue
-            corr = float(correlations.loc[ticker, other_ticker])
+            corr = to_float(correlations.loc[ticker, other_ticker])
             if (
                 math.isfinite(corr)
                 and corr >= REDUNDANT_CORRELATION

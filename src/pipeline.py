@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import pandas as pd
 
@@ -314,7 +314,8 @@ def _latest_book_equity(run: _RunFetcher, ticker: str, use_cache: bool) -> Optio
             continue
         for row in ("Common Stock Equity", "Stockholders Equity"):
             if row in sheet.index:
-                values = pd.to_numeric(sheet.loc[row], errors="coerce").dropna()
+                # Statement rows are unique, so .loc gives a Series
+                values = pd.to_numeric(cast(pd.Series, sheet.loc[row]), errors="coerce").dropna()
                 if not values.empty:
                     return float(values.iloc[0])
     return None
@@ -418,7 +419,7 @@ def pead_history(earnings: Optional[Dict[str, pd.DataFrame]]) -> List[Dict[str, 
     frame = history.reset_index() if "quarter" not in history.columns else history
     frame = frame.rename(columns={"index": "quarter"})
     return [
-        {k: (None if isinstance(v, float) and pd.isna(v) else v) for k, v in r.items()}
+        {str(k): (None if isinstance(v, float) and pd.isna(v) else v) for k, v in r.items()}
         for r in frame.to_dict("records")
     ]
 

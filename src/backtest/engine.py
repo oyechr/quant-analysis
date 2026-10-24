@@ -87,10 +87,12 @@ def backtest_months(years: int, today: Optional[date] = None) -> List[pd.Period]
     return [last - k for k in range(years * 12 - 1, -1, -1)]
 
 
-def month_end_positions(index: pd.DatetimeIndex) -> pd.Series:
+def month_end_positions(index: pd.DatetimeIndex) -> Dict[pd.Period, int]:
     """Month -> position of that month's last bar."""
-    months = trading_dates(index).to_period("M")
-    return pd.Series(range(len(index)), index=months).groupby(level=0).last()
+    ends: Dict[pd.Period, int] = {}
+    for position, month in enumerate(trading_dates(index).to_period("M")):
+        ends[month] = position  # later bars overwrite, so the last one wins
+    return ends
 
 
 def score_window(
@@ -145,14 +147,18 @@ def ticker_observations(
 
     rows: List[Dict[str, Any]] = []
     for month in months:
-        if month not in ends.index:
+        if month not in ends:
             continue
-        i = int(ends[month])
+        i = ends[month]
         if i + 1 < LOOKBACK_BARS:
             continue
         window = prices.iloc[i + 1 - LOOKBACK_BARS : i + 1]
         # The benchmark up to the same trading date (exchanges keep different holidays)
-        j = int(bench_dates.searchsorted(trading_dates(window.index[-1:])[0], side="right"))
+        j = int(
+            bench_dates.searchsorted(
+                trading_dates(pd.DatetimeIndex(window.index[-1:]))[0], side="right"
+            )
+        )
         benchmark_window = benchmark.iloc[max(0, j - LOOKBACK_BARS) : j]
 
         row: Dict[str, Any] = {
@@ -166,12 +172,11 @@ def ticker_observations(
             target = month + h
             ret = excess = alpha = None
             # Only complete months: the current month's last bar isn't its month-end
-            if target <= last_month and target in ends.index:
-                ret = float(close.iloc[int(ends[target])] / close.iloc[i] - 1)
-                if month in bench_ends.index and target in bench_ends.index:
+            if target <= last_month and target in ends:
+                ret = float(close.iloc[ends[target]] / close.iloc[i] - 1)
+                if month in bench_ends and target in bench_ends:
                     bench_ret = float(
-                        bench_close.iloc[int(bench_ends[target])]
-                        / bench_close.iloc[int(bench_ends[month])]
+                        bench_close.iloc[bench_ends[target]] / bench_close.iloc[bench_ends[month]]
                         - 1
                     )
                     excess = ret - bench_ret

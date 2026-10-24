@@ -992,10 +992,10 @@ class ValuationAnalyzer:
                     upcoming = dates[dates > pd.Timestamp.now(tz="UTC")]
                     if not upcoming.empty:
                         # Rows are newest-first, so the next date is the earliest upcoming one
-                        next_label = upcoming.idxmin()
-                        result["next_earnings_date"] = str(upcoming[next_label].date())
+                        pos = int(upcoming.to_numpy().argmin())
+                        result["next_earnings_date"] = str(upcoming.iloc[pos].date())
                         result["next_earnings_estimate"] = to_float(
-                            earnings_dates.loc[next_label].get("EPS Estimate")
+                            earnings_dates.loc[upcoming.index[pos]].get("EPS Estimate")
                         )
                 except Exception as e:
                     logger.warning(f"Could not parse earnings dates: {e}")

@@ -11,7 +11,7 @@ Detects patterns across multiple tracked portfolios:
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Sequence
 
 from .models import (
     ContrarianSignal,
@@ -358,7 +358,7 @@ class PortfolioAnalyzer:
         return sorted(signals, key=lambda s: s.strength, reverse=True)
 
     @staticmethod
-    def _safe_avg(values: list[Optional[float]]) -> Optional[float]:
+    def _safe_avg(values: Sequence[Optional[float]]) -> Optional[float]:
         """Calculate average of non-None values."""
         valid = [v for v in values if v is not None]
         return sum(valid) / len(valid) if valid else None

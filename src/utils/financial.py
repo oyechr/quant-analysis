@@ -68,7 +68,7 @@ def annualize_volatility(daily_volatility: float, periods: int = TRADING_DAYS_PE
     Returns:
         Annualized volatility (standard deviation)
     """
-    return daily_volatility * np.sqrt(periods)
+    return float(daily_volatility * np.sqrt(periods))
 
 
 def validate_price_data(price_data: pd.DataFrame, column: str = "Close") -> bool:
@@ -96,7 +96,7 @@ def convert_annual_to_daily_rate(annual_rate: float) -> float:
     Returns:
         Daily rate as decimal
     """
-    return (1 + annual_rate) ** (1 / TRADING_DAYS_PER_YEAR) - 1
+    return float((1 + annual_rate) ** (1 / TRADING_DAYS_PER_YEAR) - 1)
 
 
 def trading_dates(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
@@ -153,7 +153,7 @@ def calculate_cagr(ending_value: float, beginning_value: float, num_periods: int
     """
     if ending_value is None or beginning_value is None or beginning_value <= 0 or num_periods <= 0:
         return 0.0
-    return (pow(ending_value / beginning_value, 1 / num_periods) - 1) * 100
+    return float((pow(ending_value / beginning_value, 1 / num_periods) - 1) * 100)
 
 
 def calculate_growth_rate(current: Optional[float], previous: Optional[float]) -> Optional[float]:

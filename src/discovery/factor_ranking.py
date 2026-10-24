@@ -176,7 +176,7 @@ class FactorRanker:
 
         # Step 4: Final composite percentile rank
         scored = [r for r in results if r.composite_score is not None]
-        scored.sort(key=lambda r: r.composite_score)  # type: ignore[arg-type]
+        scored.sort(key=lambda r: r.composite_score or 0.0)  # never None here
         n = len(scored)
         for rank, r in enumerate(scored):
             r.percentile_rank = (rank / (n - 1)) * 100 if n > 1 else 50.0
@@ -354,7 +354,7 @@ def inverse_volatility(close: pd.Series) -> Optional[float]:
     """
     if len(close) < 60:
         return None
-    annualized_vol = float(close.pct_change().dropna().std()) * np.sqrt(252)
+    annualized_vol = float(close.pct_change().dropna().std()) * float(np.sqrt(252))
     if not annualized_vol > 0:
         return None
     return 1.0 / annualized_vol
@@ -373,4 +373,4 @@ def _percentiles(values: Dict[str, float]) -> Dict[str, float]:
         return {}
     ranks = pd.Series(values, dtype=float).rank(method="average")
     n = len(ranks)
-    return {t: float((r - 1) / (n - 1) * 100) for t, r in ranks.items()}
+    return {str(t): float((r - 1) / (n - 1) * 100) for t, r in ranks.items()}

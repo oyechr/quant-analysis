@@ -353,7 +353,7 @@ class TechnicalAnalyzer:
         base_cols = ["Open", "High", "Low", "Close", "Volume", "Adj Close"]
         indicator_cols = [col for col in self.df.columns if col not in base_cols]
 
-        result = {
+        result: Dict[str, Any] = {
             "date": format_date(latest.name),
             "close_price": float(latest["Close"]),
             "indicators": {},

@@ -36,7 +36,10 @@ class HoldingEnricher:
         """Load CUSIP→ticker mapping cache."""
         if self._cusip_cache_file.exists():
             try:
-                return json.loads(self._cusip_cache_file.read_text(encoding="utf-8"))
+                cusips: dict[str, str] = json.loads(
+                    self._cusip_cache_file.read_text(encoding="utf-8")
+                )
+                return cusips
             except json.JSONDecodeError, OSError:
                 pass
         return {}
@@ -45,7 +48,10 @@ class HoldingEnricher:
         """Load ticker→sector/industry mapping cache."""
         if self._sector_cache_file.exists():
             try:
-                return json.loads(self._sector_cache_file.read_text(encoding="utf-8"))
+                sectors: dict[str, dict] = json.loads(
+                    self._sector_cache_file.read_text(encoding="utf-8")
+                )
+                return sectors
             except json.JSONDecodeError, OSError:
                 pass
         return {}
@@ -195,7 +201,7 @@ class HoldingEnricher:
                         industry = quote.get("industry")
                         if sector:
                             self._sector_map[symbol] = {"sector": sector, "industry": industry}
-                        return symbol
+                        return str(symbol)
                 # Fallback: first equity result even if foreign
                 for quote in results.quotes:
                     symbol = quote.get("symbol", "")
@@ -204,7 +210,7 @@ class HoldingEnricher:
                         industry = quote.get("industry")
                         if sector:
                             self._sector_map[symbol] = {"sector": sector, "industry": industry}
-                        return symbol
+                        return str(symbol)
         except Exception as e:
             logger.debug(f"Search failed for '{search_name}': {e}")
 

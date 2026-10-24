@@ -5,7 +5,7 @@ Rendering and saving for `quant backtest`
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from ..vetting.render import Section, Table, sections_to_markdown, sections_to_text
 from .engine import BacktestResult
@@ -123,7 +123,7 @@ def build_sections(data: Dict[str, Any]) -> List[Section]:
             ),
         ]
 
-    notes = list(CAVEATS)
+    notes: List[Union[str, Table]] = list(CAVEATS)
     if data.get("errors"):
         failed = [f"{t} ({e})" for t, e in data["errors"].items()]
         notes.append(f"Not tested: {', '.join(failed[:10])}{' ...' if len(failed) > 10 else ''}")

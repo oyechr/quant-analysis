@@ -674,10 +674,10 @@ class RiskMetrics:
                 return {}
 
             # Skewness (Fisher's definition)
-            skewness = float(daily_returns.skew())
+            skewness = to_float(daily_returns.skew())
 
             # Excess kurtosis (Fisher's: normal = 0, not Pearson where normal = 3)
-            kurtosis = float(daily_returns.kurtosis())
+            kurtosis = to_float(daily_returns.kurtosis())
 
             # Jarque-Bera test statistic: JB = (n/6) * (S^2 + (K^2)/4)
             jb_stat = (n / 6.0) * (skewness**2 + (kurtosis**2) / 4.0)
@@ -742,8 +742,8 @@ class RiskMetrics:
         except ImportError:
             # scipy not available - compute without normal comparison
             daily_returns = price_data["Close"].pct_change().dropna()
-            skewness = float(daily_returns.skew())
-            kurtosis = float(daily_returns.kurtosis())
+            skewness = to_float(daily_returns.skew())
+            kurtosis = to_float(daily_returns.kurtosis())
             n = len(daily_returns)
             jb_stat = (n / 6.0) * (skewness**2 + (kurtosis**2) / 4.0)
 

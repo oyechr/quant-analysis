@@ -37,6 +37,3 @@ jobs:
 
       - name: Type check (mypy)
         run: mypy src/ --ignore-missing-imports
-        # Non-blocking for now: mypy findings are reported but don't fail the build
-        # until the codebase is fully annotated. Remove `continue-on-error` when ready.
-        continue-on-error: true

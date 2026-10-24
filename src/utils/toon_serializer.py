@@ -69,4 +69,5 @@ def report_to_toon(
         excluded = set(excluded_sections)
         json_safe = {k: v for k, v in json_safe.items() if k not in excluded}
 
-    return toon_encode(json_safe)
+    encoded: str = toon_encode(json_safe)
+    return encoded
