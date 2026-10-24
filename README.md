@@ -704,7 +704,7 @@ quant-analysis/
 |       +-- serialization.py         # JSON conversion
 |       +-- toon_serializer.py       # TOON format serializer
 |       +-- types.py                 # Type definitions
-+-- examples/                        # Standalone usage scripts
++-- examples/                        # Python API example (python_api.py)
 |   +-- 01_basic_fetch.py
 |   +-- 02_inspect_data.py
 |   +-- 03_test_fundamentals.py
