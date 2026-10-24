@@ -165,6 +165,28 @@ class TestDilution:
         report = make_report(history={"periods": self.PERIODS, "shares_outstanding": shares})
         assert check_dilution(report, TODAY)[0].severity == "high"
 
+    def test_one_off_jump_is_a_deal_not_dilution(self):
+        # AMCR: flat, +60% in one year (all-stock merger), flat again
+        shares = [462.0, 461.0, 289.0, 289.4]
+        report = make_report(history={"periods": self.PERIODS, "shares_outstanding": shares})
+        [flag] = check_dilution(report, TODAY)
+        assert flag.severity == "medium"
+        assert flag.title == "One-off share issuance"
+        assert "2024-12-31" in flag.detail
+
+    def test_repeated_issuance_stays_heavy_dilution(self):
+        # GPGI: +18%, +418%, +26%
+        shares = [127.0, 100.5, 19.4, 16.4]
+        report = make_report(history={"periods": self.PERIODS, "shares_outstanding": shares})
+        [flag] = check_dilution(report, TODAY)
+        assert (flag.severity, flag.title) == ("high", "Share count dilution")
+
+    def test_single_change_cannot_tell_a_deal_from_dilution(self):
+        report = make_report(
+            history={"periods": self.PERIODS[:2], "shares_outstanding": [150.0, 100.0]}
+        )
+        assert check_dilution(report, TODAY)[0].title == "Share count dilution"
+
     def test_buybacks_pass(self):
         shares = [90.0, 95.0, 98.0, 100.0]
         report = make_report(history={"periods": self.PERIODS, "shares_outstanding": shares})

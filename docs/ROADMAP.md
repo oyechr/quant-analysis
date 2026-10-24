@@ -316,6 +316,7 @@ Every live run so far has turned up a calculation bug the tests didn't catch (Al
 7. Composite (2731fd4): a dimension with no usable data scored 50 at full weight.
 8. Williams %R (93a5118): the same jump at the overbought line that MFI had.
 9. After the live check (the user's choice): Altman's original Z (fitted on manufacturers) is used only for Industrials, Basic Materials and Energy; everything else uses Altman's Z'' (6.56 X1 + 3.26 X2 + 6.72 X3 + 1.05 book equity / liabilities; distress below 1.10, safe above 2.60). The model is recorded as `quality_scores.altman_model`; reports without it are read as Z. On the user's portfolio, two telecom/packaging Review flags went away (Telenor 1.80 -> Z'' 1.91, Amcor) and two stayed (AT&T, SoftwareONE). AAPL's Altman sub-score drops from 100 to 64 (small book equity after buybacks), taking it from Buy 65 to Hold 63. Also: "minor red flags" in the verdict counts medium flags only (8fe8663).
+10. Dilution vs a deal (the user's choice): a share count that jumped more than 25% in one year and stayed within 3% in every other year is flagged medium, "One-off share issuance (likely an acquisition or merger paid in shares)", instead of high "Share count dilution". This affects AMCR (Berry Global merger) and SWON.OL (Crayon); repeated issuers (GPGI, RR, UEC) stay high. Beneish false positives after acquisitions (LUN.TO) are left alone: detecting them is much less reliable.
 
 **Noted, not changed:**
 

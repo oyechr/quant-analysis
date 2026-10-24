@@ -13,7 +13,7 @@ be tested one at a time with synthetic reports.
 import math
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..analysis.fundamental import altman_zones
 from ..scoring.dimensions import FINANCIAL_SECTORS
@@ -24,6 +24,9 @@ BENEISH_THRESHOLD = -1.78  # above = likely manipulator (Beneish 1999)
 BENEISH_MIN_COMPONENTS = 5  # fewer inputs and the score is mostly defaults
 DILUTION_PCT_PER_YEAR = 3.0
 HEAVY_DILUTION_PCT_PER_YEAR = 10.0
+# One year's jump above this, with the other years flat, reads as a deal
+# (an all-stock acquisition or merger) rather than ongoing dilution
+ONE_OFF_ISSUANCE_PCT = 25.0
 INTEREST_COVERAGE_MIN = 2.0
 STATEMENT_MAX_AGE_MONTHS = 15
 DATA_COVERAGE_MIN = 0.60
@@ -119,9 +122,24 @@ def check_negative_fcf(report: Dict[str, Any], today: datetime) -> List[RedFlag]
 
 def check_dilution(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
     history = _history(report)
-    rate = share_growth_per_year(history.get("shares_outstanding", []), history.get("periods", []))
+    shares, periods = history.get("shares_outstanding", []), history.get("periods", [])
+    rate = share_growth_per_year(shares, periods)
     if rate is None or rate <= DILUTION_PCT_PER_YEAR:
         return []
+    one_off = one_off_issuance(shares, periods)
+    if one_off is not None:
+        period, jump = one_off
+        return [
+            RedFlag(
+                severity="medium",
+                title="One-off share issuance",
+                detail=(
+                    f"Shares up {jump:.0f}% in the year to {period} and flat otherwise "
+                    "(likely an acquisition or merger paid in shares)"
+                ),
+                rule="dilution",
+            )
+        ]
     return [
         RedFlag(
             severity="high" if rate > HEAVY_DILUTION_PCT_PER_YEAR else "medium",
@@ -319,6 +337,29 @@ def share_growth_per_year(shares: List[Optional[float]], periods: List[str]) -> 
     if years < 0.5:
         return None
     return float(((latest / oldest) ** (1 / years) - 1) * 100)
+
+
+def one_off_issuance(
+    shares: List[Optional[float]], periods: List[str]
+) -> Optional[Tuple[str, float]]:
+    """
+    (period, % jump) when the share count rose more than ONE_OFF_ISSUANCE_PCT in
+    one year and at most DILUTION_PCT_PER_YEAR in each other year, else None.
+    Needs at least two year-on-year changes; lists are most recent first.
+    """
+    points = [(p, s) for p, s in zip(periods, shares, strict=False) if s is not None and s > 0][:4]
+    changes = [
+        (str(period)[:10], (newer / older - 1) * 100)
+        for (period, newer), (_, older) in zip(points, points[1:], strict=False)
+    ]
+    if len(changes) < 2:
+        return None
+    jump_at = max(range(len(changes)), key=lambda i: changes[i][1])
+    jump = changes[jump_at]
+    others = [pct for i, (_, pct) in enumerate(changes) if i != jump_at]
+    if jump[1] > ONE_OFF_ISSUANCE_PCT and all(pct <= DILUTION_PCT_PER_YEAR for pct in others):
+        return jump
+    return None
 
 
 def _report_date(report: Dict[str, Any]) -> datetime:
