@@ -569,11 +569,11 @@ class FundamentalAnalyzer:
         if ocf and net_income and ocf > net_income:
             score += 1
 
-        # 5. Decreasing Long-Term Debt
+        # 5. Decreasing leverage (long-term debt / total assets, as Piotroski defines it)
         lt_debt = self._get_value(self.balance_sheet_a, "Long Term Debt", 0)
         lt_debt_prev = self._get_value(self.balance_sheet_a, "Long Term Debt", 1)
-        if lt_debt is not None and lt_debt_prev is not None:
-            if lt_debt < lt_debt_prev:
+        if lt_debt is not None and lt_debt_prev is not None and total_assets and total_assets_prev:
+            if lt_debt / total_assets < lt_debt_prev / total_assets_prev:
                 score += 1
 
         # 6. Increasing Current Ratio
@@ -593,9 +593,18 @@ class FundamentalAnalyzer:
             if current_ratio > current_ratio_prev:
                 score += 1
 
-        # 7. No New Shares Issued
-        # Requires historical shares data which yfinance doesn't always provide — skip
-        _ = self.info.get("shares_outstanding") or self.info.get("sharesOutstanding")
+        # 7. No new shares issued: period-end share count (or average diluted
+        # shares) not up on the year before
+        for sheet, row in (
+            (self.balance_sheet_a, "Ordinary Shares Number"),
+            (self.income_stmt_a, "Diluted Average Shares"),
+        ):
+            shares = self._get_value(sheet, row, 0)
+            shares_prev = self._get_value(sheet, row, 1)
+            if shares and shares_prev:
+                if shares <= shares_prev:
+                    score += 1
+                break
 
         # 8. Increasing Gross Margin
         revenue = self._get_value(self.income_stmt_a, "Total Revenue", 0)
@@ -916,7 +925,8 @@ class FundamentalAnalyzer:
         ocf = self._get_value(self.cash_flow_a, "Operating Cash Flow", 0)
         ebitda = self._get_value(self.income_stmt_a, "EBITDA", 0)
 
-        if ocf is None or ebitda is None or ebitda == 0:
+        # A ratio over negative EBITDA means nothing (and would read as "poor")
+        if ocf is None or ebitda is None or ebitda <= 0:
             return None
 
         conversion_ratio = (ocf / ebitda) * 100
@@ -926,7 +936,7 @@ class FundamentalAnalyzer:
         for i in range(3):
             ocf_i = self._get_value(self.cash_flow_a, "Operating Cash Flow", i)
             ebitda_i = self._get_value(self.income_stmt_a, "EBITDA", i)
-            if ocf_i is not None and ebitda_i is not None and ebitda_i != 0:
+            if ocf_i is not None and ebitda_i is not None and ebitda_i > 0:
                 trend.append((ocf_i / ebitda_i) * 100)
 
         # Interpretation

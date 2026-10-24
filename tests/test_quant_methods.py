@@ -436,3 +436,36 @@ class TestGrowthRates:
         assert growth["earnings"]["3y_cagr"] is None
         assert growth["earnings"]["1y"] < 0
         assert growth["revenue"]["3y_cagr"] == pytest.approx(8.0)
+
+
+class TestPiotroski:
+    def _score(self, shares=(2.5e9, 2.5e9), lt_debt=None):
+        from conftest import make_statements
+
+        from src.analysis.fundamental import FundamentalAnalyzer
+
+        statements = make_statements()
+        balance = statements["balance_sheet"].copy()
+        balance.loc["Ordinary Shares Number", balance.columns[:2]] = list(shares)
+        if lt_debt is not None:
+            balance.loc["Long Term Debt", balance.columns[:2]] = list(lt_debt)
+        return FundamentalAnalyzer(
+            {},
+            {
+                "income_stmt_annual": statements["income_stmt"],
+                "balance_sheet_annual": balance,
+                "cash_flow_annual": statements["cashflow"],
+            },
+        ).calculate_piotroski_f_score()
+
+    def test_no_new_shares_earns_its_point(self, default_config):
+        assert self._score(shares=(2.5e9, 2.5e9)) == self._score(shares=(2.6e9, 2.5e9)) + 1
+
+    def test_leverage_is_debt_over_assets(self, default_config):
+        from conftest import make_statements
+
+        assets_now, assets_prev = make_statements()["balance_sheet"].loc["Total Assets"].iloc[:2]
+        # Assets grew 8%; debt up ~2.6% (19% of assets after 20%) is still lower leverage
+        lower_leverage = self._score(lt_debt=(0.19 * assets_now, 0.2 * assets_prev))
+        same_leverage = self._score(lt_debt=(0.2 * assets_now, 0.2 * assets_prev))
+        assert lower_leverage == same_leverage + 1
