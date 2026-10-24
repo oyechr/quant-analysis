@@ -86,7 +86,7 @@ class TestCLIGroup:
 class TestReportCommand:
     """Test the 'report' subcommand."""
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.analyze.ReportGenerator")
     def test_report_basic(self, mock_gen_cls):
         mock_gen = MagicMock()
         mock_gen.generate.return_value = _mock_bundle()
@@ -98,7 +98,7 @@ class TestReportCommand:
         assert "AAPL" in result.output
         mock_gen.generate.assert_called_once()
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.analyze.ReportGenerator")
     def test_report_with_options(self, mock_gen_cls):
         mock_gen = MagicMock()
         mock_gen.generate.return_value = _mock_bundle("TSLA")
@@ -128,7 +128,7 @@ class TestReportCommand:
         assert options.scoring_config.weights == ScoringConfig.value_investor().weights
         assert mock_gen.generate.call_args[1]["output_format"] == "json"
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.analyze.ReportGenerator")
     def test_report_prints_freshness_warnings(self, mock_gen_cls):
         bundle = _mock_bundle()
         bundle.report["data_freshness"] = {"warnings": ["Latest price bar is 9 days old"]}
@@ -147,7 +147,7 @@ class TestReportCommand:
 class TestScoreCommand:
     """Test the 'score' subcommand."""
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.analyze.ReportGenerator")
     def test_score_single(self, mock_gen_cls):
         mock_gen = MagicMock()
         mock_gen.generate.return_value = _mock_bundle()
@@ -159,7 +159,7 @@ class TestScoreCommand:
         assert "AAPL" in result.output
         assert "STOCK SCORES" in result.output
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.analyze.ReportGenerator")
     def test_score_multiple_keeps_input_order(self, mock_gen_cls):
         mock_gen = MagicMock()
         mock_gen.generate.side_effect = lambda ticker, *a, **kw: _mock_bundle(ticker)
@@ -171,7 +171,7 @@ class TestScoreCommand:
         table = result.output.split("STOCK SCORES")[1]
         assert table.index("MSFT") < table.index("AAPL")
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.analyze.ReportGenerator")
     def test_score_reports_errors_per_ticker(self, mock_gen_cls):
         def _generate(ticker, *args, **kwargs):
             if ticker == "BAD":
@@ -186,7 +186,7 @@ class TestScoreCommand:
         assert "BAD" in result.output
         assert "ERROR" in result.output
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.analyze.ReportGenerator")
     def test_score_with_config(self, mock_gen_cls):
         mock_gen = MagicMock()
         mock_gen.generate.return_value = _mock_bundle()
@@ -207,7 +207,7 @@ class TestScoreCommand:
 class TestCompareCommand:
     """Test the 'compare' subcommand."""
 
-    @patch("src.cli.TickerComparator")
+    @patch("src.cli.analyze.TickerComparator")
     def test_compare_basic(self, mock_comp_cls):
         import pandas as pd
 
@@ -234,7 +234,7 @@ class TestCompareCommand:
 class TestWatchCommand:
     """Test the 'watch' subcommand."""
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.analyze.ReportGenerator")
     def test_watch_single_iteration(self, mock_gen_cls):
         mock_gen = MagicMock()
         mock_gen.generate.return_value = _mock_bundle()
@@ -268,7 +268,7 @@ class TestChatCommand:
         assert "--no-intro" in result.output
         assert "--debug-context" in result.output
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.chat.ReportGenerator")
     def test_chat_debug_context_uses_existing_report(self, mock_gen_cls, tmp_path):
         """--debug-context prints context and exits without calling the LLM."""
         report_dir = tmp_path / "AAPL" / "reports"
@@ -294,7 +294,7 @@ class TestChatCommand:
         assert "TICKER: AAPL" in result.output
         mock_gen_cls.return_value.generate_full_report.assert_not_called()
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.chat.ReportGenerator")
     def test_chat_generates_report_when_missing(self, mock_gen_cls, tmp_path):
         """chat auto-generates a report if none exists, then starts the session."""
         mock_gen = MagicMock()
@@ -317,7 +317,7 @@ class TestChatCommand:
         # Session header should be present
         assert "MSFT" in result.output
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.chat.ReportGenerator")
     def test_chat_loads_existing_report_without_regenerating(self, mock_gen_cls, tmp_path):
         """chat loads an existing report without re-generating it."""
         report_dir = tmp_path / "AAPL" / "reports"
@@ -339,7 +339,7 @@ class TestChatCommand:
 
         mock_gen_cls.return_value.generate_full_report.assert_not_called()
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.chat.ReportGenerator")
     def test_chat_rebuilds_report_from_earlier_day(self, mock_gen_cls, tmp_path):
         """A report from an earlier day is regenerated before the chat starts."""
         report_dir = tmp_path / "AAPL" / "reports"
@@ -356,7 +356,7 @@ class TestChatCommand:
         assert result.exit_code == 0
         mock_gen_cls.return_value.generate_full_report.assert_called_once()
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.chat.ReportGenerator")
     def test_chat_conversation_loop(self, mock_gen_cls, tmp_path):
         """Messages are accumulated and passed to chat_turn on each turn."""
         report_dir = tmp_path / "AAPL" / "reports"
@@ -388,7 +388,7 @@ class TestChatCommand:
         assert len(call_messages[1]) > len(call_messages[0])
         assert call_messages[1][-1]["content"] == "What is the bull case?"
 
-    @patch("src.cli.ReportGenerator")
+    @patch("src.cli.chat.ReportGenerator")
     def test_chat_clear_resets_history(self, mock_gen_cls, tmp_path):
         """/clear resets message history but context is preserved."""
         report_dir = tmp_path / "AAPL" / "reports"

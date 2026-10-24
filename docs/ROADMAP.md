@@ -285,7 +285,7 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 ## Phase 6: Cleanup (do alongside the other phases)
 
 - Split `src/reporting/generator.py` (~900 lines of Markdown formatting) into `reporting/markdown.py`.
-- Turn `src/cli.py` into a package (`cli/__init__.py` plus one module per command group). Move table rendering out of the command functions.
+- **Done (2026-10-24): `src/cli/` is a package.** `__init__.py` defines the `quant` group and registers the commands from `analyze` (report, score, vet, compare, watch), `find` (screen, discover), `chat`, `portfolio` (import-portfolio, review), `track` (watchlist, changes) and `backtest`; shared options live in `common.py`. Pure move: every `--help` page is unchanged. Still to do: move table rendering out of the command functions.
 - **Done (2026-10-24): the 27 skipped tests run.** The session fixture `sample_data_dir` (tests/conftest.py) builds full reports for AAPL, EXE.TO and GJF.OL with the real pipeline on a fake market (`make_statements`, `make_context`), so the samples follow code changes. `test_scorer.py` and `test_toon_serializer.py` read from it. The dead object-column loop in `utils/serialization.py` (a pandas 3 deprecation warning) is removed.
 - `FundamentalAnalyzer.calculate_all()` runs 3 times per report (JSON section, markdown, per-analysis JSON). Memoize it like `ValuationAnalyzer.analyze()`.
 - Filters for market cap and volume mix currencies across exchanges (NOK vs USD). Convert with FX rates (`EURUSD=X`-style Yahoo symbols) if it matters.
