@@ -57,6 +57,19 @@ def annualize_return(daily_return: float, periods: int = TRADING_DAYS_PER_YEAR) 
     return daily_return * periods
 
 
+def downside_deviation(returns: Any) -> float:
+    """
+    Target downside deviation (target 0): sqrt(mean(min(r, 0)^2)) over all
+    periods, as in the Sortino ratio. Gains count as zero rather than being
+    dropped, and the losses aren't centred on their own mean.
+    """
+    values = np.asarray(returns, dtype=float)
+    values = values[~np.isnan(values)]
+    if values.size == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(np.minimum(values, 0.0) ** 2)))
+
+
 def annualize_volatility(daily_volatility: float, periods: int = TRADING_DAYS_PER_YEAR) -> float:
     """
     Convert daily volatility to annualized volatility

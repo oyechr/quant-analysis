@@ -469,3 +469,30 @@ class TestPiotroski:
         lower_leverage = self._score(lt_debt=(0.19 * assets_now, 0.2 * assets_prev))
         same_leverage = self._score(lt_debt=(0.2 * assets_now, 0.2 * assets_prev))
         assert lower_leverage == same_leverage + 1
+
+
+class TestRiskFormulas:
+    def test_downside_deviation_counts_gains_as_zero(self):
+        from src.utils.financial import downside_deviation
+
+        # losses -0.02 and -0.04 over four periods: sqrt((0.0004 + 0.0016) / 4)
+        assert downside_deviation([0.01, -0.02, 0.03, -0.04]) == pytest.approx(0.02236, abs=1e-5)
+        assert downside_deviation([0.01, 0.02]) == 0.0
+
+    def test_sortino_uses_target_downside_deviation(self, default_config):
+        from src.analysis.risk import RiskMetrics
+        from src.utils.financial import convert_annual_to_daily_rate, downside_deviation
+
+        prices = pd.DataFrame({"Close": 100 * np.cumprod(1 + np.tile([0.01, -0.005, 0.002], 50))})
+        excess = prices["Close"].pct_change().dropna() - convert_annual_to_daily_rate(0.04)
+        expected = excess.mean() / downside_deviation(excess) * np.sqrt(252)
+        assert RiskMetrics().calculate_sortino_ratio(prices, 0.04) == pytest.approx(expected)
+
+    def test_parametric_var_is_deterministic(self, default_config):
+        from src.analysis.risk import RiskMetrics
+
+        prices = pd.DataFrame({"Close": 100 * np.cumprod(1 + np.tile([0.01, -0.012], 60))})
+        returns = prices["Close"].pct_change().dropna()
+        var = RiskMetrics().calculate_var(prices)["var_parametric"]
+        assert var == pytest.approx(returns.mean() - 1.6449 * returns.std(), rel=1e-4)
+        assert RiskMetrics().calculate_var(prices)["var_parametric"] == var

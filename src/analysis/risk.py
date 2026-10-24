@@ -11,6 +11,7 @@ Calculates risk and performance metrics for stock analysis:
 """
 
 import logging
+from statistics import NormalDist
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -25,6 +26,7 @@ from ..utils.financial import (
     calculate_daily_returns,
     calculate_kelly_criterion,
     convert_annual_to_daily_rate,
+    downside_deviation,
     to_float,
     validate_price_data,
 )
@@ -140,18 +142,10 @@ class RiskMetrics:
             daily_vol = daily_returns.std()
             annualized_vol = annualize_volatility(to_float(daily_vol))
 
-            # Downside deviation (only negative returns)
-            downside_returns = daily_returns[daily_returns < 0]
-            downside_deviation = (
-                annualize_volatility(to_float(downside_returns.std()))
-                if len(downside_returns) > 0
-                else 0.0
-            )
-
             metrics = {
                 "daily_volatility": float(daily_vol),
                 "annualized_volatility": float(annualized_vol),
-                "downside_deviation": float(downside_deviation),
+                "downside_deviation": annualize_volatility(downside_deviation(daily_returns)),
             }
 
             # Rolling volatility if window specified
@@ -242,12 +236,9 @@ class RiskMetrics:
             # Excess returns
             excess_returns = daily_returns - daily_rf
 
-            # Downside deviation (only negative excess returns)
-            downside_returns = excess_returns[excess_returns < 0]
-            if len(downside_returns) == 0 or downside_returns.std() == 0:
+            downside_std = downside_deviation(excess_returns)
+            if downside_std == 0:
                 return 0.0
-
-            downside_std = downside_returns.std()
 
             # Sortino ratio (annualized)
             sortino = (excess_returns.mean() / downside_std) * np.sqrt(TRADING_DAYS_PER_YEAR)
@@ -435,9 +426,7 @@ class RiskMetrics:
             # Parametric VaR (assumes normal distribution)
             mean_return = float(daily_returns.mean())
             std_return = float(daily_returns.std())
-            z_score = np.abs(
-                np.percentile(np.random.standard_normal(10000), (1 - confidence_level) * 100)
-            )
+            z_score = NormalDist().inv_cdf(confidence_level)  # 1.645 at 95%
             parametric_var = mean_return - z_score * std_return
 
             return {
@@ -598,13 +587,11 @@ class RiskMetrics:
                 rolling_std = excess_returns.rolling(window=window).std()
                 rolling_sharpe = (rolling_mean / rolling_std) * np.sqrt(TRADING_DAYS_PER_YEAR)
 
-                # Rolling Sortino
-                def calculate_downside_std(window_returns):
-                    downside = window_returns[window_returns < 0]
-                    return downside.std() if len(downside) > 0 else np.nan
-
-                rolling_downside_std = excess_returns.rolling(window=window).apply(
-                    calculate_downside_std, raw=False
+                # Rolling Sortino (a window without losses has no downside deviation)
+                rolling_downside_std = (
+                    excess_returns.rolling(window=window)
+                    .apply(downside_deviation, raw=True)
+                    .replace(0.0, np.nan)
                 )
                 rolling_sortino = (rolling_mean / rolling_downside_std) * np.sqrt(
                     TRADING_DAYS_PER_YEAR
