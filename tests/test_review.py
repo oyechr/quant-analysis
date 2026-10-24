@@ -314,6 +314,10 @@ def test_cli_review(review_market, tmp_path):
     assert result.exit_code == 0, result.output
     assert "PORTFOLIO REVIEW" in result.output
     assert "positions up to 60%, sectors up to 35% (from" in result.output
+    # Scores go into the history, like vet's (before the peer rescale)
+    history = pd.read_csv(tmp_path / "data" / "_history" / "scores.csv")
+    assert set(history["ticker"]) == {"BIG.OL", "TST"}
+    assert set(history["source"]) == {"review"}
     assert "Unmapped Thing" in result.output
     saved = json.loads((tmp_path / "review.json").read_text(encoding="utf-8"))
     assert {h["ticker"] for h in saved["holdings"]} == {"BIG.OL", "TST"}

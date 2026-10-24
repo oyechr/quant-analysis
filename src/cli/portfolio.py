@@ -9,6 +9,7 @@ from ..pipeline import AnalysisOptions
 from .common import (
     config_option,
     get_scoring_config,
+    record_history,
     workers_option,
 )
 
@@ -264,6 +265,7 @@ def _run_review(ctx, portfolio_file, config_name, workers, base, targets_file, q
         targets=targets,
     )
     result.unmapped = unmapped
+    record_history(output_dir, result.history_rows)
     return result, targets
 
 

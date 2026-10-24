@@ -17,7 +17,7 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 5 | Trust: price-only backtest, calibrate signal thresholds | Done (live on sp100 and OBX, 2026-10-23; thresholds documented as heuristics) |
 | 6 | Cleanup (do alongside the others) | Done (2026-10-24) |
 | 6b | Correctness review of the decision code | Done (2026-10-24; 10 fixes, live-checked) |
-| 7 | Construct: portfolio exposure and rebalance proposals | 7a-7c done (2026-10-24, live-checked); open: review score history, optional --fill |
+| 7 | Construct: portfolio exposure and rebalance proposals | Done (7a-7c live-checked 2026-10-24; review score history 2026-10-25); optional: rebalance --fill |
 | 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
 | - | Side items: decision journal, automation, quick wins | Planned (outline only) |
 
@@ -245,7 +245,7 @@ Input: the holdings you own. Output: per holding, **Exit / Trim / Hold / Add**, 
   - `history.py`: `history_row(report, scoring, source, red_flags, today)`, `record_scores(rows, data_dir)`, `load_history(data_dir, ticker, preset)`. The file is `data/_history/scores.csv`, written atomically, with columns date, ticker, preset, source, score, the four dimensions, signal, confidence, price, currency, red_flags (count) and flags (titles joined by " | ", so `changes` can tell new from cleared). One row per (date, ticker, preset); the later run wins. No row is written without a score and a price: an unknown symbol still gets a meaningless score.
   - `changes.py`: `track_changes()` runs `analyze_ticker` (no peers, no context) and `find_red_flags` per ticker, compares with the latest row for the same preset from an earlier day, then records today's rows. `TickerChange.notes()` holds the rules: a signal change, a score move of `SCORE_MOVE` (3) or more, dimensions that moved `DIMENSION_MOVE` (5) or more, new or cleared red flags, price within `NEAR_LEVEL_PCT` (5%) of or past the target/stop, and earnings within `EARNINGS_SOON_DAYS` (14). The price change is shown only when the currency is the same. `render_text` reuses `vetting.render` sections.
 - **Comparable history:** `vet` rescales P/E against peers, so `VetResult.base_scoring` keeps the score from before the peer rescore, and that is what `vet` records. Every row in the history is on the standard valuation cutoffs.
-- **Recorded by** `report`, `score`, `vet`, `screen` (stage 2: `ScreenCandidate.report` keeps the report) and `changes`. `review` doesn't record yet; it would need `base_scoring` passed through `review_portfolio`.
+- **Recorded by** `report`, `score`, `vet`, `screen` (stage 2: `ScreenCandidate.report` keeps the report) and `changes`. `review` and `rebalance` record their holdings too since 2026-10-25 (source "review", from `base_scoring`).
 - **CLI:** `quant watchlist [--file] add/rm/ls` (ls shows each ticker's last history row), `quant changes [TICKERS] [--config] [--file] [--json]`, `quant screen ... --add-to-watchlist N` (the thesis notes the screen; tickers already listed keep their thesis), and `watchlist` as a screen universe. `watch` points to `changes` for daily use. stderr is now UTF-8 too, so the progress marks (✓/✗) print on Windows.
 - **Chat:** `build_brief_context(..., score_history=rows)` adds the last `CHAT_HISTORY_ROWS` (12) rows.
 - **Tests:** `tests/test_tracking.py`. `tests/test_cli.py` now runs in a temp working directory, because commands write the history under `./data`.
@@ -464,7 +464,7 @@ For restructuring the portfolio. `review` judges each holding alone and suggests
   quant rebalance --cash 20000 --candidates watchlist
   ```
 
-**Also in this phase:** `review` records score history (the Phase 4 gap: pass `base_scoring` through `review_portfolio`).
+**Also in this phase (done 2026-10-25):** `review` records score history (the Phase 4 gap: pass `base_scoring` through `review_portfolio`).
 
 **Tests (offline, synthetic):**
 - NOK conversion with a synthetic FX series, including GBp.

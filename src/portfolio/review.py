@@ -41,6 +41,7 @@ from ..comparison import identify_correlation_flags
 from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisOptions
 from ..scoring import ScoringConfig
+from ..tracking.history import Row, history_row
 from ..utils.concurrency import DEFAULT_WORKERS, run_concurrently
 from ..utils.financial import to_float
 from ..utils.fx import conversion_rate
@@ -185,6 +186,7 @@ class PortfolioReview:
     unmapped: List[str] = field(default_factory=list)
     summary: Dict[str, Any] = field(default_factory=dict)
     exposure: Optional[Exposure] = None  # the data behind summary["exposure"]
+    history_rows: List[Row] = field(default_factory=list)  # for the score history
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -328,16 +330,23 @@ def review_portfolio(
     by_ticker = {h.ticker: h for h in holdings}
     reviews: Dict[str, HoldingReview] = {h.ticker: HoldingReview(holding=h) for h in holdings}
 
-    def vet(ticker: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    history: List[Row] = []
+
+    def vet(ticker: str) -> Tuple[Dict[str, Any], Dict[str, Any], Optional[Row]]:
         result = vet_ticker(ticker, fetcher=fetcher, options=options, data_dir=data_dir)
-        return result.to_dict(), result.report.get("info") or {}
+        # The score before the peer rescale, like `vet` records (see tracking.history)
+        row = history_row(result.report, result.base_scoring, "review", result.red_flags)
+        return result.to_dict(), result.report.get("info") or {}, row
 
     for ticker, outcome, error in run_concurrently(vet, list(by_ticker), workers=workers):
         review = reviews[ticker]
         if error is not None or outcome is None:
             review.error = str(error or "no result")
         else:
-            apply_vet(review, *outcome)
+            data, info, row = outcome
+            apply_vet(review, data, info)
+            if row:
+                history.append(row)
         if progress:
             progress(ticker, error)
 
@@ -367,6 +376,7 @@ def review_portfolio(
             "targets": target_notes,
         },
         exposure=exposure,
+        history_rows=history,
     )
 
 

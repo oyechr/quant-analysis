@@ -69,7 +69,7 @@ A Python-based quantitative financial analysis tool for fetching market data, pe
 ### Tracking
 
 - **Watchlist** in ``watchlist.toml`` (gitignored): ticker, a one-line thesis, the date added, and an optional target and stop price. Add by hand, with ``quant watchlist add``, or straight from a screen with ``--add-to-watchlist N``
-- **Score history:** every ``report``, ``score``, ``vet``, ``screen`` (stage 2) and ``changes`` run adds one row per ticker to ``data/_history/scores.csv`` (one row per ticker, preset and day)
+- **Score history:** every ``report``, ``score``, ``vet``, ``screen`` (stage 2), ``changes``, ``review`` and ``rebalance`` run adds one row per ticker to ``data/_history/scores.csv`` (one row per ticker, preset and day)
 - **What changed:** ``quant changes`` rescores the watchlist and compares it with the last run from an earlier day: score and signal, red flags that appeared or cleared, price move, price against target/stop, and earnings in the next 14 days
 - ``quant chat`` sees the ticker's score history, so you can ask why a score dropped
 
