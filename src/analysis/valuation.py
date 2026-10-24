@@ -12,6 +12,7 @@ import pandas as pd
 from ..config import get_config
 from ..utils.dataframe_utils import normalize_datetime_index, safe_get_dataframe_value
 from ..utils.financial import calculate_cagr, to_float
+from ..utils.fx import market_cap_in_listing_units
 
 logger = logging.getLogger(__name__)
 
@@ -416,8 +417,8 @@ class ValuationAnalyzer:
         )
         if shares:
             return shares
-        market_cap = self._get_info_value("marketCap")
-        if market_cap and self.current_price and self.current_price > 0:
+        market_cap = market_cap_in_listing_units(self.info)
+        if market_cap and market_cap > 0 and self.current_price and self.current_price > 0:
             return market_cap / self.current_price
         return None
 
@@ -497,9 +498,9 @@ class ValuationAnalyzer:
         "Tax Rate For Calcs" (21% if missing).
         """
         cost_of_equity, details = self._cost_of_equity()
-        equity = self._get_info_value("marketCap")
+        equity = market_cap_in_listing_units(self.info)  # same units as the statement debt
         debt = self._latest_balance_value("Total Debt")
-        if not equity or not debt or debt <= 0:
+        if not equity or equity <= 0 or not debt or debt <= 0:
             details["debt_weight"] = 0.0
             return cost_of_equity, details
 

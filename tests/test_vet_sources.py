@@ -16,6 +16,7 @@ from src.utils.fx import (
     convert_statements,
     fx_symbol,
     major_currency,
+    market_cap_in_listing_units,
     normalize_info,
     usd_per_unit,
 )
@@ -401,6 +402,50 @@ class TestYahooRatioCorrection:
         usd = {"currency": "USD", "financial_currency": "USD", "price_to_sales": 3.0}
         assert normalize_info(usd, {}.get) is usd
         assert normalize_info(EQNR_INFO, {}.get) is EQNR_INFO
+
+
+class TestMinorUnitListings:
+    """BARC.L: price and converted statements in pence, Yahoo's market cap and ratios in GBP."""
+
+    BARC = {
+        "currency": "GBp",
+        "financial_currency": "GBP",
+        "market_cap": 54.6e9,
+        "enterprise_value": 68.0e9,
+        "price_to_sales": 1.94,
+        "ev_to_ebitda": 6.0,
+    }
+
+    def test_market_cap_in_listing_units(self):
+        assert market_cap_in_listing_units(self.BARC) == pytest.approx(5.46e12)
+        assert market_cap_in_listing_units({"currency": "USD", "market_cap": 3e9}) == 3e9
+
+    def test_pounds_to_pence_leaves_yahoos_ratios_alone(self):
+        # GBP -> GBp is a x100 unit change, not a currency mismatch
+        adjusted = adjust_info_ratios(self.BARC, 100.0, book_equity=7.9e12)
+        assert adjusted["price_to_sales"] == pytest.approx(1.94)
+        assert adjusted["ev_to_ebitda"] == pytest.approx(6.0)
+        assert adjusted["price_to_book"] == pytest.approx(5.46e12 / 7.9e12)
+
+    def test_fcf_yield_and_wacc_use_matching_units(self, default_config):
+        from src.analysis.fundamental import FundamentalAnalyzer
+        from src.analysis.valuation import ValuationAnalyzer
+
+        pence = 100.0  # statements converted into pence, like the pipeline does
+        year = pd.Timestamp("2025-12-31")
+        statements = {
+            "cash_flow_annual": pd.DataFrame({year: {"Free Cash Flow": 2.73e9 * pence}}),
+            "balance_sheet_annual": pd.DataFrame({year: {"Total Debt": 54.6e9 * pence}}),
+            "income_stmt_annual": pd.DataFrame({year: {"Total Revenue": 28e9 * pence}}),
+        }
+
+        fcf = FundamentalAnalyzer(self.BARC, statements).calculate_fcf_metrics()
+        assert fcf["fcf_yield"] == pytest.approx(5.0)
+
+        _, details = ValuationAnalyzer(
+            "BARC.L", self.BARC, fundamentals=statements
+        )._estimate_wacc_details()
+        assert details["debt_weight"] == pytest.approx(0.5)
 
 
 class TestUsdPerUnit:

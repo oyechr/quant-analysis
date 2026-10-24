@@ -11,6 +11,7 @@ import pandas as pd
 from ..config import AnalysisConfig, get_config
 from ..utils.dataframe_utils import safe_get_dataframe_value
 from ..utils.financial import calculate_cagr, calculate_growth_rate, safe_divide
+from ..utils.fx import market_cap_in_listing_units
 
 logger = logging.getLogger(__name__)
 
@@ -212,8 +213,8 @@ class FundamentalAnalyzer:
             if fcf:
                 fcf_metrics["fcf"] = fcf
 
-                # FCF Yield = FCF / Market Cap
-                market_cap = self.info.get("market_cap")
+                # FCF Yield = FCF / Market Cap (both in listing units)
+                market_cap = market_cap_in_listing_units(self.info)
                 if market_cap:
                     fcf_metrics["fcf_yield"] = (fcf / market_cap) * 100
 
@@ -440,8 +441,8 @@ class FundamentalAnalyzer:
         ebit = self._get_value(self.income_stmt_a, "EBIT", 0)
         revenue = self._get_value(self.income_stmt_a, "Total Revenue", 0)
 
-        # Get market cap
-        market_cap = self.info.get("market_cap")
+        # Market cap in the statements' units (pence for a GBp listing)
+        market_cap = market_cap_in_listing_units(self.info)
 
         # Calculate components
         if not all(

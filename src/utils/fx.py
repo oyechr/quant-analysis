@@ -112,9 +112,16 @@ def adjust_info_ratios(
     The keys that were corrected are listed in `converted_ratios`; peer
     comparisons skip the other statement-based ratios of such tickers.
     Returns a copy; the original (cached) info is not modified.
+
+    `rate` and `book_equity` are in listing units (pence for a GBp listing),
+    while Yahoo's market cap and ratios use the major currency (GBP), so the
+    minor units are taken back out: GBP statements on a GBp listing need no
+    ratio correction.
     """
     out = dict(info)
     converted: List[str] = []
+    units = major_currency(str(info.get("currency") or ""))[1]
+    rate = rate / units
     price_to_sales = _num(info.get("price_to_sales"))
     if price_to_sales is not None:
         out["price_to_sales"] = price_to_sales / rate
@@ -132,11 +139,23 @@ def adjust_info_ratios(
         converted.append("ev_to_ebitda")
 
     if market_cap and book_equity and book_equity > 0:
-        out["price_to_book"] = market_cap / book_equity
+        out["price_to_book"] = market_cap * units / book_equity
         converted.append("price_to_book")
 
     out["converted_ratios"] = converted
     return out
+
+
+def market_cap_in_listing_units(info: Dict[str, Any]) -> Optional[float]:
+    """
+    Market cap in the units of the price and the converted statements. Yahoo
+    gives it in the major currency even for a minor-unit listing (BARC.L: GBP,
+    while its price and converted statements are in pence).
+    """
+    cap = _num(info.get("market_cap"))
+    if cap is None:
+        return None
+    return cap * major_currency(str(info.get("currency") or ""))[1]
 
 
 def normalize_info(
