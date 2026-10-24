@@ -17,7 +17,7 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 5 | Trust: price-only backtest, calibrate signal thresholds | Done (live on sp100 and OBX, 2026-10-23; thresholds documented as heuristics) |
 | 6 | Cleanup (do alongside the others) | Done (2026-10-24) |
 | 6b | Correctness review of the decision code | Done (2026-10-24; 10 fixes, live-checked) |
-| 7 | Construct: portfolio exposure and rebalance proposals | 7a and 7b done (2026-10-24, live-checked); next: 7c |
+| 7 | Construct: portfolio exposure and rebalance proposals | 7a-7c done (2026-10-24, live-checked); open: review score history, optional --fill |
 | 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
 | - | Side items: decision journal, automation, quick wins | Planned (outline only) |
 
@@ -433,6 +433,36 @@ For restructuring the portfolio. `review` judges each holding alone and suggests
    - a before/after table (weights, risk contributions, sector, country and currency mix, betas, effective N);
    - caveats: rule-based, not advice; no trading costs; covariance from 2 years of history; ASK eligibility is approximated from the headquarters country.
 4. **CLI:** `quant rebalance [PORTFOLIO] [--cash N] [--candidates watchlist|T1,T2] [--targets FILE] [--base NOK] [--config] [--workers] [--json] [--save]`. It runs `review_portfolio` (cheap on a warm cache), vets the candidates, and proposes. `--save` writes `portfolio/rebalance.md/json` (gitignored).
+
+**7c as built (2026-10-24, live-checked: `quant rebalance --save` matched the offline run)**
+
+- `src/portfolio/rebalance.py`:
+  - `propose_trades(holdings, candidates, settings, cash) -> Proposal` is pure and runs steps 1-7 in order. Amounts are in the base currency, and targets are fractions of holdings plus cash.
+  - Each trade not made is recorded in `Proposal.notes` with the reason: under the minimum, at target already, out of cash, or a candidate's verdict or overlap.
+  - `rebalance_portfolio(review, candidates, settings, cash, ...)` vets the candidates, values them, checks each against the holdings' weekly returns (`_moves_with`), and measures the after-trade exposure by calling `measure_exposure` again on copies of the holdings at the new share counts.
+- **Accounts:**
+  - `load_portfolio` keeps `Holding.positions`, each account's shares and cost.
+  - Sales are split ASK/IPS first.
+  - AF tax is signed: gain x `AF_TAX_RATE`, so a loss is negative (a deduction), and the summary nets them.
+  - `buy_account` checks the country against `EEA_COUNTRIES`.
+- **Refactors in `review.py`:**
+  - `MarketData` memoizes FX rates and 2y closes, and `apply_vet` fills a review from a vet result. Both are shared with rebalance.
+  - `HoldingReview` gains `price_base` and `cost_price`.
+  - `Exposure` keeps its inputs (closes, benchmarks, returns).
+  - `review`'s output is identical on the cached portfolio.
+- **CLI:** `quant rebalance`. `review` and `rebalance` share `_run_review`, `_save` and the `--targets` option.
+- **Offline run on the cached portfolio (default limits):**
+  - 8 sales: the six Exits plus trims of the two most overweight holdings.
+  - 2 Adds. A third Add's gap was under the 2,000 NOK minimum.
+  - Volatility goes from 12.3% to 10.8%.
+  - The Exits' realized losses in AF more than cover the one gain, for a net deduction.
+  - About a sixth of the portfolio is left as cash, because the Exits raise more than the Adds absorb. With `--candidates watchlist`, three Look deeper names are bought and two Watch names are skipped.
+- Tests: `tests/test_rebalance.py` covers each step, the candidate rules, account routing and tax (ASK first, AF gain and loss, cost in another currency), per-account positions, end to end, and the CLI.
+- **Live check for the user:**
+  ```
+  quant rebalance --save
+  quant rebalance --cash 20000 --candidates watchlist
+  ```
 
 **Also in this phase:** `review` records score history (the Phase 4 gap: pass `base_scoring` through `review_portfolio`).
 

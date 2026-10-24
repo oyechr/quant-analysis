@@ -57,6 +57,11 @@ class Exposure:
     summary: Dict[str, Any]  # JSON-ready, shown by `review`
     covariance: pd.DataFrame = field(default_factory=pd.DataFrame)  # weekly, shrunk
     correlations: pd.DataFrame = field(default_factory=pd.DataFrame)  # weekly, sample
+    returns: pd.DataFrame = field(default_factory=pd.DataFrame)  # weekly, included holdings
+    # The inputs, so the exposure can be measured again after trades
+    closes: Dict[str, pd.Series] = field(default_factory=dict)
+    benchmarks: Dict[str, pd.Series] = field(default_factory=dict)
+    local_closes: Dict[str, pd.Series] = field(default_factory=dict)
 
 
 # ==================== Returns and covariance ====================
@@ -267,7 +272,15 @@ def measure_exposure(
         }
     )
     correlations = returns[included].corr() if len(included) >= 2 else pd.DataFrame()
-    return Exposure(summary=result, covariance=cov, correlations=correlations)
+    return Exposure(
+        summary=result,
+        covariance=cov,
+        correlations=correlations,
+        returns=returns[included],
+        closes=closes,
+        benchmarks=benchmarks,
+        local_closes=local_closes or {},
+    )
 
 
 def _by_trading_date(series: pd.Series) -> pd.Series:

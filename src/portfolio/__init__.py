@@ -1,6 +1,7 @@
 """
 Portfolio: the holdings you own, imported from Nordnet's holdings export, and
-`quant review` (Exit / Trim / Hold / Add per holding).
+`quant review` (Exit / Trim / Hold / Add per holding), exposure, targets and
+`quant rebalance` (trade proposals).
 """
 
 from .nordnet import (
@@ -11,7 +12,13 @@ from .nordnet import (
     read_nordnet_holdings,
     write_portfolio,
 )
-from .render import render_markdown, render_text
+from .rebalance import Proposal, Trade, propose_trades, rebalance_portfolio
+from .render import (
+    render_markdown,
+    render_proposal_markdown,
+    render_proposal_text,
+    render_text,
+)
 from .review import (
     Holding,
     HoldingReview,
@@ -28,15 +35,21 @@ __all__ = [
     "HoldingReview",
     "Limits",
     "PortfolioReview",
+    "Proposal",
     "TargetSettings",
+    "Trade",
     "account_from_filename",
     "combine_holdings",
     "decide_action",
     "load_portfolio",
     "load_targets",
     "load_ticker_map",
+    "propose_trades",
     "read_nordnet_holdings",
+    "rebalance_portfolio",
     "render_markdown",
+    "render_proposal_markdown",
+    "render_proposal_text",
     "render_text",
     "review_portfolio",
     "target_weights",

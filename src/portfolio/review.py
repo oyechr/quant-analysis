@@ -80,8 +80,15 @@ REDUNDANT_CORRELATION = 0.80
 SECTOR_LIMIT = 0.35
 
 _FUND_TYPES = ("ETF", "MUTUALFUND")
-_TAXABLE_ACCOUNTS = ("AF",)
-_TAX_FREE_ACCOUNTS = ("ASK", "IPS")
+TAXABLE_ACCOUNTS = ("AF",)
+TAX_FREE_ACCOUNTS = ("ASK", "IPS")
+
+
+@dataclass
+class AccountPosition:
+    account: str
+    shares: float
+    cost_basis: Optional[float]  # average cost per share, in the holding's currency
 
 
 @dataclass
@@ -94,6 +101,7 @@ class Holding:
     cost_basis: Optional[float]  # average cost per share, in `currency`
     currency: str
     accounts: List[str] = field(default_factory=list)
+    positions: List[AccountPosition] = field(default_factory=list)  # per account
 
 
 @dataclass
@@ -111,6 +119,8 @@ class HoldingReview:
     risk_share: Optional[float] = None  # share of portfolio risk (see exposure.py)
     price: Optional[float] = None  # listing currency
     listing_currency: Optional[str] = None
+    price_base: Optional[float] = None  # one share in the base currency
+    cost_price: Optional[float] = None  # one share in the cost currency
     value: Optional[float] = None  # base currency
     weight: Optional[float] = None
     target_weight: Optional[float] = None
@@ -174,6 +184,7 @@ class PortfolioReview:
     preset: str
     unmapped: List[str] = field(default_factory=list)
     summary: Dict[str, Any] = field(default_factory=dict)
+    exposure: Optional[Exposure] = None  # the data behind summary["exposure"]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -194,7 +205,7 @@ def load_portfolio(path: Path) -> Tuple[List[Holding], List[str]]:
     ticker across accounts, plus the names that have no ticker.
 
     Shares are summed and the cost basis is share-weighted over the rows that
-    have one.
+    have one; `positions` keeps each account's shares and cost.
     """
     frame = pd.read_csv(path, dtype={"ticker": str, "account": str, "name": str})
     missing = [c for c in ("ticker", "shares") if c not in frame.columns]
@@ -215,25 +226,84 @@ def load_portfolio(path: Path) -> Tuple[List[Holding], List[str]]:
         rows = rows[rows["shares"] > 0]
         if rows.empty:
             continue
-        shares = float(rows["shares"].sum())
-        costed = rows.dropna(subset=["cost_basis"])
-        cost = (
-            float((costed["shares"] * costed["cost_basis"]).sum() / costed["shares"].sum())
-            if not costed.empty and costed["shares"].sum() > 0
-            else None
-        )
         currency = next((str(c) for c in rows["currency"] if isinstance(c, str) and c), "")
+        positions = [
+            AccountPosition(str(account), float(group["shares"].sum()), _average_cost(group))
+            for account, group in rows.groupby("account", sort=False)
+        ]
         holdings.append(
             Holding(
                 ticker=str(ticker),
                 name=str(rows["name"].iloc[0]),
-                shares=shares,
-                cost_basis=cost,
+                shares=float(rows["shares"].sum()),
+                cost_basis=_average_cost(rows),
                 currency=currency,
                 accounts=list(dict.fromkeys(a for a in rows["account"] if a)),
+                positions=positions,
             )
         )
     return holdings, unmapped
+
+
+def _average_cost(rows: pd.DataFrame) -> Optional[float]:
+    """Share-weighted cost basis over the rows that have one."""
+    costed = rows.dropna(subset=["cost_basis"])
+    if costed.empty or costed["shares"].sum() <= 0:
+        return None
+    return float((costed["shares"] * costed["cost_basis"]).sum() / costed["shares"].sum())
+
+
+class MarketData:
+    """Memoized FX rates and two-year closes for one run."""
+
+    def __init__(self, fetcher: DataFetcher, base_currency: str, use_cache: bool = True):
+        self.fetcher = fetcher
+        self.base_currency = base_currency
+        self.use_cache = use_cache
+        self._rates: Dict[Tuple[str, str], Optional[float]] = {}
+        self._closes: Dict[str, Optional[pd.Series]] = {}
+
+    def rate(self, from_ccy: str, to_ccy: str) -> Optional[float]:
+        """Latest multiplier from one currency (minor units allowed) into another."""
+        key = (from_ccy, to_ccy)
+        if key not in self._rates:
+            converted = conversion_rate(
+                from_ccy,
+                to_ccy,
+                lambda symbol: self.fetcher.latest_close(symbol, use_cache=self.use_cache),
+            )
+            self._rates[key] = converted[0] if converted else None
+        return self._rates[key]
+
+    def closes(self, symbol: str) -> Optional[pd.Series]:
+        """Daily closes over `HISTORY_PERIOD`, in the symbol's own currency."""
+        if symbol not in self._closes:
+            try:
+                frame = self.fetcher.fetch_ticker(
+                    symbol, period=HISTORY_PERIOD, use_cache=self.use_cache
+                )
+                self._closes[symbol] = frame["Close"] if "Close" in frame.columns else None
+            except Exception as e:
+                logger.warning(f"No {HISTORY_PERIOD} prices for {symbol}: {e}")
+                self._closes[symbol] = None
+        return self._closes[symbol]
+
+    def base_closes(self, symbol: str, currency: str) -> Optional[pd.Series]:
+        """Daily closes converted into the base currency."""
+        close = self.closes(symbol)
+        if close is None:
+            return None
+        return to_base_currency(close, currency, self.base_currency, self.closes)
+
+    def benchmarks(self) -> Dict[str, pd.Series]:
+        """Home and world benchmark closes in the base currency, by label."""
+        home = HOME_BENCHMARKS.get(self.base_currency.upper())
+        found: Dict[str, pd.Series] = {}
+        for symbol, currency, label in [*([home] if home else []), WORLD_BENCHMARK]:
+            converted = self.base_closes(symbol, currency)
+            if converted is not None:
+                found[label] = converted
+        return found
 
 
 # ==================== Review ====================
@@ -267,37 +337,19 @@ def review_portfolio(
         if error is not None or outcome is None:
             review.error = str(error or "no result")
         else:
-            data, info = outcome
-            review.vet = data
-            review.is_fund = is_fund(info, by_ticker[ticker].name)
-            review.sector = "Fund" if review.is_fund else _clean(info.get("sector"))
-            review.country = _clean(info.get("country"))
-            review.characteristics = characteristics(info)
-            review.price = _num((data.get("header") or {}).get("price"))
-            review.listing_currency = info.get("currency") or by_ticker[ticker].currency
+            apply_vet(review, *outcome)
         if progress:
             progress(ticker, error)
 
-    def fx_lookup(symbol: str) -> Optional[float]:
-        return fetcher.latest_close(symbol, use_cache=use_cache)
-
-    rates: Dict[Tuple[str, str], Optional[float]] = {}
-
-    def rate(from_ccy: str, to_ccy: str) -> Optional[float]:
-        key = (from_ccy, to_ccy)
-        if key not in rates:
-            converted = conversion_rate(from_ccy, to_ccy, fx_lookup)
-            rates[key] = converted[0] if converted else None
-        return rates[key]
-
+    market = MarketData(fetcher, base_currency, use_cache)
     for review in reviews.values():
-        value_holding(review, base_currency, rate)
+        value_holding(review, base_currency, market.rate)
     total = sum(r.value for r in reviews.values() if r.value)
     for review in reviews.values():
         if review.value and total:
             review.weight = review.value / total
 
-    exposure = _exposure(list(reviews.values()), fetcher, base_currency, use_cache)
+    exposure = _exposure(list(reviews.values()), market)
     target_notes = _set_targets(list(reviews.values()), exposure, targets)
     _find_overlaps(list(reviews.values()), exposure.correlations)
 
@@ -314,7 +366,19 @@ def review_portfolio(
             ),
             "targets": target_notes,
         },
+        exposure=exposure,
     )
+
+
+def apply_vet(review: HoldingReview, data: Dict[str, Any], info: Dict[str, Any]) -> None:
+    """Fill a review from `vet_ticker`'s result (to_dict) and the report's info."""
+    review.vet = data
+    review.is_fund = is_fund(info, review.holding.name)
+    review.sector = "Fund" if review.is_fund else _clean(info.get("sector"))
+    review.country = _clean(info.get("country"))
+    review.characteristics = characteristics(info)
+    review.price = _num((data.get("header") or {}).get("price"))
+    review.listing_currency = info.get("currency") or review.holding.currency
 
 
 def is_fund(info: Dict[str, Any], name: str = "") -> bool:
@@ -345,51 +409,32 @@ def value_holding(
         return
     to_base = rate(review.listing_currency, base_currency)
     if to_base is not None:
-        review.value = h.shares * review.price * to_base
-    if h.cost_basis and h.cost_basis > 0 and h.currency:
+        review.price_base = review.price * to_base
+        review.value = h.shares * review.price_base
+    if h.currency:
         to_cost = rate(review.listing_currency, h.currency)
         if to_cost is not None:
-            review.gain_pct = (review.price * to_cost / h.cost_basis - 1) * 100
+            review.cost_price = review.price * to_cost
+            if h.cost_basis and h.cost_basis > 0:
+                review.gain_pct = (review.cost_price / h.cost_basis - 1) * 100
 
 
-def _exposure(
-    reviews: List[HoldingReview], fetcher: DataFetcher, base_currency: str, use_cache: bool
-) -> Exposure:
-    """Fetch two years of closes, convert them to the base currency, measure exposure."""
-    fx_cache: Dict[str, Optional[pd.Series]] = {}
-
-    def closes(symbol: str) -> Optional[pd.Series]:
-        if symbol not in fx_cache:
-            try:
-                frame = fetcher.fetch_ticker(symbol, period=HISTORY_PERIOD, use_cache=use_cache)
-                fx_cache[symbol] = frame["Close"] if "Close" in frame.columns else None
-            except Exception as e:
-                logger.warning(f"No {HISTORY_PERIOD} prices for {symbol}: {e}")
-                fx_cache[symbol] = None
-        return fx_cache[symbol]
-
+def _exposure(reviews: List[HoldingReview], market: MarketData) -> Exposure:
+    """Two years of closes per valued holding, in the base currency, then the exposure."""
     local: Dict[str, pd.Series] = {}
     in_base: Dict[str, pd.Series] = {}
     for review in reviews:
         ticker = review.holding.ticker
-        close = closes(ticker) if review.weight and review.listing_currency else None
-        if close is None or not review.listing_currency:
+        if not review.weight or not review.listing_currency:
+            continue
+        close = market.closes(ticker)
+        if close is None:
             continue
         local[ticker] = close
-        converted = to_base_currency(close, review.listing_currency, base_currency, closes)
+        converted = market.base_closes(ticker, review.listing_currency)
         if converted is not None:
             in_base[ticker] = converted
-
-    benchmarks: Dict[str, pd.Series] = {}
-    home = HOME_BENCHMARKS.get(base_currency.upper())
-    for symbol, currency, label in [*([home] if home else []), WORLD_BENCHMARK]:
-        close = closes(symbol)
-        converted = (
-            to_base_currency(close, currency, base_currency, closes) if close is not None else None
-        )
-        if converted is not None:
-            benchmarks[label] = converted
-    return measure_exposure(reviews, in_base, benchmarks, local)
+    return measure_exposure(reviews, in_base, market.benchmarks(), local)
 
 
 def _set_targets(
@@ -517,9 +562,9 @@ def _with_tax_note(review: HoldingReview, reasons: List[str]) -> List[str]:
     accounts = [a.upper() for a in review.holding.accounts]
     if not review.gain_pct or review.gain_pct <= 0:
         return reasons
-    if any(a in _TAX_FREE_ACCOUNTS for a in accounts) and len(accounts) > 1:
+    if any(a in TAX_FREE_ACCOUNTS for a in accounts) and len(accounts) > 1:
         return [*reasons, "sell from the ASK first: a sale in AF realizes the gain"]
-    if any(a in _TAXABLE_ACCOUNTS for a in accounts):
+    if any(a in TAXABLE_ACCOUNTS for a in accounts):
         return [*reasons, f"selling realizes a {review.gain_pct:.0f}% gain in AF"]
     return reasons
 

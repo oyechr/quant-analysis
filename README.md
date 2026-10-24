@@ -444,6 +444,39 @@ target = 0.10          # a fixed target; or max = 0.05 for a cap of its own
 
 ETFs and funds have no statements to vet, so they are only ever Trim or Hold. Taxes are ignored, except for a note when a sale at a gain would happen in AF (label your accounts ASK/AF with ``import-portfolio --label``). These are rule-based suggestions, not advice. The first run fetches every holding and its peers, which takes a few minutes; later runs use the cache.
 
+### ``quant rebalance`` -- Concrete trades for the portfolio
+
+Runs ``review``, then turns its actions into trades, in a fixed order:
+
+1. Sell Exits in full.
+2. Leave Review and Check holdings alone.
+3. Trim down to the target, and cut any position above the position limit.
+4. If a sector is over its limit, sell its lowest-scoring stocks.
+5. Buy Add holdings up to their target, with ``--cash`` plus what the sales raised.
+6. Spend what's left on candidates (``--candidates watchlist`` or tickers) that ``vet`` calls Look deeper and that don't move with a holding: best score first, at most ``max_new``, each at the median target weight.
+7. Use whole shares, and drop trades under ``min_trade`` (Exits are kept).
+
+```bash
+quant rebalance                                       # trades from the review alone
+quant rebalance --cash 50000 --candidates watchlist   # new money, new names from the watchlist
+quant rebalance --candidates EQNR.OL,AAPL --save      # writes portfolio/rebalance.json + .md
+```
+
+**Output:**
+
+- **Summary line:** the sales and buys, the cash left, and the net estimated AF tax.
+- **Trades table:** each trade with its account.
+- **Before/after table:** volatility, betas, effective positions, and the sector, country and currency mix.
+- **Notes:** the trades that weren't made, and why.
+
+**Accounts:**
+
+- **Sales** come from ASK first.
+- **AF tax:** each sale in AF shows the estimated tax at 37.84% of the gain. A loss shows as a negative amount, since it's deductible against gains at the same rate. The cost is converted at today's FX rate, and the shielding deduction is ignored.
+- **ASK eligibility:** ASK only takes shares in EEA companies. Buys are marked "ASK or AF" or "AF only (not EEA)" from Yahoo's headquarters country, which isn't always the legal domicile.
+
+The limits (``max_position``, ``max_sector``, ``cash_reserve``, ``min_trade``, ``max_new``) go in ``portfolio/targets.toml`` (see ``quant review``). No trading costs are included. These are rule-based suggestions, not advice.
+
 ### ``quant watchlist`` -- Tickers you follow
 
 ```bash
@@ -570,6 +603,7 @@ Optional ``config.json`` in the working directory (gitignored). All keys are opt
 | Discover new investment ideas | ``quant discover`` |
 | Quick verdict on one stock | ``quant vet TICKER`` |
 | What to do with the stocks you own | ``quant review`` |
+| Turn the review into trades | ``quant rebalance --cash N --candidates watchlist`` |
 | Deep dive on one stock | ``quant report TICKER`` |
 | Ask follow-up questions / interrogate a stock | ``quant chat TICKER`` |
 | Score a few tickers side by side | ``quant score T1 T2 T3 ...`` |
@@ -667,7 +701,7 @@ quant-analysis/
 |   |   +-- analyze.py               # report, score, vet, compare, watch
 |   |   +-- find.py                  # screen, discover
 |   |   +-- chat.py                  # chat
-|   |   +-- portfolio.py             # import-portfolio, review
+|   |   +-- portfolio.py             # import-portfolio, review, rebalance
 |   |   +-- track.py                 # watchlist, changes
 |   |   +-- backtest.py              # backtest
 |   |   +-- common.py                # shared options and helpers
@@ -697,7 +731,8 @@ quant-analysis/
 |   |   +-- review.py                # review_portfolio(): Exit / Trim / Hold / Add rules
 |   |   +-- exposure.py              # Risk, beta, concentration and factor tilts (weekly, base currency)
 |   |   +-- targets.py               # Equal-risk-contribution targets, limits (targets.toml)
-|   |   +-- render.py                # Terminal + Markdown output for review
+|   |   +-- rebalance.py             # propose_trades(): trades from the review, accounts and AF tax
+|   |   +-- render.py                # Terminal + Markdown output for review and rebalance
 |   +-- reporting/
 |   |   +-- generator.py             # Report file writing (runs the pipeline)
 |   |   +-- sections.py              # Modular section handlers
@@ -749,6 +784,7 @@ quant-analysis/
     +-- test_pipeline.py
     +-- test_portfolio.py
     +-- test_quant_methods.py
+    +-- test_rebalance.py
     +-- test_review.py
     +-- test_scorer.py
     +-- test_screening.py

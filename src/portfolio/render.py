@@ -311,3 +311,152 @@ def _money(value: Any, ccy: str) -> str:
 
 def _short(text: str) -> str:
     return text if len(text) <= REASON_WIDTH else text[: REASON_WIDTH - 3] + "..."
+
+
+# ==================== Rebalance proposal ====================
+
+REBALANCE_CAVEATS = [
+    "Rule-based suggestions from free Yahoo data, not advice.",
+    "No trading costs or spreads; prices are the latest close.",
+    "Risk numbers use two years of weekly returns in the base currency.",
+    "AF tax is 37.84% of the gain, and a loss deducts at the same rate (net against gains "
+    "in the same year); the cost is at today's FX rate, with no shielding deduction "
+    "(skjermingsfradrag).",
+    "ASK eligibility is judged from Yahoo's headquarters country, which isn't always the domicile.",
+]
+MIN_MIX_CHANGE = 0.005  # mix lines show groups that moved at least half a point
+
+
+def build_proposal_sections(data: Dict[str, Any]) -> List[Section]:
+    return [_trades_section(data), _before_after_section(data), _proposal_notes(data)]
+
+
+def render_proposal_text(data: Dict[str, Any]) -> str:
+    return sections_to_text(build_proposal_sections(data))
+
+
+def render_proposal_markdown(data: Dict[str, Any]) -> str:
+    return sections_to_markdown(build_proposal_sections(data))
+
+
+def _trades_section(data: Dict[str, Any]) -> Section:
+    ccy = data.get("base_currency") or ""
+    trades = data.get("trades") or []
+    blocks: List[Block] = [proposal_headline(data), ""]
+    if not trades:
+        blocks.append("No trades: every holding is within its target and limits.")
+        return Section("REBALANCE PROPOSAL", blocks)
+    rows = [
+        [
+            t["side"].upper(),
+            t["ticker"] + (" (new)" if t.get("new") else ""),
+            f"{t['shares']:,.0f}" if float(t["shares"]).is_integer() else f"{t['shares']:,.4f}",
+            f"{t['amount']:,.0f}",
+            t.get("account") or "",
+            f"{t['tax']:+,.0f}" if t.get("tax") else "",
+            _short(t.get("reason") or ""),
+        ]
+        for t in trades
+    ]
+    blocks.append(
+        Table(
+            ["Side", "Ticker", "Shares", f"Amount ({ccy})", "Account", "Est. tax", "Reason"],
+            rows,
+            "llrrlrl",
+        )
+    )
+    return Section("REBALANCE PROPOSAL", blocks)
+
+
+def proposal_headline(data: Dict[str, Any]) -> str:
+    """'4 sells (82,000 NOK), 3 buys (75,000 NOK), cash left 7,000 NOK; volatility ...'"""
+    ccy = data.get("base_currency") or ""
+    trades = data.get("trades") or []
+    sells = {t["ticker"] for t in trades if t["side"] == "Sell"}
+    buys = {t["ticker"] for t in trades if t["side"] == "Buy"}
+    parts = [
+        f"{len(sells)} sell(s) ({_money(data.get('proceeds'), ccy)}), "
+        f"{len(buys)} buy(s) ({_money(data.get('spent'), ccy)}), "
+        f"cash left {_money(data.get('cash_left'), ccy)}"
+    ]
+    taxes = [t["tax"] for t in trades if t.get("tax")]
+    if taxes:
+        gains = sum(t for t in taxes if t > 0)
+        losses = sum(t for t in taxes if t < 0)
+        text = f"estimated AF tax {_money(data.get('tax'), ccy)}"
+        if gains and losses:
+            text += f" ({gains:+,.0f} on gains, {losses:+,.0f} from losses)"
+        parts.append(text)
+    before, after = data.get("before") or {}, data.get("after") or {}
+    if before.get("volatility") is not None and after.get("volatility") is not None:
+        parts.append(f"volatility {before['volatility']:.1%} -> {after['volatility']:.1%}")
+    moves = _mix_changes(before.get("by_sector") or [], after.get("by_sector") or [])
+    if moves:
+        name, old, new = moves[0]
+        parts.append(f"{name} {old:.0%} -> {new:.0%}")
+    return "; ".join(parts)
+
+
+def _before_after_section(data: Dict[str, Any]) -> Section:
+    before, after = data.get("before") or {}, data.get("after") or {}
+    if not before or not after:
+        return Section("BEFORE / AFTER", ["No risk numbers (no price history)"])
+
+    def beta(summary: Dict[str, Any], label: str) -> Any:
+        return next(
+            (b["beta"] for b in summary.get("betas") or [] if b["benchmark"] == label), None
+        )
+
+    rows = [
+        ["Volatility", _share(before.get("volatility")), _share(after.get("volatility"))],
+        *(
+            [f"Beta vs {b['benchmark']}", _num(b.get("beta")), _num(beta(after, b["benchmark"]))]
+            for b in before.get("betas") or []
+        ),
+        [
+            "Effective positions",
+            _num(before.get("effective_positions"), 0),
+            _num(after.get("effective_positions"), 0),
+        ],
+        [
+            "Effective positions by risk",
+            _num(before.get("effective_risk_positions"), 0),
+            _num(after.get("effective_risk_positions"), 0),
+        ],
+        ["Top 5 weight", _share(before.get("top5")), _share(after.get("top5"))],
+    ]
+    blocks: List[Block] = [Table(["", "Before", "After"], rows, "lrr")]
+    for label, key in (
+        ("By sector", "by_sector"),
+        ("By country", "by_country"),
+        ("By currency", "by_currency"),
+    ):
+        moves = _mix_changes(before.get(key) or [], after.get(key) or [])
+        if moves:
+            text = ", ".join(f"{n} {old:.0%} -> {new:.0%}" for n, old, new in moves[:6])
+            blocks.append(f"{label}: {text}")
+    return Section("BEFORE / AFTER", blocks)
+
+
+def _proposal_notes(data: Dict[str, Any]) -> Section:
+    blocks: List[Block] = [f"Not traded: {note}" for note in data.get("notes") or []]
+    if data.get("reserve"):
+        blocks.append(
+            f"Cash reserve kept: {_money(data['reserve'], data.get('base_currency') or '')}"
+        )
+    return Section("NOTES", [*blocks, *REBALANCE_CAVEATS])
+
+
+def _mix_changes(
+    before: List[Dict[str, Any]], after: List[Dict[str, Any]]
+) -> List[tuple[str, float, float]]:
+    """Groups whose value share moved, largest move first: (name, before, after)."""
+    old = {g["name"]: g["weight"] or 0.0 for g in before}
+    new = {g["name"]: g["weight"] or 0.0 for g in after}
+    moves = [(n, old.get(n, 0.0), new.get(n, 0.0)) for n in {*old, *new}]
+    moves = [m for m in moves if abs(m[2] - m[1]) >= MIN_MIX_CHANGE]
+    return sorted(moves, key=lambda m: abs(m[2] - m[1]), reverse=True)
+
+
+def _num(value: Any, decimals: int = 2) -> str:
+    return f"{float(value):.{decimals}f}" if value is not None else ""

@@ -54,6 +54,7 @@ COMMANDS = (
     chat.chat,
     portfolio.import_portfolio,
     portfolio.review,
+    portfolio.rebalance,
     track.watchlist,
     track.changes,
     backtest.backtest,
