@@ -1,124 +1,19 @@
-# Quantitative Analysis Tool
+# quant-analysis
 
-A Python-based quantitative financial analysis tool for fetching market data, performing technical and fundamental analysis, and generating comprehensive stock reports.
+A command-line companion for stock picking with free Yahoo Finance data. It helps you:
 
-## Features
+- **find** candidates in an index or in what large funds are buying;
+- **vet** one ticker in a single screen: verdict, red flags, peers, fair value;
+- **review** the portfolio you hold, and turn the review into concrete **rebalance** trades;
+- **track** a watchlist and see what changed since the last run.
 
-### Data Fetching
+Everything is rule-based and explained in the output. It's built for a Norwegian investor (NOK base currency, Oslo listings, Nordnet's ASK and AF accounts), but works for any market Yahoo covers.
 
-- Historical price data via Yahoo Finance (yfinance)
-- Company fundamentals and financial statements
-- Earnings data and institutional holdings
-- Dividend history and analyst ratings
-- Recent news articles
-- Caching with per-resource expiry (prices 12h, company info 24h, statements 7d, ...)
-- Falls back to the last cached copy when Yahoo is unreachable or rate-limiting, and says so
-- Reports flag stale data (e.g. last price bar is 9 days old)
+> These are rule-based suggestions from free data, not advice. The Buy/Hold/Sell bands are rules of thumb: the backtest found no edge in the price-based part of the score, and the fundamental part can't be backtested with Yahoo's data (see [`quant backtest`](#quant-backtest)).
 
-### Technical Analysis
+## Quick start
 
-- **Trend Indicators:** SMA, EMA, MACD
-- **Momentum Indicators:** RSI, Stochastic Oscillator, Williams %R
-- **Volatility Indicators:** Bollinger Bands, ATR, ADX
-- **Volume Indicators:** OBV, VWAP, MFI
-- Automated signal generation (buy/sell signals)
-
-### Fundamental Analysis
-
-- **Growth Metrics:** Revenue, Earnings, FCF growth (1Y, 3Y, 5Y CAGR)
-- **Free Cash Flow Analysis:** FCF yield, FCF margin, FCF per share
-- **Profitability Margins:** Gross, EBITDA, Operating, Net margins with trends
-- **Efficiency Ratios:** Asset turnover, inventory turnover, cash conversion cycle
-- **DuPont Analysis:** ROE decomposition (Margin x Turnover x Leverage)
-- **Quality Scores:** Altman Z-Score (bankruptcy risk), Piotroski F-Score (fundamental strength)
-
-### Valuation Analysis
-
-- **DCF Valuation:** two-stage DCF. FCF growth starts at the clamped 3-year history (-10% to +20%) and fades linearly to 2.5% over 10 years. Cash flows are discounted at a CAPM WACC (config risk-free rate, 5% equity risk premium, Blume-adjusted beta, after-tax debt weight), and net debt comes from the balance sheet. A reverse DCF gives the starting growth the current price implies. Monte Carlo runs the same model with varied inputs.
-- **DDM Valuation:** Dividend Discount Model (Gordon Growth Model)
-- **Dividend Analysis:** Yield, growth rate, payout ratio, coverage, sustainability scoring
-- **Earnings Analysis:** EPS trends, surprises, quality assessment (cash flow backing)
-- **Multi-Currency Support:** Automatic currency detection and formatting (USD, CAD, NOK, EUR, GBP)
-
-### Risk Analysis
-
-- **Volatility Metrics:** Historical volatility, downside deviation
-- **Risk-Adjusted Returns:** Sharpe ratio, Sortino ratio, Calmar ratio
-- **Drawdown Analysis:** Maximum drawdown, current drawdown
-- **Value at Risk (VaR):** 95% and 99% confidence levels (parametric and historical)
-- **Market Risk:** Beta and alpha against the stock's home market (OSEBX for `.OL`, FTSE 100 for `.L`, DAX for `.DE`, ...; S&P 500 for US listings)
-
-### Screening
-
-- **Two-stage screen** over an index or ticker list: a cheap multi-factor ranking of every ticker, then the full composite score for the top N
-- **Built-in universes:** S&P 500, S&P 100, Nasdaq-100, OBX (Nasdaq-100 from Nasdaq's official constituent list, others from Wikipedia; cached for 30 days), plus the latest `discover` consensus picks
-- **Factors:** Value (earnings yield, book/price), Quality (ROE, leverage), Momentum (12-minus-1 month), Low Volatility; each ranked cross-sectionally
-- **Filters:** sector/industry include/exclude, market cap range, minimum volume
-- Results saved as CSV (spreadsheet-friendly), JSON, and TOON
-
-### Vetting
-
-- **One-screen verdict** on a single ticker (`quant vet`), without writing report files
-- **Red flags:** Beneish M-Score, Altman Z distress, repeated negative FCF, share dilution, uncovered dividend, weak interest cover, stale statements, low data coverage, stale data, statements in a different currency than the price
-- **Peer-relative valuation:** P/E, forward P/E, EV/EBITDA, P/S, P/B and FCF yield against the peer median, with percentile rank. With 4+ peers, the P/E sub-score is judged against the peer median instead of fixed cutoffs
-- **Signals:** post-earnings drift (SUE) and relative strength against the home-market benchmark
-- **13F fund activity** from the `quant discover` cache: which tracked funds hold it and whether they bought, added, trimmed or exited
-- **What would change the verdict:** analyst price targets, Monte Carlo/DCF/DDM fair value range, the price at which the signal moves one band up or down, and trade levels
-- **Currency-safe valuation:** when a company reports in another currency than it trades in (EQNR.OL: USD vs NOK), statements are converted at the latest Yahoo FX rate before any analysis
-
-### Tracking
-
-- **Watchlist** in ``watchlist.toml`` (gitignored): ticker, a one-line thesis, the date added, and an optional target and stop price. Add by hand, with ``quant watchlist add``, or straight from a screen with ``--add-to-watchlist N``
-- **Score history:** every ``report``, ``score``, ``vet``, ``screen`` (stage 2), ``changes``, ``review`` and ``rebalance`` run adds one row per ticker to ``data/_history/scores.csv`` (one row per ticker, preset and day)
-- **What changed:** ``quant changes`` rescores the watchlist and compares it with the last run from an earlier day: score and signal, red flags that appeared or cleared, price move, price against target/stop, and earnings in the next 14 days
-- ``quant chat`` sees the ticker's score history, so you can ask why a score dropped
-
-### Portfolio Discovery
-
-- **Cross-portfolio pattern detection** from SEC EDGAR 13F filings (free, no API key)
-- **Quarter-over-quarter diff:** Compares 2 consecutive filings to infer new/exit/add/trim/hold actions
-- **Ticker Overlap:** Find consensus picks held by multiple institutional investors
-- **Sector/Industry Clustering:** Granular concentration patterns (not just "Technology" but "Semiconductors", "Internet Retail", etc.)
-- **Activity Convergence:** Detect multiple portfolios buying/selling the same ticker within a time window
-- **Contrarian Signals:** Spot disagreement — some whales buying while others sell
-- **Auto-enrichment:** Top overlap tickers automatically enriched with sector/industry from yfinance
-- Pre-configured notable filers: Berkshire Hathaway, ARK, Soros, Bridgewater, Renaissance, Pershing Square, Appaloosa, Icahn
-- Pluggable source architecture for adding paid data sources later
-- TOON output for LLM-based reasoning about discovery signals
-
-### Composite Scoring
-
-- 0-100 score across four dimensions: Technical, Fundamental, Risk, Valuation
-- Valuation weighs DCF, P/E, PEG, FCF yield, dividend sustainability and earnings quality. Banks and insurers skip the cash-flow measures (DCF, FCF yield)
-- Configurable presets: ``default``, ``value``, ``growth``, ``income``
-- Scorecard output with strengths and concerns
-- Buy/Hold/Sell bands: Strong Buy 80+, Buy 65-80, Hold 50-65, Sell 35-50, Strong Sell below 35. **These are rules of thumb, not forecasts:** the backtest found no edge in the price-based part of the score, and the fundamental and valuation parts can't be backtested (see ``quant backtest``). Read a signal as a summary of the score
-
-### Backtest
-
-- **Walk-forward test** of the signals that can be computed from prices alone: the technical and risk scores, their composite (with the real Buy/Hold/Sell bands), 12-1 momentum and low volatility
-- At each month-end, only prices up to that day are used. Forward returns over 1, 3 and 6 months are measured against each ticker's home benchmark
-- **Rank IC, quintile spread, hit rate** and **returns per signal band**, with 95% intervals (Newey-West, for the overlapping windows)
-- Fundamental and valuation scores are not tested: Yahoo's statements are restated and undated, so they can't be used as of a past date
-
-### Report Generation
-
-- JSON reports with complete data aggregation
-- Markdown reports for human-readable analysis
-- TOON reports for LLM-optimized input (Token-Oriented Object Notation)
-
-### Interactive Analyst Chat
-
-- Conversational Q&A session grounded in the full quantitative report
-- Supports Anthropic (Claude) and OpenAI / GitHub Models (free tier)
-- Auto-generates the report on first use — no need to run ``report`` first
-- Maintains full conversation history across turns for follow-up questions
-- Opening investment brief generated automatically on session start
-- In-session ``/refresh`` command to re-fetch live data mid-conversation
-
-## Installation
-
-Requires Python 3.14+. All dependencies are declared in `pyproject.toml`.
+Requires Python 3.14+.
 
 ```powershell
 py install 3.14                  # Python install manager (Windows)
@@ -128,366 +23,432 @@ python -m pip install -U pip
 pip install -e ".[all]"
 ```
 
-Optional extras (combine as needed, e.g. `".[llm,dev]"`):
-
-- `llm` -- anthropic, openai (required for `quant chat`)
-- `viz` -- matplotlib, seaborn (correlation heatmap in `quant compare`)
-- `all` -- `llm` + `viz`
-- `dev` -- pytest, ruff, mypy
-
-## CLI Reference
-
-### ``quant report`` -- Single-ticker deep dive
-
-Generates a full report with scorecard for one ticker. Prints dimension scores, strengths, and concerns. Saves JSON, Markdown, and TOON files.
+Extras: `llm` (anthropic, openai; needed for `quant chat`), `viz` (matplotlib, seaborn; the heatmap in `quant compare`), `all` (both), `dev` (pytest, ruff, mypy, type stubs).
 
 ```bash
-quant report AAPL
-quant report EQNR --period 2y
-quant report MSFT --exclude-technical --no-cache
-quant report AAPL --format toon
-quant report EQNR.OL --config income
+quant screen sp100 --top 10          # the best-scoring names in an index
+quant vet EQNR.OL                    # one-screen verdict on a ticker
+quant watchlist add AAPL --thesis "Services growth"
+quant changes                        # what moved on the watchlist since last time
+quant review                         # your holdings: Exit / Review / Trim / Hold / Add
 ```
 
-Options:
-- ``--exclude-technical / --exclude-fundamental / --exclude-risk / --exclude-valuation``
-- ``--config [default|value|growth|income]`` -- scoring weight preset (recorded in the saved scoring files)
+## Which command
 
-### ``quant score`` -- Multi-ticker screening table
+| Goal | Command |
+|------|---------|
+| Find candidates in an index | `quant screen sp500` |
+| See what large funds are buying (13F) | `quant discover` |
+| Quick verdict on one stock | `quant vet TICKER` |
+| Full write-up of one stock | `quant report TICKER` |
+| Ask questions about a stock | `quant chat TICKER` |
+| Score or compare a few tickers | `quant score T1 T2`, `quant compare T1 T2` |
+| What to do with the stocks you own | `quant review` |
+| Turn the review into trades | `quant rebalance --cash N --candidates watchlist` |
+| Follow names, and see what moved | `quant watchlist add T`, `quant changes` |
+| How much to trust the signals | `quant backtest sp100` |
 
-Scores one or more tickers and prints a compact summary table. Use this for screening and ranking a watchlist.
+**Finding and vetting new ideas:**
 
 ```bash
-quant score AAPL MSFT TSLA
-quant score NVDA AMD --config growth
-quant score EQNR BP --config value
+quant screen sp500 --top 25 --config growth      # rank the index, fully score the top 25
+quant screen discover                            # or rank the funds' consensus picks
+quant vet NVDA                                   # verdict, red flags, peers, fair value
+quant report NVDA && quant chat NVDA             # deep dive, then ask about the bear case
+quant watchlist add NVDA --thesis "AI capex cycle" --stop 150
 ```
 
-Options:
-- ``--config [default|value|growth|income]`` -- scoring weight preset
-- ``--workers N`` -- tickers analyzed in parallel (default 4)
+**Your portfolio:**
 
-### ``quant screen`` -- Find candidates across an index
+```bash
+quant import-portfolio "~/Downloads/Beholdningstabell eksport*.csv" --label 12345678=ASK --label 87654321=AF
+quant review --save
+quant rebalance --cash 20000 --candidates watchlist
+```
 
-Ranks every ticker in a universe with a multi-factor model, then runs the full analysis and composite score on the best ``--top`` candidates.
+**Following up**, daily or weekly: `quant changes`.
+
+## Commands
+
+Global options go **before** the command: `quant --period 2y report AAPL`.
+
+| Global option | Default | What it does |
+|---------------|---------|--------------|
+| `--period` | `1y` | Price history for analysis: `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y` |
+| `--format` | `all` | Report files: `json`, `markdown`, `toon`, `all` |
+| `--no-cache` | off | Fetch fresh data, ignoring the cache |
+| `--output-dir` | `data` | Folder for the cache, reports and history |
+| `-v` / `-q` | | Debug logging / errors only (the default shows warnings) |
+
+Most commands take `--config default|value|growth|income` (the scoring preset) and `--workers N` (tickers fetched in parallel; keep it modest, since Yahoo rate-limits).
+
+### Find
+
+#### `quant screen`
+
+Ranks every ticker in a universe on four factors, then runs the full analysis on the best `--top` (default 20).
 
 ```bash
 quant screen sp500 --top 25 --config value
 quant screen obx --exclude-sector Energy
 quant screen nasdaq100 --sector Technology --min-mcap 50B
-quant screen discover                         # score the whales' consensus picks
-quant screen my_tickers.txt EQNR.OL DNB.OL    # ticker file + literal tickers
-quant screen watchlist                        # the tickers in watchlist.toml
-quant screen sp100 --add-to-watchlist 5       # put the 5 best on the watchlist
-quant screen --list                           # show built-in universes
+quant screen my_tickers.txt EQNR.OL DNB.OL     # a ticker file plus literal tickers
+quant screen sp100 --add-to-watchlist 5        # put the 5 best on the watchlist
+quant screen --list                            # the built-in universes
 ```
 
-UNIVERSE can be any mix of:
-- a built-in index: ``sp500``, ``sp100``, ``nasdaq100``, ``obx``
-- ``discover``: overlap tickers from the last ``quant discover`` run
-- ``watchlist``: the tickers in ``watchlist.toml``
-- a ticker file: one or more per line (comma/space separated, ``#`` comments) or a CSV with a ``ticker``/``symbol`` column
-- literal tickers
+- **Universes:** `sp500`, `sp100`, `nasdaq100`, `obx` (from Nasdaq's and Wikipedia's lists, cached for 30 days); `discover` (the last `quant discover` picks); `watchlist`; a ticker file (one or more per line, `#` comments, or a CSV with a `ticker` column); or literal tickers. Mix them freely.
+- **Stage 1, rank:** company info and a year of prices per ticker. Each is ranked against the others on value (earnings yield, book/price), quality (ROE, leverage), momentum (12-1 month return) and low volatility, as percentiles (100 = best).
+- **Stage 2, score:** the full technical, fundamental, risk and valuation analysis for the top N.
+- **Filters:**
+  - `--sector` / `--exclude-sector` match a sector or industry substring, and can be repeated.
+  - `--min-mcap` / `--max-mcap` (e.g. `500M`, `10B`) are in the universe's own currency: NOK for `obx`, and USD when it mixes currencies. `--currency` picks another.
+  - `--min-volume` is in shares.
+- **Saving:** results are saved to `data/_screens/` (`--no-save` to skip). The first `sp500` screen takes a few minutes; later runs use the cache.
 
-**How it works:**
+#### `quant discover`
 
-1. **Rank (whole universe):** fetches company info and one year of prices per ticker, applies filters, and ranks each ticker against the others on Value, Quality, Momentum, and Low Volatility (percentiles, 100 = best).
-2. **Score (top N):** runs the full technical/fundamental/risk/valuation analysis on the ``--top`` factor-ranked tickers. Stage-1 data is reused from the cache.
+Finds patterns across the 13F filings of well-known funds (Berkshire Hathaway, ARK, Soros, Bridgewater, Renaissance, Pershing Square, Appaloosa, Icahn), from SEC EDGAR (free, no key). It compares each fund's two latest quarters to tell new, added, trimmed, held and exited positions apart. It then looks for four patterns: tickers held by several funds, sector clusters, several funds buying or selling the same name, and funds disagreeing.
 
-The table lists the scored candidates by composite score with their factor rank and factor percentiles. Results are saved to ``data/_screens/`` (a timestamped file plus ``latest.csv``/``latest.json``).
+```bash
+quant --no-cache discover             # fetch the latest filings (about 30 s)
+quant discover --min-overlap 3        # held by 3+ funds: the strongest consensus
+quant discover --sector Technology
+quant screen discover                 # then rank and score the consensus picks
+```
 
-Options:
-- ``--top N`` -- candidates to fully score (default 20)
-- ``--config [default|value|growth|income]`` -- scoring preset
-- ``--sector TEXT`` / ``--exclude-sector TEXT`` -- sector or industry substring, repeatable
-- ``--min-mcap`` / ``--max-mcap`` -- market cap, e.g. ``500M``, ``10B``, ``1T``, in the universe's own currency (``obx``: NOK). A universe that mixes currencies (a watchlist with EQNR.OL and AAPL) is compared in USD at Yahoo's latest FX rate; ``--currency NOK`` picks another. The screen prints which currency it used
-- ``--min-volume`` -- average daily volume in shares, e.g. ``500K``
-- ``--workers N`` -- parallel downloads (default 4; Yahoo rate-limits aggressive clients)
-- ``--no-save`` -- print only
-- ``--add-to-watchlist N`` -- add the N best-scoring results to ``watchlist.toml`` (the thesis notes the screen; tickers already listed keep theirs)
+- **Options:** `--min-overlap` (default 2), `--top` (default 20), `--sector`, `--enrich` (sector data for every holding, not just the top ones; slow), and `--list-sources`.
+- **Refreshing:** 13F filings arrive about 45 days after each quarter (mid-February, mid-May, mid-August, mid-November), so the data is 1-4 months old. Refresh with `--no-cache` after those dates.
+- **User-Agent:** SEC asks for one with contact details (`edgar_user_agent` in `config.json`).
 
-**Performance:** the first ``sp500`` screen downloads info and prices for about 500 tickers, which takes a few minutes. Later runs within the cache TTL take seconds.
+### Vet
 
-### ``quant vet`` -- Should this ticker get a deeper look?
+#### `quant vet`
 
-Prints a one-screen verdict for a single ticker. It opens with ``VERDICT: Look deeper / Watch / Pass`` and the reasons on one line: Pass means a high-severity red flag or a Sell signal, and Look deeper means a Buy signal with at least medium confidence. Then come the details: header (score, signal, confidence, preset), red flags, peer valuation, signals, 13F fund activity, what would change the verdict, strengths/concerns, and next steps. Nothing is written to disk unless you pass ``--save``.
+A one-screen verdict on one ticker. It writes nothing to disk unless you pass `--save`.
 
 ```bash
 quant vet EQNR.OL
 quant vet AAPL --peers MSFT,GOOGL,META
-quant vet EQNR.OL --peers AKRBP.OL,VAR.OL  # home-market peers
-quant vet NVDA --config growth --save      # also writes data/NVDA/reports/vet.json + vet.md
-quant vet AAPL --json                      # machine-readable
+quant vet EQNR.OL --peers AKRBP.OL,VAR.OL    # home-market peers
+quant vet NVDA --config growth --save        # also writes data/NVDA/reports/vet.json + vet.md
+quant vet AAPL --brief                       # verdict, key facts and next steps only
 ```
 
-Options:
-- ``--peers T1,T2,...`` -- explicit peer group, used as given (no size filter)
-- ``--config [default|value|growth|income]`` -- scoring preset
-- ``--brief`` -- only the verdict, key facts, and next steps
-- ``--json`` -- print the result as JSON
-- ``--save`` -- write ``vet.json`` and ``vet.md`` to ``data/TICKER/reports/``
+It opens with `VERDICT: Look deeper / Watch / Pass` and the reasons:
 
-**Peers:** your ``--peers``; otherwise Yahoo's industry list, topped up from its sector list when fewer than 4 remain, keeping companies within 0.1x-10x of the ticker's USD market cap and dropping other listings of the same company.
+- **Pass:** a high-severity red flag or a Sell signal.
+- **Look deeper:** a Buy signal with at least medium confidence.
+- **Watch:** everything else.
 
-Yahoo's lists (``yf.Industry``/``yf.Sector`` ``top_companies``, cached for 30 days) are mostly US companies, so use ``--peers`` for home-market comparisons. Ratios are Yahoo's own (TTM). Many companies report in one currency and trade in another (most Oslo energy names report in USD), and Yahoo mixes the two in P/S, EV/EBITDA and sometimes P/B. For every ticker, the ticker itself and its peers, P/S and EV/EBITDA are converted at the latest FX rate. P/B is recomputed from the converted balance sheet for the ticker, and is left out for such peers. FCF yield is left out for such tickers.
+The sections that follow:
 
-**Peer-relative scoring:** when at least 4 peers have a P/E, ``vet`` rescores with the P/E cutoffs scaled around the peer median, so its score can differ slightly from ``report``/``score``. Turn it off with ``"peer_relative": false`` under ``valuation`` in a scoring config.
+- **Red flags:** Beneish M-Score, Altman Z distress, repeated negative free cash flow, ongoing share dilution (a one-off issuance, such as a merger, is medium), uncovered dividend, weak interest cover, stale statements, low data coverage, and stale prices.
+- **Peer valuation:** P/E, forward P/E, EV/EBITDA, P/S, P/B and FCF yield against the peer median, with percentiles.
+  - **Choosing peers:** your `--peers`; otherwise Yahoo's industry list, topped up from its sector list. Only companies within 0.1x-10x of the ticker's market cap are kept, and other listings of the same company are dropped.
+  - **Home-market peers:** Yahoo's lists are mostly US companies, so use `--peers` for those.
+  - **P/E against peers:** with 4 or more peers that have a P/E, the P/E is judged against their median, so `vet`'s score can differ slightly from `report`'s.
+- **Signals:** post-earnings drift, and relative strength against the home index.
+- **Fund activity:** which tracked funds hold the ticker and what they did last quarter. This needs the cache from `quant discover`.
+- **What would change the verdict:**
+  - analyst targets and a fair value range (DCF, Monte Carlo, DDM);
+  - the price at which valuation alone would move the signal one band;
+  - trade levels.
+- **Strengths, concerns and next steps.**
 
-**Statements in another currency** (e.g. USD statements for a NOK-listed share) are converted into the listing currency at the latest Yahoo FX rate (``USDNOK=X``) before any analysis, so DCF, Monte Carlo, FCF yield and Altman Z use one currency. The fair value section says which rate was used. If no rate is available, a red flag says the values mix currencies.
+#### `quant report`
 
-**Signal flip prices** hold everything except price-driven valuation inputs (multiples, DCF premium, FCF yield) constant. They show how far the price must move for valuation alone to change the signal, not a price target.
-
-**13F activity** needs the cache from ``quant discover``. Holdings are matched by ticker (through the CUSIP map) or by issuer name, which also finds US ADRs of foreign listings.
-
-### ``quant compare`` -- Side-by-side comparison
-
-Compares two or more tickers across scores, relative valuation, key metrics, and return correlation. It also flags highly correlated pairs (above 0.8) and hedges (below -0.3), and suggests risk-parity (inverse volatility) weights. Use this for head-to-head evaluation before a buy decision.
+The full write-up of one ticker: a scorecard printed, and JSON, Markdown and TOON files in `data/TICKER/reports/`.
 
 ```bash
-quant compare AAPL MSFT
-quant compare AAPL MSFT GOOGL --weights 0.5,0.3,0.2
+quant report AAPL
+quant --period 2y report EQNR.OL --config income
+quant --format toon report MSFT --exclude-technical
+```
+
+`--exclude-technical`, `--exclude-fundamental`, `--exclude-risk` and `--exclude-valuation` leave sections out.
+
+#### `quant score` and `quant compare`
+
+```bash
+quant score AAPL MSFT TSLA --config growth     # one summary row per ticker
+quant compare AAPL MSFT GOOGL                  # side by side, with return correlation
+quant compare AAPL MSFT --weights 0.6,0.4      # plus a portfolio view
 quant compare EQNR BP --save-chart data/corr.png
 ```
 
-Options:
-- ``--weights`` -- comma-separated portfolio weights for a portfolio summary view
-- ``--save-chart`` -- save correlation heatmap to a file (requires matplotlib)
-- ``--config [default|value|growth|income]`` -- scoring preset
+`compare` flags pairs that move together (correlation above 0.8) and hedges (below -0.3), and suggests inverse-volatility weights.
 
-### ``quant chat`` -- Interactive analyst session
+#### `quant chat`
 
-Opens a conversational session for a single ticker. The LLM has the full quantitative report in context for every question — ask about risks, run hypothetical scenarios, or drill into any metric.
-
-**If no report exists yet, ``chat`` generates one automatically before starting the session.** If a report already exists (e.g. from a previous ``report`` run), it is loaded instantly.
+A conversation about one ticker with an LLM that has the full report in context. If there's no report yet, one is generated first.
 
 ```bash
-quant chat EQNR
+quant chat EQNR.OL
 quant chat AAPL --model claude-sonnet-4-5
-quant chat MSFT --no-intro          # skip opening brief, go straight to the prompt
-quant --no-cache chat TSLA          # force fresh data fetch before starting
+quant chat MSFT --no-intro            # skip the opening brief
+quant --no-cache chat TSLA            # fresh data first
 ```
 
-Options:
-- ``--model`` -- LLM model override (e.g. ``gpt-4o``, ``claude-sonnet-4-5``). Reads ``llm_model`` from ``config.json`` if not set.
-- ``--no-intro`` -- skip the automatic opening investment brief
-- ``--debug-context`` -- print the context sent to the LLM and exit (useful for debugging)
+- **Context:** the model also sees the last 12 rows of the ticker's score history. It sees peer valuation if `quant vet TICKER --save` has been run.
+- **In-session commands:** `/refresh` re-fetches the data and rebuilds the report, `/clear` resets the conversation, `/help`, and `/quit`.
+- **Setup:** it needs an Anthropic or OpenAI key, or a free GitHub Models token, in `config.json` (see [Your files](#your-files)). `--debug-context` prints what the model is sent.
 
-Peer valuation is included when ``quant vet TICKER --save`` has been run, since chat reads the peers from ``vet.json``. The last 12 rows of the ticker's score history (``data/_history/scores.csv``) are included too, so you can ask what changed.
+### Your portfolio
 
-Special commands during the session:
+#### `quant import-portfolio`
 
-| Command | Effect |
-|---------|--------|
-| ``/refresh`` | Re-fetch fresh data, rebuild report, and clear conversation history |
-| ``/clear`` | Reset conversation history (report context is always preserved) |
-| ``/help`` | Show available commands |
-| ``/quit`` | Exit the session |
-
-Example questions to ask:
-- *"What is the bear case for this stock?"*
-- *"How does the DCF change if I assume 3% growth instead of 5%?"*
-- *"Is the dividend safe given the current payout ratio and debt level?"*
-- *"What would need to change to upgrade this from Hold to Buy?"*
-
-Requires an API key in ``config.json``:
-```json
-{
-    "llm_model": "claude-haiku-3-5",
-    "llm_anthropic_api_key": "sk-ant-..."
-}
-```
-Alternatively, use the free GitHub Models tier with ``"llm_github_token": "ghp_..."`` (no billing required — see [GitHub Models](https://github.com/marketplace/models)).
-
-### ``quant discover`` -- Portfolio signal discovery
-
-Analyzes institutional 13F filings for cross-portfolio patterns. Fetches the **two most recent quarterly filings** for each investor and diffs them to infer buy/sell actions, then detects four signal types across all portfolios.
-
-**How it works:**
-
-1. Fetches latest + previous 13F filings from SEC EDGAR (free, no API key)
-2. Diffs holdings quarter-over-quarter to infer actions:
-   - ``new`` = position didn't exist last quarter
-   - ``exit`` = position completely sold
-   - ``add`` = shares increased >5%
-   - ``trim`` = shares decreased >5%
-   - ``hold`` = shares unchanged (within ±5%)
-3. Auto-enriches top overlap tickers with sector/industry from yfinance
-4. Runs all 4 pattern detectors: overlap, sector clustering, convergence, contrarian
-
-**Optimal usage order (recommended workflow):**
+Combines Nordnet holdings exports, one file per account, into `portfolio/portfolio.csv`. Nordnet's API is closed to retail customers, so the export is the input. In Nordnet's web app, download the holdings list for each account, then run:
 
 ```bash
-# 1. First run — fetch fresh data from SEC EDGAR (takes ~30s)
-quant --no-cache discover
-
-# 2. High-conviction consensus picks only (strongest signal)
-quant discover --min-overlap 3
-
-# 3. Drill into a sector you're interested in
-quant discover --sector Technology
-quant discover --sector "Financial Services"
-
-# 4. Full enrichment if you want ALL sector clusters (slower, enriches 800+ tickers)
-quant discover --enrich
-
-# 5. See what's configured
-quant discover --list-sources
+quant import-portfolio "~/Downloads/Beholdningstabell eksport*.csv" --label 12345678=ASK --label 87654321=AF
+quant import-portfolio "~/Downloads/Beholdningstabell eksport*.csv" --verify   # check each ticker on Yahoo
 ```
 
-**Subsequent runs** use cached data (instant). Clear cache periodically or when new filings are expected:
+- **Exports:** both formats are read, `Beholdningstabell eksport, kontono. N, date.csv` and the older `aksjelister_konto-N_date.csv`. Quote the pattern, since the names have spaces.
+- **Tickers:** the exports have names but no tickers, so `portfolio/tickers.csv` (`name,ticker`) maps them to Yahoo tickers. Unmapped names are listed so you can add them and rerun.
+- **Accounts:** label them ASK or AF with `--label`, so `review` and `rebalance` can handle tax.
+- **Updating:** rerun the import whenever your holdings change.
+
+#### `quant review`
+
+Vets every holding, values them in NOK (`--base` for another currency), and gives each an action.
 
 ```bash
-# Refresh after mid-Feb / mid-May / mid-Aug / mid-Nov (when new 13F filings appear)
-quant --no-cache discover
-```
-
-**Tips:**
-- The first run without ``--no-cache`` returns cached results instantly
-- ``--min-overlap 3`` is the sweet spot — tickers held by 3+ of 8 whales is a strong consensus signal
-- Sector data appears automatically for top overlap tickers (auto-enriched via yfinance)
-- ``--enrich`` enriches ALL holdings (slow) — usually unnecessary since auto-enrich covers the top results
-- 13F data is quarterly, filed ~45 days after quarter-end. Data is 1-4 months stale
-- Save TOON output for LLM reasoning: ``quant --format toon discover``
-- Rank and score the consensus picks: ``quant screen discover``
-
-**Data freshness schedule:**
-
-| Quarter | Filings appear | Best time to ``--no-cache`` |
-|---------|----------------|---------------------------|
-| Q1 (Jan-Mar) | Mid-May | After May 15 |
-| Q2 (Apr-Jun) | Mid-August | After August 14 |
-| Q3 (Jul-Sep) | Mid-November | After November 14 |
-| Q4 (Oct-Dec) | Mid-February | After February 14 |
-
-Options:
-- ``--min-overlap`` -- minimum portfolios a ticker must appear in (default: 2)
-- ``--top`` -- number of top signals to display (default: 20)
-- ``--sector`` -- filter results to a specific sector
-- ``--enrich / --no-enrich`` -- enrich ALL holdings with sector/industry (slow; top overlap tickers are auto-enriched by default)
-- ``--list-sources`` -- list configured portfolio sources without fetching
-
-**Configuration** (``config.json``):
-```json
-{
-    "edgar_user_agent": "PersonalResearch you@email.com"
-}
-```
-SEC EDGAR requires a User-Agent with contact info. No API key needed — all data is free public records.
-
-### ``quant watch`` -- Continuous refresh
-
-Re-scores tickers on a timer with fresh data. Useful for monitoring during market hours. Nothing is written to disk. For a daily check of what moved, use ``quant changes``.
-
-```bash
-quant watch AAPL MSFT --interval 60
-quant watch EQNR --interval 300 --count 5
-```
-
-Options:
-- ``--interval`` -- refresh interval in seconds (default: 300)
-- ``--count`` -- number of iterations before exiting (default: 0 = infinite)
-
-### ``quant import-portfolio`` -- Nordnet holdings to a portfolio file
-
-Combines Nordnet holdings exports (``Beholdningstabell eksport, kontono. <account>, <date>.csv``, or the older ``aksjelister_konto-<account>_<date>.csv``; one per account) into ``portfolio/portfolio.csv`` with the columns ``ticker,name,account,shares,cost_basis,currency``. Nordnet's export has names but no tickers, so ``portfolio/tickers.csv`` (``name,ticker``) maps names to Yahoo tickers. Unmapped names are listed so you can add them and rerun. ``portfolio/`` and the export file names are gitignored: holdings never go into git.
-
-```bash
-quant import-portfolio "~/Downloads/Beholdningstabell eksport*.csv" --label 12345678=ASK --label 87654321=AF   # quote: the names have spaces
-quant import-portfolio "~/Downloads/Beholdningstabell eksport*.csv" --verify   # show Yahoo's name/currency per ticker
-```
-
-Nordnet's API is closed to retail customers (paid partner access only), so the export is the supported input: in Nordnet's web app, download the holdings list for each account, then run ``import-portfolio`` on the files. Repeat whenever your holdings change.
-
-### ``quant review`` -- Exit / Review / Trim / Hold / Add for each holding
-
-Runs ``vet`` on every holding in ``portfolio/portfolio.csv``, values the holdings in one currency (NOK by default, using Yahoo FX rates), and compares each weight with a target. The output starts with one row per holding: action, weight, share of the portfolio's risk, target, gain, score, verdict and the main reason. Next comes the portfolio view, then details for every holding that isn't a Hold. The portfolio view shows:
-
-- **Risk:** volatility, beta against Oslo (OSEBX) and the world (ACWI), and the effective number of positions, by value and by risk.
-- **Concentration:** the top-5 and top-10 weights.
-- **Mix:** by sector, country and currency, each as share of value / share of risk.
-- **Factor tilts:** weighted medians over the stocks of earnings yield (value), ROE (quality), 12-1 month return (momentum) and volatility, plus the weighted vet dimension scores.
-- **Overlap:** holdings that move together.
-
-The risk numbers, betas and correlations all use two years of weekly returns in the base currency. Prices are converted with the daily FX rate, because a NOK investor carries the currency risk. They're weekly because markets in different time zones close at different times, which makes daily correlations look lower than they are. The covariance is shrunk towards constant correlation (Ledoit-Wolf). A holding with less than 18 months of history is left out of the risk numbers, and the output names it.
-
-```bash
-quant review                           # portfolio/portfolio.csv
-quant review --config value --save     # also writes portfolio/review.json + review.md (gitignored)
-quant review --json
+quant review
+quant review --config value --save     # also writes portfolio/review.json + review.md
 ```
 
 | Action | Rule |
 |--------|------|
 | Exit | A Sell or Strong Sell signal |
-| Review | A high-severity red flag (e.g. Altman Z distress, Beneish M) with a Hold or Buy signal: look into the flag before selling. These models have known false positives, so they don't trigger an Exit for a stock you own; ``vet`` still says Pass for a new candidate |
-| Trim | Weight is at least 1.5x its target and at least 2 points above it, or the holding moves with a larger one (weekly-return correlation >= 0.80) |
-| Add | ``vet`` verdict is Look deeper, the weight is below target, and there's no overlap |
-| Hold | Everything else |
-| Check | No price data, usually a wrong ticker in ``portfolio/tickers.csv`` |
+| Review | A high-severity red flag with a Hold or Buy signal. Altman and Beneish have known false positives, so for a stock you own the flag means "look into it", not "sell" |
+| Trim | The weight is at least 1.5x its target and 2+ points above it, or the holding moves with a larger one (weekly correlation of 0.80 or more) |
+| Add | `vet` says Look deeper, the weight is below target, and it doesn't overlap a larger holding |
+| Hold | Everything else. Funds are only ever Trim or Hold |
+| Check | No price data, usually a wrong ticker in `portfolio/tickers.csv` |
 
-**Targets** are equal risk contribution: the weights at which every holding contributes the same share of portfolio risk, using the same covariance as the risk numbers. Unlike plain inverse volatility, this accounts for correlation. Some holdings are set first:
+- **The table:** each holding's weight, its share of the portfolio's risk, its target, gain, score, verdict and main reason.
+- **The portfolio view:**
+  - volatility, and beta against Oslo (OSEBX) and the world (ACWI);
+  - the effective number of positions, by value and by risk, and the top-5 and top-10 weights;
+  - the sector, country and currency mix, as share of value and share of risk;
+  - factor tilts, and the pairs of holdings that move together.
+- **Targets** are equal risk contribution, within your limits (see [How the numbers work](#portfolio-risk-and-targets)).
 
-- Exits get 0.
-- Review holdings, and holdings with too little history, keep their current weight.
-- Targets you set yourself take their share.
+#### `quant rebalance`
 
-The rest is shared out by equal risk, within a maximum position (10%) and sector (35%; funds are exempt). What a cap removes goes to the other holdings. Limits and per-ticker targets are read from ``portfolio/targets.toml`` (gitignored, optional; ``--targets`` for another file):
-
-```toml
-[limits]
-max_position = 0.10
-max_sector = 0.35
-
-[ticker."XYZ.DE"]      # e.g. a broad ETF, which equal risk would keep small
-target = 0.10          # a fixed target; or max = 0.05 for a cap of its own
-```
-
-ETFs and funds have no statements to vet, so they are only ever Trim or Hold. Taxes are ignored, except for a note when a sale at a gain would happen in AF (label your accounts ASK/AF with ``import-portfolio --label``). These are rule-based suggestions, not advice. The first run fetches every holding and its peers, which takes a few minutes; later runs use the cache.
-
-### ``quant rebalance`` -- Concrete trades for the portfolio
-
-Runs ``review``, then turns its actions into trades, in a fixed order:
+Runs `review`, then turns its actions into trades, in this order:
 
 1. Sell Exits in full.
 2. Leave Review and Check holdings alone.
 3. Trim down to the target, and cut any position above the position limit.
-4. If a sector is over its limit, sell its lowest-scoring stocks.
-5. Buy Add holdings up to their target, with ``--cash`` plus what the sales raised.
-6. Spend what's left on candidates (``--candidates watchlist`` or tickers) that ``vet`` calls Look deeper and that don't move with a holding: best score first, at most ``max_new``, each at the median target weight.
-7. Use whole shares, and drop trades under ``min_trade`` (Exits are kept).
+4. If a sector is above its limit, sell its lowest-scoring stocks.
+5. Buy Add holdings up to their target, with `--cash` plus what the sales raised.
+6. Buy candidates (`--candidates watchlist`, or tickers) that `vet` calls Look deeper and that don't move with a holding: best score first, at most `max_new`, each at the median target weight.
+7. Round to whole shares and drop trades under `min_trade` (Exits are kept).
 
 ```bash
 quant rebalance                                       # trades from the review alone
-quant rebalance --cash 50000 --candidates watchlist   # new money, new names from the watchlist
-quant rebalance --candidates EQNR.OL,AAPL --save      # writes portfolio/rebalance.json + .md
+quant rebalance --cash 50000 --candidates watchlist   # new money and new names
+quant rebalance --candidates AAPL,MSFT --save         # writes portfolio/rebalance.json + .md
 ```
 
-**Output:**
+- **The output:**
+  - a summary line: sales, buys, cash left, and the net estimated AF tax;
+  - the trades table, with an account for each trade;
+  - before and after: volatility, betas, effective positions, and the sector, country and currency mix;
+  - the trades that weren't made, and why.
+- **Accounts:**
+  - Sales come from ASK first, where gains are tax-free.
+  - A sale in AF shows the estimated tax at 37.84% of the gain. A loss shows as negative, because it's deductible against gains at the same rate.
+  - ASK only takes shares in EEA companies, so buys are marked "ASK or AF" or "AF only (not EEA)".
+- **Not included:** trading costs and spreads.
 
-- **Summary line:** the sales and buys, the cash left, and the net estimated AF tax.
-- **Trades table:** each trade with its account.
-- **Before/after table:** volatility, betas, effective positions, and the sector, country and currency mix.
-- **Notes:** the trades that weren't made, and why.
+### Track
 
-**Accounts:**
-
-- **Sales** come from ASK first.
-- **AF tax:** each sale in AF shows the estimated tax at 37.84% of the gain. A loss shows as a negative amount, since it's deductible against gains at the same rate. The cost is converted at today's FX rate, and the shielding deduction is ignored.
-- **ASK eligibility:** ASK only takes shares in EEA companies. Buys are marked "ASK or AF" or "AF only (not EEA)" from Yahoo's headquarters country, which isn't always the legal domicile.
-
-The limits (``max_position``, ``max_sector``, ``cash_reserve``, ``min_trade``, ``max_new``) go in ``portfolio/targets.toml`` (see ``quant review``). No trading costs are included. These are rule-based suggestions, not advice.
-
-### ``quant watchlist`` -- Tickers you follow
+#### `quant watchlist`
 
 ```bash
 quant watchlist add EQNR.OL --thesis "Cheap vs peers if oil holds" --target 450 --stop 380
 quant watchlist add AAPL MSFT
-quant watchlist add EQNR.OL --stop 390        # update one field; the rest is kept
+quant watchlist add EQNR.OL --stop 390       # update one field; the rest is kept
 quant watchlist rm MSFT
-quant watchlist ls                            # with each ticker's last recorded score
+quant watchlist ls                           # with each ticker's last recorded score
 ```
 
-The list is ``watchlist.toml`` in the current folder (gitignored, ``--file`` for another), one table per ticker, so it's easy to edit by hand:
+The list lives in `watchlist.toml` (`--file` for another file). Target and stop are prices in the listing currency.
+
+#### `quant changes`
+
+Rescores the watchlist (or the tickers given) and compares each one with its last run from an earlier day, on the same preset. Tickers with something worth a look come first:
+
+- a signal change, or a score move of 3+ points (with the dimensions that moved 5+);
+- red flags that appeared or cleared;
+- a price within 5% of, or past, the target or stop;
+- earnings in the next 14 days.
+
+```bash
+quant changes
+quant changes EQNR.OL AAPL --config value
+```
+
+- **Score history:** every scoring command (`report`, `score`, `vet`, `screen`, `changes`, `review` and `rebalance`) adds a row per ticker to `data/_history/scores.csv`. A later run the same day replaces the earlier one.
+- **Comparable scores:** `vet` stores its score before the peer adjustment, so rows from every command compare like with like.
+
+#### `quant watch`
+
+Rescores tickers on a timer during market hours, and writes nothing to disk. For a daily check, use `quant changes`.
+
+```bash
+quant watch AAPL MSFT --interval 60
+quant watch EQNR.OL --interval 300 --count 5
+```
+
+### Trust
+
+#### `quant backtest`
+
+How well did the price-based signals predict the next months?
+
+```bash
+quant backtest sp100                         # 5 years; horizons 1, 3 and 6 months
+quant backtest obx --years 3 --horizons 1,3
+quant backtest watchlist --no-save
+```
+
+**Method:**
+- At every month-end, each ticker is scored on the prices up to that day only: the technical and risk scores, their composite (with the real Buy/Hold/Sell bands), 12-1 momentum and low volatility.
+- The returns over the next months are then compared with the home index.
+- Results are written to `data/_backtests/`: JSON, Markdown, and a CSV of every ticker-month.
+
+**What the output reports:**
+
+| Table | What it says |
+|-------|--------------|
+| Rank IC | Correlation between the signal and the next return, averaged over months. Above about 0.03 is typical for a useful signal |
+| Quintile spread | Return of the top fifth minus the bottom fifth |
+| Hit rate | Share of months the top fifth beat the bottom fifth |
+| Signal bands | Return against the index for each Buy/Hold/Sell band. Useful bands rise from Strong Sell to Strong Buy |
+
+**Statistics:** intervals are 95%, with Newey-West errors because the windows overlap. A beta-adjusted section separates market exposure from stock picking.
+
+**Findings (October 2021 to September 2026, sp100 and OBX):**
+- **No edge in the composite.** The price-only composite has rank ICs between -0.04 and +0.02, and every interval includes zero. The bands don't rise from Sell to Buy; on sp100, Buy did worst. That is why the bands are documented as rules of thumb.
+- **Low volatility lost** by about 5% over 3 months, beta-adjusted. That goes against the long-run evidence, so the risk score is unchanged for now.
+- **Momentum** leaned positive, but within noise.
+
+**Limits:**
+- Fundamentals and valuation can't be tested: Yahoo serves restated statements with no publication dates.
+- The universe is today's constituents (survivorship bias).
+- Trades are at the close, with no costs.
+
+## How the numbers work
+
+### Composite score
+
+Each ticker gets a score from 0 to 100, built from four dimensions, weighted by preset (`default`, `value`, `growth`, `income`):
+
+- **Technical:** trend (SMA, EMA, MACD), momentum (RSI, Stochastic, Williams %R), volatility (Bollinger, ATR, ADX), and volume (OBV, VWAP, MFI).
+- **Fundamental:** Piotroski F-Score, Altman Z, Beneish M, accruals, growth (revenue, earnings and FCF CAGR), margins, and ROE.
+  - Altman's original Z is used for manufacturers (industrials, materials, energy), and Z'' for everyone else.
+  - Banks and insurers skip the cash-flow measures and Altman.
+- **Risk:** volatility, downside deviation, Sharpe, Sortino and Calmar ratios, drawdowns, VaR at 95% and 99%, and beta and alpha against the home index (OSEBX for `.OL`, FTSE 100 for `.L`, DAX for `.DE`, the S&P 500 for US listings).
+- **Valuation:** DCF against the price, P/E, PEG, FCF yield, dividend sustainability, and earnings quality. Banks and insurers skip DCF and FCF yield.
+
+**Bands:** Strong Buy is 80+, Buy 65-80, Hold 50-65, Sell 35-50, and Strong Sell below 35. Read a band as a summary of the score, not as a forecast.
+
+### Valuation
+
+- **DCF:** two stages.
+  - FCF growth starts at the 3-year history, clamped to -10% to +20%, and fades to 2.5% over 10 years. A terminal value follows.
+  - The discount rate is a WACC: CAPM cost of equity (the risk-free rate from `config.json`, a 5% equity premium, and a Blume-adjusted beta), plus after-tax debt.
+  - Net debt comes from the balance sheet.
+- **Reverse DCF:** the starting growth the price implies.
+- **Monte Carlo:** the same model with varied inputs. **DDM:** Gordon growth, with growth capped at 4%.
+- **Known limit:** the latest FCF is the base, so cyclicals at a capex peak look expensive.
+
+### Currencies
+
+Many companies report in one currency and trade in another; most Oslo energy names report in USD.
+
+- **Statements** are converted into the listing currency at the latest Yahoo FX rate before any analysis.
+- **Yahoo's own ratios** are corrected the same way, both for the ticker and for its peers.
+- **London listings** trade in pence and are handled.
+- **Portfolio values** are in the base currency (NOK by default).
+
+### Portfolio risk and targets
+
+- **Returns:** risk, beta and correlations use two years of weekly returns in the base currency.
+  - Prices are converted with the daily FX rate, because a NOK investor carries the currency risk.
+  - Returns are weekly because markets in different time zones close at different times, which makes daily correlations look too low.
+  - The covariance is shrunk towards constant correlation (Ledoit-Wolf).
+  - A holding with less than 18 months of history is left out of the risk numbers and named.
+- **Risk share:** a holding's share of the portfolio's variance. The shares sum to 100%.
+- **Factor tilts:** weighted medians over the stocks held: earnings yield (value), ROE (quality), 12-1 month return (momentum) and volatility. They describe the portfolio; they aren't regression loadings.
+- **Targets:** equal risk contribution, meaning every holding contributes the same share of risk. Unlike inverse volatility, this accounts for correlation.
+  - Set first: Exits get 0, Review holdings and short histories keep their weight, and your own targets take their share. The rest is shared out by equal risk.
+  - Caps: positions up to 10% and sectors up to 35% by default (funds are exempt). What a cap removes goes to the other holdings.
+  - A broad ETF moves with everything, so equal risk keeps it small. Give it a fixed target in `targets.toml` if you want more.
+
+### Data and caching
+
+- **Source:** everything comes from Yahoo Finance through yfinance: prices, statements, earnings, dividends, holders, analyst ratings and news.
+- **Cache expiry:** prices 12 hours, company info 24 hours, statements 7 days, and so on. Override this in `config.json`.
+- **When Yahoo fails:** the expired cache is used, and the output says so.
+- **Stale data**, such as a last price bar 9 days old, is flagged in reports and red flags.
+
+## Your files
+
+| File | What | In git? |
+|------|------|---------|
+| `config.json` | Settings and API keys (below) | No |
+| `watchlist.toml` | The watchlist (`quant watchlist`) | No |
+| `portfolio/portfolio.csv`, `tickers.csv` | Your holdings and the name-to-ticker map (`quant import-portfolio`) | No |
+| `portfolio/targets.toml` | Limits and per-ticker targets for `review` and `rebalance` (optional) | No |
+| `portfolio/review.*`, `rebalance.*` | Saved with `--save` | No |
+| `data/` | The cache, reports, score history, screens and backtests | No |
+
+**`config.json`** (all keys optional):
+
+```json
+{
+    "risk_free_rate": 0.04,
+    "benchmark_ticker": "^GSPC",
+    "benchmark_by_suffix": {".OL": "OBX.OL"},
+    "cache_ttl_hours": {"fundamentals": 336, "prices": 6},
+    "edgar_user_agent": "PersonalResearch you@email.com",
+    "llm_model": "claude-haiku-3-5",
+    "llm_anthropic_api_key": "sk-ant-...",
+    "llm_github_token": "ghp_..."
+}
+```
+
+- **Risk and benchmarks:**
+  - `risk_free_rate` is a decimal (0.04 = 4%). It's used for Sharpe, Sortino, alpha and the DCF.
+  - `benchmark_ticker` is the index for US and unmapped listings.
+  - `benchmark_by_suffix` overrides the built-in exchange-to-index map.
+- **Cache:** `cache_ttl_hours` sets the maximum age per resource (`prices`, `info`, `earnings`, `analyst_ratings`, `dividends`, `fundamentals`, `holders`, `universe`, `industry`). `0` means never expire.
+- **Chat:**
+  - `llm_model` picks the model: `claude-*` uses Anthropic, and `gpt-*` uses OpenAI or GitHub Models.
+  - The key comes from `llm_anthropic_api_key` or `llm_openai_api_key`.
+  - Alternatively, `llm_github_token` gives free access through [GitHub Models](https://github.com/marketplace/models).
+
+**`portfolio/targets.toml`:**
+
+```toml
+[limits]
+max_position = 0.10    # of the portfolio
+max_sector = 0.35
+cash_reserve = 0       # base currency, kept out of buys
+min_trade = 2000       # base currency; smaller trades are dropped
+max_new = 3            # new names per rebalance
+
+[ticker."XYZ.DE"]      # e.g. a broad ETF
+target = 0.10          # a fixed target; or max = 0.05 for a cap of its own
+```
+
+**`watchlist.toml`:**
 
 ```toml
 ["EQNR.OL"]
@@ -497,361 +458,15 @@ target = 450.0
 stop = 380.0
 ```
 
-Target and stop are prices in the listing currency.
+**`data/` layout:** `data/TICKER/cache/` (API responses) and `data/TICKER/reports/` (from `report` and `vet --save`). Shared folders: `_history/scores.csv`, `_screens/`, `_backtests/`, `_discovery/` (13F filings and results), `_universes/`, and `_peer_groups/`. Delete any of them to start fresh.
 
-### ``quant changes`` -- What moved since the last run
-
-```bash
-quant changes                     # the watchlist
-quant changes EQNR.OL AAPL        # given tickers
-quant changes --config value      # compare value-preset scores
-quant changes --json
-```
-
-Rescores each ticker, records it in the score history, and compares it with the ticker's latest run from an earlier day (from any command, same preset). Tickers with something worth a look come first:
-
-- signal changes, and score moves of 3+ points (with dimensions that moved 5+)
-- red flags that appeared or cleared
-- price within 5% of, or past, the watchlist target or stop
-- earnings in the next 14 days
-
-The table shows every ticker's score, signal and price change; a ticker seen for the first time gets a baseline. The history (``data/_history/scores.csv``) holds the date, ticker, preset, command, composite and dimension scores, signal, confidence, price, and red flags. Running the same ticker and preset twice in a day keeps the later run. ``vet`` judges P/E against peers, but the history stores its score with the standard cutoffs, so rows from every command compare like with like.
-
-### ``quant backtest`` -- How well did the signals predict?
-
-```bash
-quant backtest sp100                      # 5 years, horizons 1, 3 and 6 months
-quant backtest obx --years 3 --horizons 1,3
-quant backtest sp100 --config growth --no-save
-quant backtest watchlist --json
-```
-
-At every month-end of the last ``--years`` years, each ticker is scored using only the prices up to that day: the technical and risk dimensions, the composite of the two (the real scorer, with the preset's weights over the dimensions it has), 12-1 momentum and low volatility. The returns over the next ``--horizons`` months are then measured against the ticker's home benchmark (S&P 500, OSEBX, ...).
-
-| Table | What it says |
-|-------|--------------|
-| Rank IC | Spearman correlation between the signal and the next return, averaged over months. Above about 0.03 is typical for a useful equity signal |
-| Quintile spread | Return of the top fifth minus the bottom fifth |
-| Hit rate | Share of months the top fifth beat the bottom fifth |
-| Signal bands | Mean return vs the benchmark, and the share of stocks beating it, for each Buy/Hold/Sell band of the composite. Useful bands rise from Strong Sell to Strong Buy |
-
-Each statistic is computed across tickers within a month, then averaged over months. Intervals are 95% with Newey-West errors, since monthly samples of 3- and 6-month returns overlap; ``*`` marks an interval that excludes zero (50% for the hit rate).
-
-A beta-adjusted section repeats the IC and spread on returns net of market exposure, ``(return - rf) - beta x (benchmark - rf)``, with each stock's beta from the same one-year window as its signals. When the market rises, a low-volatility (low-beta) tilt trails it for that reason alone; this section separates that from stock picking. The band table's "All" row is the baseline to compare bands with: the average stock beat its benchmark, partly from survivorship and partly because ``^GSPC`` leaves out dividends.
-
-**What it found (October 2021 to September 2026, sp100 and OBX):**
-- The price-only composite has no edge. Its rank ICs are between -0.04 and +0.02 at every horizon, raw and beta-adjusted, and every interval includes zero. The bands don't rise from Sell to Buy; on sp100, Buy did worst (-0.5%, -0.3% and -0.1% vs the benchmark at 1, 3 and 6 months, against +0.5%, +1.5% and +3.0% for all stocks). The ``growth`` preset gives the same picture. So the Buy/Hold/Sell bands are documented as rules of thumb.
-- Strong Sell did best, but it's 1-2% of observations from a few rebounds after crashes (sp100: 2022's INTC, PLTR, AMD, META; OBX: shippers), too few to act on.
-- Low volatility lost: the calmest fifth trailed the most volatile fifth by about 5% over 3 months in both universes, beta-adjusted. About a third of the raw gap was market exposure (low-beta stocks trail a rising market). The rest suits this window's rally in volatile stocks (AI names on sp100, shipping and energy on OBX). It runs against the long-run evidence for the low-volatility anomaly, so it isn't a reason to change the risk score yet.
-- Momentum (12-1) leaned positive (IC +0.01 to +0.05) but within noise.
-
-Limits, also printed with the results:
-- Fundamental and valuation scores are not tested. Yahoo serves the latest restated statements with no publication dates, so using them at a past date would leak the future.
-- Survivorship bias: the universe is today's constituents.
-- Trades at the signal day's close, with no costs. Prices are adjusted, so returns include dividends.
-
-The first run downloads up to 10 years of prices per ticker. Scoring sp100 over 5 years (about 6,000 ticker-months) then takes about 5 minutes. Results go to ``data/_backtests/``: a JSON summary, a Markdown report, and a CSV with every ticker-month's signals and returns for your own analysis.
-
-### Global options
-
-All options below must be placed **before** the subcommand:
-
-```bash
-quant --period 2y report AAPL
-quant --format json score AAPL MSFT
-quant --no-cache compare EQNR BP
-quant -v report TSLA
-quant -q score AAPL MSFT
-quant --output-dir /tmp/data report AAPL
-```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| ``--period`` | ``1y`` | Data period: ``1mo``, ``3mo``, ``6mo``, ``1y``, ``2y``, ``5y`` |
-| ``--format`` | ``all`` | Output format: ``json``, ``markdown``, ``toon``, ``all`` |
-| ``--no-cache`` | off | Bypass cache and fetch fresh data |
-| ``--output-dir`` | ``data`` | Root directory for cache and reports |
-| ``-v / --verbose`` | off | Show debug logging (default shows warnings only) |
-| ``-q / --quiet`` | off | Show errors only |
-
-## Configuration
-
-Optional ``config.json`` in the working directory (gitignored). All keys are optional:
-
-```json
-{
-    "risk_free_rate": 0.04,
-    "benchmark_ticker": "^GSPC",
-    "benchmark_by_suffix": {".OL": "OBX.OL"},
-    "cache_ttl_hours": {"fundamentals": 336, "prices": 6},
-    "llm_model": "gpt-4.1",
-    "llm_github_token": "ghp_...",
-    "edgar_user_agent": "PersonalResearch you@email.com"
-}
-```
-
-- ``risk_free_rate`` -- annual rate as a decimal (0.04 = 4%), used for Sharpe, Sortino, and alpha
-- ``benchmark_ticker`` -- benchmark for US and unmapped listings
-- ``benchmark_by_suffix`` -- override the built-in exchange-to-index map in ``src/markets.py``
-- ``cache_ttl_hours`` -- max cache age per resource (``prices``, ``info``, ``earnings``, ``analyst_ratings``, ``dividends``, ``fundamentals``, ``holders``, ``universe``, ``industry``). Only keys you set are overridden; ``0`` means never expire.
-
-## When to Use Which Command
-
-| Goal | Command |
-|------|---------|
-| Find candidates in an index | ``quant screen sp500`` |
-| Discover new investment ideas | ``quant discover`` |
-| Quick verdict on one stock | ``quant vet TICKER`` |
-| What to do with the stocks you own | ``quant review`` |
-| Turn the review into trades | ``quant rebalance --cash N --candidates watchlist`` |
-| Deep dive on one stock | ``quant report TICKER`` |
-| Ask follow-up questions / interrogate a stock | ``quant chat TICKER`` |
-| Score a few tickers side by side | ``quant score T1 T2 T3 ...`` |
-| Compare two candidates | ``quant compare T1 T2`` |
-| Keep a list of names to follow | ``quant watchlist add TICKER --thesis "..."`` |
-| What moved since last time | ``quant changes`` |
-| How much to trust the signals | ``quant backtest sp100`` |
-| Monitor during market hours | ``quant watch T1 T2`` |
-
-### Recommended Workflow: Discovery → Analysis
-
-```bash
-# Step 1: Find candidates: screen an index, and/or see what the whales are buying
-quant screen sp500 --top 25 --config growth
-quant --no-cache discover --min-overlap 3     # after new 13F filings appear
-quant screen discover --config growth         # rank + score the consensus picks
-
-# Step 2: Score any extra names you're curious about
-quant score AAPL NVDA AMZN MSFT BAC --config growth
-
-# Step 3: Vet the best names, then deep dive on the survivor
-quant vet NVDA
-quant report NVDA
-
-# Step 4: Compare your top 2-3 candidates
-quant compare NVDA AMD AVGO
-
-# Step 5: Ask the LLM about risks and thesis
-quant chat NVDA
-# > "What's the bear case? Is the valuation stretched?"
-
-# Step 6: Follow your picks, and check daily what moved
-quant watchlist add NVDA --thesis "AI capex cycle" --stop 150
-quant changes
-```
-
-## Output Files
-
-Reports are written to ``data/TICKER/reports/``:
-
-```
-data/TICKER/
-+-- cache/                     # Ephemeral API responses (gitignored)
-|   +-- prices_1y_1d.csv
-|   +-- info.json
-|   +-- fundamentals.json
-|   +-- ...
-+-- reports/                   # Generated analysis outputs (version-controlled)
-    +-- full_report.json
-    +-- full_report.toon        # LLM-optimized (TOON format)
-    +-- report.md
-    +-- scoring.json
-    +-- scoring.md
-    +-- technical_analysis.json
-    +-- technical_analysis.md
-    +-- fundamental_analysis.json
-    +-- fundamental_analysis.md
-    +-- risk_analysis.json
-    +-- risk_analysis.md
-    +-- valuation_analysis.json
-    +-- valuation_analysis.md
-```
-
-The score history is ``data/_history/scores.csv`` (see ``quant changes``). Backtests are written to ``data/_backtests/``. Screen results are written to ``data/_screens/`` (``screen_<universe>_<timestamp>.csv/json/toon`` plus ``latest.*``). Index constituent lists are cached in ``data/_universes/``.
-
-Discovery results are written to ``data/_discovery/``:
-
-```
-data/_discovery/
-+-- edgar_13f/                 # Cached 13F filing data per CIK
-|   +-- 0001067983.json        # Berkshire Hathaway
-|   +-- 0001697748.json        # ARK Investment
-|   +-- ...
-+-- enrichment/                # Ticker/sector resolution caches
-|   +-- cusip_map.json
-|   +-- sector_map.json
-+-- discovery_result.json       # Latest analysis output
-+-- discovery_result.toon       # LLM-optimized discovery output
-```
-
-### TOON Format
-
-Reports are generated in [TOON (Token-Oriented Object Notation)](https://github.com/toon-format/spec) format alongside JSON and Markdown. TOON uses YAML-style indentation for objects and CSV-like tabular rows for uniform arrays, reducing token count while maintaining LLM readability.
-
-TOON is generated by default (``--format all``). Use ``--format toon`` for TOON-only output.
-
-**Note:** The ``news`` section is excluded from TOON output -- its deeply nested structure produces larger output than compact JSON. The full news data remains in the JSON report.
-
-## Project Structure
-
-```
-quant-analysis/
-+-- src/
-|   +-- cli/                         # CLI entry point: `quant` group + one module per command group
-|   |   +-- analyze.py               # report, score, vet, compare, watch
-|   |   +-- find.py                  # screen, discover
-|   |   +-- chat.py                  # chat
-|   |   +-- portfolio.py             # import-portfolio, review, rebalance
-|   |   +-- track.py                 # watchlist, changes
-|   |   +-- backtest.py              # backtest
-|   |   +-- common.py                # shared options and helpers
-|   +-- data_fetcher.py              # Yahoo Finance data fetching with caching + expiry
-|   +-- pipeline.py                  # Fetch -> analyze -> score for one ticker (no file I/O)
-|   +-- markets.py                   # Exchange suffix -> benchmark index mapping
-|   +-- config.py                    # Configuration settings
-|   +-- llm.py                       # LLM integration (chat, provider routing, context building)
-|   +-- analysis/
-|   |   +-- technical.py             # Technical indicators (finta)
-|   |   +-- fundamental.py           # Fundamental metrics
-|   |   +-- valuation.py             # DCF/DDM valuation & earnings analysis
-|   |   +-- risk.py                  # Risk metrics & VaR
-|   +-- comparison/
-|   |   +-- comparator.py            # TickerComparator & PortfolioView
-|   |   +-- formatters.py            # Table, Markdown, JSON, heatmap output
-|   +-- discovery/
-|   |   +-- models.py                # Data models (Holding, TrackedPortfolio, signals)
-|   |   +-- analyzer.py              # Cross-portfolio pattern detection
-|   |   +-- enrichment.py            # CUSIP→ticker + sector/industry enrichment
-|   |   +-- factor_ranking.py        # Multi-factor cross-sectional ranking
-|   |   +-- sources/
-|   |       +-- base.py              # PortfolioSource ABC (pluggable)
-|   |       +-- edgar_13f.py         # SEC EDGAR 13F source (free)
-|   +-- portfolio/
-|   |   +-- nordnet.py               # Nordnet holdings export -> portfolio.csv
-|   |   +-- review.py                # review_portfolio(): Exit / Trim / Hold / Add rules
-|   |   +-- exposure.py              # Risk, beta, concentration and factor tilts (weekly, base currency)
-|   |   +-- targets.py               # Equal-risk-contribution targets, limits (targets.toml)
-|   |   +-- rebalance.py             # propose_trades(): trades from the review, accounts and AF tax
-|   |   +-- render.py                # Terminal + Markdown output for review and rebalance
-|   +-- reporting/
-|   |   +-- generator.py             # Report file writing (runs the pipeline)
-|   |   +-- sections.py              # Modular section handlers
-|   +-- screening/
-|   |   +-- universe.py              # Index lists, ticker files, discover picks
-|   |   +-- screener.py              # Two-stage factor rank -> full score
-|   +-- backtest/
-|   |   +-- engine.py                # run_backtest(): point-in-time signals + forward returns
-|   |   +-- stats.py                 # Rank IC, quintile spread, hit rate, bands (Newey-West)
-|   |   +-- render.py                # Terminal + Markdown output, saving
-|   +-- tracking/
-|   |   +-- watchlist.py             # watchlist.toml read/write
-|   |   +-- history.py               # Score history (data/_history/scores.csv)
-|   |   +-- changes.py               # track_changes(): what moved since the last run
-|   +-- vetting/
-|   |   +-- red_flags.py             # Rule-based red flags over a report dict
-|   |   +-- peers.py                 # Yahoo industry/sector peers + peer-relative valuation
-|   |   +-- ownership.py             # 13F fund activity from the discover cache
-|   |   +-- verdict.py               # Fair value range, signal flip prices
-|   |   +-- vet.py                   # vet_ticker() orchestration
-|   |   +-- render.py                # Terminal + Markdown output
-|   +-- scoring/
-|   |   +-- config.py                # Scoring configuration & presets
-|   |   +-- dimensions.py            # Dimension scorers
-|   |   +-- scorer.py                # StockScorer orchestrator
-|   +-- utils/
-|       +-- concurrency.py           # Thread-pool helper for multi-ticker commands
-|       +-- financial.py             # Financial calculations
-|       +-- dataframe_utils.py       # DataFrame helpers
-|       +-- report.py                # Report formatting
-|       +-- serialization.py         # JSON conversion
-|       +-- toon_serializer.py       # TOON format serializer
-|       +-- types.py                 # Type definitions
-+-- examples/                        # Python API example (python_api.py)
-|   +-- 01_basic_fetch.py
-|   +-- 02_inspect_data.py
-|   +-- 03_test_fundamentals.py
-|   +-- 05_technical_analysis.py
-|   +-- 06_test_error_handling.py
-|   +-- 07_test_risk_metrics.py
-|   +-- 08_test_valuation.py
-+-- tests/
-    +-- conftest.py                  # Offline fake Yahoo market fixture
-    +-- test_backtest.py
-    +-- test_cli.py
-    +-- test_comparator.py
-    +-- test_discovery.py
-    +-- test_exposure.py
-    +-- test_pipeline.py
-    +-- test_portfolio.py
-    +-- test_quant_methods.py
-    +-- test_rebalance.py
-    +-- test_review.py
-    +-- test_scorer.py
-    +-- test_screening.py
-    +-- test_targets.py
-    +-- test_toon_serializer.py
-    +-- test_tracking.py
-    +-- test_vetting.py
-```
-
-## Python API
-
-The CLI is the primary interface. For direct library use:
-
-```python
-from src.pipeline import AnalysisOptions, analyze_ticker
-from src.scoring import ScoringConfig
-
-# Compute only (no files written)
-bundle = analyze_ticker("AAPL", options=AnalysisOptions(scoring_config=ScoringConfig.value_investor()))
-print(f"{bundle.scoring.composite_score:.0f}/100  ({bundle.scoring.signal})")
-print(bundle.freshness_warnings)
-
-# Compute and write report files
-from src.reporting import ReportGenerator
-report_data = ReportGenerator(output_dir="data").generate_full_report("AAPL", period="1y")
-
-# Screen a universe
-from src.screening import Screener, ScreenFilters, resolve_universe
-universe = resolve_universe(["sp100"])
-result = Screener().run(universe.tickers, ScreenFilters(min_market_cap=100e9), top_n=10)
-for c in result.scored:
-    print(c.ticker, c.scoring.composite_score, c.factor_rank)
-
-# Vet one ticker (red flags, peers, 13F activity, fair value)
-from src.vetting import render_text, vet_ticker
-vet = vet_ticker("AAPL", peers=["MSFT", "GOOGL", "META"])
-print(render_text(vet.to_dict()))
-print([f.title for f in vet.red_flags])
-```
-
-## Data Organization
-
-The project uses a two-tier data structure:
-
-- **``cache/``** -- Ephemeral API responses, regenerated on demand, gitignored
-- **``reports/``** -- Analysis outputs, version-controlled for historical tracking
-
-This allows regenerating fresh data without losing analysis history, and enables Git-tracked evolution of trading signals over time.
+Report files come as JSON, Markdown and [TOON](https://github.com/toon-format/spec). TOON is a compact format for LLM input, and leaves out the news section.
 
 ## Development
 
-Install all dev dependencies (linter, formatter, test runner, type checker):
-
 ```bash
 pip install -e ".[all,dev]"
+ruff check src tests && ruff format --check src tests && mypy src --ignore-missing-imports && pytest tests -q
 ```
 
-Before pushing, run lint + format in one pass:
-
-```bash
-ruff check src/ tests/ --fix && ruff format src/ tests/
-```
-
-Run the test suite:
-
-```bash
-pytest tests/ -q
-```
-
-CI (GitHub Actions) runs `ruff check`, `ruff format --check`, and `pytest` automatically on every push and pull request to ``main``.
+These are the same checks CI runs. The tests run offline against a fake Yahoo market. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the code layout and the Python API, and [docs/ROADMAP.md](docs/ROADMAP.md) for the plan and the design notes behind each phase.

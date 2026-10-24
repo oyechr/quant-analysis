@@ -72,6 +72,8 @@ Phase 6b (the correctness review) is done and live-checked. Phase 7 was planned 
 
 ## How the code fits together (after Phases 0-1)
 
+The current overview, kept up to date, is in [DEVELOPMENT.md](DEVELOPMENT.md); the notes below are from Phases 0-1.
+
 - `src/pipeline.py`: `analyze_ticker(ticker, fetcher, AnalysisOptions) -> AnalysisBundle`. Fetch, analyze, and score one ticker with **no file I/O**. `AnalysisBundle` has `.report` (the JSON-shaped dict), `.scoring` (`ScoringResult`), the analyzer objects, `.errors`, and `.freshness_warnings`. A per-run `_RunFetcher` makes sure each resource is fetched only once.
 - `src/reporting/generator.py`: `ReportGenerator.generate(ticker, options, output_format) -> AnalysisBundle` runs the pipeline, then writes files. `generate_full_report(...)` is the old dict-returning wrapper, kept for callers (comparator, chat). `output_format="none"` writes nothing.
 - `src/data_fetcher.py`: every resource has a cache expiry (`AnalysisConfig.cache_ttl_hours`). If a refresh fails, it falls back to the expired cache, including when yfinance returns an empty history. `fetcher.freshness(ticker)` records when each resource was fetched.
