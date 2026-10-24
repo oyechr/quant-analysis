@@ -204,9 +204,11 @@ def test_measure_exposure():
         _holding("NEW.OL", 0.1, sector="Technology", earnings_yield=0.02, roe=0.30),
     ]
 
-    exposure, correlations = measure_exposure(
+    measured = measure_exposure(
         reviews, closes, {"World": pd.Series(world, index=days)}, local_closes=closes
     )
+    exposure, correlations = measured.summary, measured.correlations
+    assert list(measured.covariance.columns) == ["OIL.OL", "BANK.OL", "FUND"]
 
     assert exposure["excluded"] == ["NEW.OL"]
     assert exposure["coverage"] == pytest.approx(0.9)

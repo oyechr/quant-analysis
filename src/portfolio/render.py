@@ -22,7 +22,6 @@ TOP_PAIRS = 8
 CAVEATS = [
     "Rule-based suggestions from free Yahoo data, not advice.",
     "Taxes are ignored apart from the AF/ASK note; selling outside an ASK realizes gains.",
-    "Targets are inverse-volatility (risk-parity) weights over the holdings with price history.",
     "Risk, beta and correlations use two years of weekly returns in the base currency.",
     "Factor tilts describe the stocks held (weighted medians); they are not regression loadings.",
     "DCF limits from `quant vet` apply (cyclicals at a capex peak look expensive).",
@@ -240,7 +239,8 @@ def _details_section(data: Dict[str, Any]) -> Section:
 
 
 def _notes_section(data: Dict[str, Any]) -> Section:
-    blocks: List[Block] = list(CAVEATS)
+    blocks: List[Block] = [_targets_note((data.get("summary") or {}).get("targets") or {})]
+    blocks += CAVEATS
     unmapped = data.get("unmapped") or []
     if unmapped:
         blocks.append(
@@ -248,6 +248,27 @@ def _notes_section(data: Dict[str, Any]) -> Section:
             "Add them to portfolio/tickers.csv and rerun import-portfolio."
         )
     return Section("NOTES", blocks)
+
+
+def _targets_note(notes: Dict[str, Any]) -> str:
+    """How the Target column was set, in one line."""
+    if not notes:
+        return "No targets (no price history)."
+    limits = notes.get("limits") or {}
+    text = (
+        "Targets: equal risk contribution (each holding the same share of risk), "
+        f"positions up to {limits.get('max_position', 0):.0%}, "
+        f"sectors up to {limits.get('max_sector', 0):.0%}"
+        + (f" (from {notes['source']})" if notes.get("source") else " (defaults)")
+        + ". Exits get 0; Review holdings and short histories keep their weight"
+    )
+    if notes.get("fixed"):
+        text += "; fixed: " + ", ".join(notes["fixed"])
+    if notes.get("capped"):
+        text += "; capped: " + ", ".join(notes["capped"])
+    if notes.get("unallocated", 0) > 0.0005:
+        text += f"; {notes['unallocated']:.1%} unallocated (every holding at its cap)"
+    return text + "."
 
 
 # ==================== Formatting ====================

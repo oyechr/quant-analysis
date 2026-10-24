@@ -17,7 +17,7 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 5 | Trust: price-only backtest, calibrate signal thresholds | Done (live on sp100 and OBX, 2026-10-23; thresholds documented as heuristics) |
 | 6 | Cleanup (do alongside the others) | Done (2026-10-24) |
 | 6b | Correctness review of the decision code | Done (2026-10-24; 10 fixes, live-checked) |
-| 7 | Construct: portfolio exposure and rebalance proposals | 7a done (2026-10-24, live-checked); next: 7b |
+| 7 | Construct: portfolio exposure and rebalance proposals | 7a and 7b done (2026-10-24, live-checked); next: 7c |
 | 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
 | - | Side items: decision journal, automation, quick wins | Planned (outline only) |
 
@@ -396,6 +396,23 @@ For restructuring the portfolio. `review` judges each holding alone and suggests
 2. **`equal_risk_weights(cov, fixed)`:** ERC over the holdings without a fixed target, scaled into what the fixed ones leave. Then the position and sector caps are applied, and anything above a cap is spread over the rest pro rata. Exit holdings are left out (target 0). Review and Check holdings keep their current weight until looked into.
 3. Tests against the closed forms: with uncorrelated assets ERC equals inverse volatility; with equal volatilities and equal correlations it is equal weight. The risk contributions come out equal, and the caps hold.
 4. `review` uses these targets for Trim and Add, so its actions will shift. Compare the live output before and after.
+
+**7b as built (2026-10-24, live-checked: the live run matched the offline one, with the default limits)**
+
+- `src/portfolio/targets.py`:
+  - `load_targets(path) -> TargetSettings`, holding `Limits` and per-ticker `TickerTarget(target, max)`. Unknown keys and values outside 0-1 are errors; a missing file gives the defaults.
+  - `equal_risk_weights(cov)` uses cyclical coordinate descent (Griveau-Billion, Richard and Roncalli, 2013), starting from inverse volatility.
+  - `target_weights(weights, cov, sectors, settings, exits, frozen) -> (targets, notes)`. The caps go through `_apply_caps`: position caps, then sector caps (Fund and Unknown are exempt), and the excess is spread pro rata over the uncapped free holdings. Whatever can't be placed is reported as `unallocated`.
+- `review`:
+  - `is_exit`, `is_under_review` and `has_data` are now separate functions, shared by `decide_action` and the targets.
+  - `measure_exposure` returns an `Exposure` (summary, shrunk covariance, sample correlations).
+  - The 1y price fetch and `calculate_risk_parity_weights` are gone from `review`; `compare` still uses inverse volatility.
+  - `--targets` (default `portfolio/targets.toml`), and `summary["targets"]` holds the notes, printed as the first line under NOTES. Reasons read "weight X vs target Y".
+- **Offline run on the cached portfolio:** one action changed (a Look deeper holding goes from Hold to Add). Every Exit now has a target of 0, which frees about 10% of the weight.
+  - The two correlated oil stocks get about 4% each, against 2% under inverse volatility: in NOK they move against much of the rest of the portfolio, so their marginal risk is small.
+  - The broad ETF gets 5%, against 9%, because it moves with everything. Use a `target` in targets.toml if it should be larger.
+- Tests: `tests/test_targets.py` covers the closed forms, equal risk shares on a random 12-asset matrix, every cap and fixed-weight rule, and file parsing. The review tests cover targets end to end and `--targets` in the CLI.
+- **Live check for the user:** `quant review --save`. Optionally first create `portfolio/targets.toml` with the limits you want and a `target` for the broad ETF.
 
 **7c: Rebalance proposals (`src/portfolio/rebalance.py`, `quant rebalance`)**
 

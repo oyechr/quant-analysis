@@ -15,6 +15,8 @@ from src.pipeline import AnalysisOptions
 from src.portfolio import (
     Holding,
     HoldingReview,
+    Limits,
+    TargetSettings,
     decide_action,
     load_portfolio,
     render_text,
@@ -119,7 +121,7 @@ class TestDecideAction:
     def test_overweight_trims(self):
         action, reasons = decide_action(_review(weight=0.12, target=0.05))
         assert action == TRIM
-        assert "12.0% vs risk-parity target 5.0%" in reasons[0]
+        assert "12.0% vs target 5.0%" in reasons[0]
 
     def test_slightly_over_target_holds(self):
         # 1.5x the target but less than 2 points above it: noise, not a trim
@@ -133,7 +135,7 @@ class TestDecideAction:
     def test_look_deeper_below_target_adds(self):
         action, reasons = decide_action(_review(call="Look deeper", weight=0.02, target=0.05))
         assert action == ADD
-        assert reasons[0] == "weight 2.0% vs risk-parity target 5.0%"
+        assert reasons[0] == "weight 2.0% vs target 5.0%"
 
     def test_look_deeper_at_target_holds(self):
         assert decide_action(_review(call="Look deeper", weight=0.05, target=0.05))[0] == HOLD
@@ -240,6 +242,7 @@ def test_review_portfolio_end_to_end(review_market, tmp_path):
         options=AnalysisOptions(include_context=False),
         workers=1,
         data_dir=str(tmp_path),
+        targets=TargetSettings(limits=Limits(max_position=1.0, max_sector=1.0)),
     )
     by_ticker = {r.holding.ticker: r for r in result.holdings}
 
@@ -268,7 +271,13 @@ def test_review_portfolio_end_to_end(review_market, tmp_path):
     assert by_ticker["TST"].beta is not None  # vs ACWI in NOK, not Yahoo's 1.2
     assert by_ticker["TST"].beta != 1.2
 
+    # Targets: equal risk contribution over what Exits and frozen holdings leave
+    assert sum(r.target_weight for r in valued) == pytest.approx(1.0)
+    assert all(r.target_weight == 0.0 for r in valued if r.action == EXIT)
+    assert summary["targets"]["method"] == "equal risk contribution"
+
     text = render_text(result.to_dict())
+    assert "Targets: equal risk contribution" in text
     assert text.index("PORTFOLIO REVIEW") < text.index("PORTFOLIO\n") < text.index("NOTES")
     assert "BAD.OL" in text
     assert "Volatility" in text and "Factor tilts" in text and "By country" in text
@@ -284,6 +293,9 @@ def test_cli_review(review_market, tmp_path):
         ],
     )
 
+    targets = tmp_path / "targets.toml"
+    targets.write_text("[limits]\nmax_position = 0.6\n", encoding="utf-8")
+
     result = CliRunner().invoke(
         cli,
         [
@@ -294,12 +306,24 @@ def test_cli_review(review_market, tmp_path):
             "--save",
             "--workers",
             "1",
+            "--targets",
+            str(targets),
         ],
     )
 
     assert result.exit_code == 0, result.output
     assert "PORTFOLIO REVIEW" in result.output
+    assert "positions up to 60%, sectors up to 35% (from" in result.output
     assert "Unmapped Thing" in result.output
     saved = json.loads((tmp_path / "review.json").read_text(encoding="utf-8"))
     assert {h["ticker"] for h in saved["holdings"]} == {"BIG.OL", "TST"}
     assert (tmp_path / "review.md").exists()
+
+
+def test_cli_review_rejects_a_bad_targets_file(review_market, tmp_path):
+    portfolio = _write_portfolio(tmp_path / "p.csv", [["TST", "Test Corp", "AF", 1, None, "USD"]])
+    targets = tmp_path / "targets.toml"
+    targets.write_text("[limits]\nmax_positon = 0.1\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, ["review", str(portfolio), "--targets", str(targets)])
+    assert result.exit_code != 0
+    assert "unknown limit 'max_positon'" in result.output

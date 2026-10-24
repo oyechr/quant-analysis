@@ -23,6 +23,7 @@ sector, country and currency, and the factor tilts of the stocks held.
 
 import logging
 import math
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -49,6 +50,13 @@ WORLD_BENCHMARK = ("ACWI", "USD", "World")
 HOME_BENCHMARKS: Dict[str, Tuple[str, str, str]] = {"NOK": ("OSEBX.OL", "NOK", "Oslo")}
 
 DIMENSIONS = ("valuation", "fundamental", "technical", "risk")
+
+
+@dataclass
+class Exposure:
+    summary: Dict[str, Any]  # JSON-ready, shown by `review`
+    covariance: pd.DataFrame = field(default_factory=pd.DataFrame)  # weekly, shrunk
+    correlations: pd.DataFrame = field(default_factory=pd.DataFrame)  # weekly, sample
 
 
 # ==================== Returns and covariance ====================
@@ -184,7 +192,7 @@ def measure_exposure(
     closes: Dict[str, pd.Series],
     benchmarks: Dict[str, pd.Series],
     local_closes: Optional[Dict[str, pd.Series]] = None,
-) -> Tuple[Dict[str, Any], pd.DataFrame]:
+) -> Exposure:
     """
     Portfolio exposure from the holdings' weights and base-currency closes.
 
@@ -194,7 +202,8 @@ def measure_exposure(
     out of the risk numbers (weights renormalized over the rest). Sets each
     review's `beta` (against the world benchmark) and `risk_share`.
 
-    Also returns the weekly-return correlations of the included holdings.
+    The covariance (shrunk) and correlations (sample) cover the included
+    holdings, from the same weekly returns.
     """
     valued = [r for r in reviews if r.weight]
     weights = pd.Series({r.holding.ticker: r.weight or 0.0 for r in valued}, dtype=float)
@@ -214,6 +223,7 @@ def measure_exposure(
     }
     risk = pd.Series(dtype=float)
     vols: Dict[str, float] = {}
+    cov = pd.DataFrame()
     if included:
         cov, shrinkage = shrunk_covariance(returns[included])
         w = weights[included] / weights[included].sum()
@@ -257,7 +267,7 @@ def measure_exposure(
         }
     )
     correlations = returns[included].corr() if len(included) >= 2 else pd.DataFrame()
-    return result, correlations
+    return Exposure(summary=result, covariance=cov, correlations=correlations)
 
 
 def _by_trading_date(series: pd.Series) -> pd.Series:

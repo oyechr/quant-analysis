@@ -12,7 +12,8 @@ testable, like the red flags (see `decide_action`):
   (telecoms read as distressed, acquisitions as manipulation), so for a stock
   you own they mean "look into it", not "sell". `vet` still says Pass, since
   for a new candidate there's no cost to walking away.
-- Trim: the weight is well above its risk-parity target, or the holding moves
+- Trim: the weight is well above its target (equal risk contribution, see
+  `targets.py`), or the holding moves
   with a larger one (weekly-return correlation >= 0.80, in the base currency).
 - Add: the vet verdict is Look deeper, the weight is below target, and it
   doesn't move with a larger holding.
@@ -36,7 +37,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from ..comparison import calculate_risk_parity_weights, identify_correlation_flags
+from ..comparison import identify_correlation_flags
 from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisOptions
 from ..scoring import ScoringConfig
@@ -48,10 +49,12 @@ from .exposure import (
     HISTORY_PERIOD,
     HOME_BENCHMARKS,
     WORLD_BENCHMARK,
+    Exposure,
     measure_exposure,
     to_base_currency,
 )
 from .nordnet import PORTFOLIO_COLUMNS
+from .targets import TargetSettings, target_weights
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +70,7 @@ ACTION_ORDER = [EXIT, REVIEW, TRIM, ADD, CHECK, HOLD]
 
 _SELL_SIGNALS = ("Sell", "Strong Sell")
 
-# Trim when the weight is at least 1.5x the risk-parity target and at least
+# Trim when the weight is at least 1.5x the target and at least
 # 2 percentage points above it (so tiny positions aren't flagged over noise)
 OVERWEIGHT_RATIO = 1.5
 OVERWEIGHT_MIN_GAP = 0.02
@@ -244,8 +247,10 @@ def review_portfolio(
     workers: int = DEFAULT_WORKERS,
     data_dir: str = "data",
     progress: Optional[Callable[[str, Optional[Exception]], None]] = None,
+    targets: Optional[TargetSettings] = None,
 ) -> PortfolioReview:
     """Vet every holding, value it in the base currency and decide an action."""
+    targets = targets or TargetSettings()
     fetcher = fetcher or DataFetcher(cache_dir=data_dir)
     options = options or AnalysisOptions(include_context=False)
     config = options.scoring_config or ScoringConfig()
@@ -292,13 +297,9 @@ def review_portfolio(
         if review.value and total:
             review.weight = review.value / total
 
-    prices = _price_history(fetcher, [t for t, r in reviews.items() if r.vet], use_cache)
-    parity = calculate_risk_parity_weights(prices) or {}
-    for ticker, weight in (parity.get("weights") or {}).items():
-        reviews[ticker].target_weight = weight
-
-    exposure, correlations = _exposure(list(reviews.values()), fetcher, base_currency, use_cache)
-    _find_overlaps(list(reviews.values()), correlations)
+    exposure = _exposure(list(reviews.values()), fetcher, base_currency, use_cache)
+    target_notes = _set_targets(list(reviews.values()), exposure, targets)
+    _find_overlaps(list(reviews.values()), exposure.correlations)
 
     for review in reviews.values():
         review.action, review.reasons = decide_action(review)
@@ -307,7 +308,12 @@ def review_portfolio(
         holdings=list(reviews.values()),
         base_currency=base_currency,
         preset=config.name,
-        summary=summarize_portfolio(list(reviews.values()), correlations, base_currency, exposure),
+        summary={
+            **summarize_portfolio(
+                list(reviews.values()), exposure.correlations, base_currency, exposure.summary
+            ),
+            "targets": target_notes,
+        },
     )
 
 
@@ -346,25 +352,9 @@ def value_holding(
             review.gain_pct = (review.price * to_cost / h.cost_basis - 1) * 100
 
 
-def _price_history(
-    fetcher: DataFetcher, tickers: List[str], use_cache: bool
-) -> Dict[str, pd.DataFrame]:
-    """One year of daily prices per ticker (already cached by the vet run)."""
-    prices: Dict[str, pd.DataFrame] = {}
-    for ticker in tickers:
-        try:
-            frame = fetcher.fetch_ticker(ticker, period="1y", use_cache=use_cache)
-        except Exception as e:
-            logger.warning(f"No price history for {ticker}: {e}")
-            continue
-        if frame is not None and not frame.empty and "Close" in frame.columns:
-            prices[ticker] = frame
-    return prices
-
-
 def _exposure(
     reviews: List[HoldingReview], fetcher: DataFetcher, base_currency: str, use_cache: bool
-) -> Tuple[Dict[str, Any], pd.DataFrame]:
+) -> Exposure:
     """Fetch two years of closes, convert them to the base currency, measure exposure."""
     fx_cache: Dict[str, Optional[pd.Series]] = {}
 
@@ -402,6 +392,24 @@ def _exposure(
     return measure_exposure(reviews, in_base, benchmarks, local)
 
 
+def _set_targets(
+    reviews: List[HoldingReview], exposure: Exposure, settings: TargetSettings
+) -> Dict[str, Any]:
+    """Target weight per valued holding (see `targets.py`), and how they were set."""
+    valued = [r for r in reviews if r.weight]
+    targets, notes = target_weights(
+        weights={r.holding.ticker: r.weight or 0.0 for r in valued},
+        cov=exposure.covariance,
+        sectors={r.holding.ticker: r.sector or "Unknown" for r in valued},
+        settings=settings,
+        exits={r.holding.ticker for r in valued if is_exit(r)},
+        frozen={r.holding.ticker for r in valued if is_under_review(r) or not has_data(r)},
+    )
+    for review in valued:
+        review.target_weight = targets.get(review.holding.ticker)
+    return notes
+
+
 def _find_overlaps(reviews: List[HoldingReview], correlations: pd.DataFrame) -> None:
     """For each holding, the most correlated larger holding at or above the threshold."""
     if correlations.empty:
@@ -436,9 +444,28 @@ def is_overweight(weight: Optional[float], target: Optional[float]) -> bool:
     return weight >= target * OVERWEIGHT_RATIO and weight - target >= OVERWEIGHT_MIN_GAP
 
 
+def has_data(review: HoldingReview) -> bool:
+    return bool(review.vet) and review.price is not None and review.score is not None
+
+
+def is_exit(review: HoldingReview) -> bool:
+    """A stock with a Sell or Strong Sell signal."""
+    return has_data(review) and not review.is_fund and review.signal in _SELL_SIGNALS
+
+
+def is_under_review(review: HoldingReview) -> bool:
+    """A stock with a high-severity red flag that isn't an Exit."""
+    return (
+        has_data(review)
+        and not review.is_fund
+        and not is_exit(review)
+        and any(f.get("severity") == "high" for f in review.vet.get("red_flags") or [])
+    )
+
+
 def decide_action(review: HoldingReview) -> Tuple[str, List[str]]:
     """The action for one holding and its reasons, most decisive first."""
-    if not review.vet or review.price is None or review.score is None:
+    if not has_data(review):
         detail = review.error or ("no price" if review.vet else "no score")
         return CHECK, [f"no data ({detail}); check the ticker in portfolio/tickers.csv"]
 
@@ -452,10 +479,10 @@ def decide_action(review: HoldingReview) -> Tuple[str, List[str]]:
         f["title"] for f in review.vet.get("red_flags") or [] if f.get("severity") == "high"
     ]
 
-    if not review.is_fund and review.signal in _SELL_SIGNALS:
+    if is_exit(review):
         return EXIT, _with_tax_note(review, verdict_reasons[:2])
 
-    if not review.is_fund and high_flags:
+    if is_under_review(review):
         return REVIEW, [
             *(f"red flag: {title.lower()}" for title in high_flags),
             f"{verdict_reasons[0]}; look into the flag before selling"
@@ -482,7 +509,7 @@ def decide_action(review: HoldingReview) -> Tuple[str, List[str]]:
 
 
 def _weights(weight: Optional[float], target: Optional[float]) -> str:
-    return f"{weight or 0.0:.1%} vs risk-parity target {target or 0.0:.1%}"
+    return f"{weight or 0.0:.1%} vs target {target or 0.0:.1%}"
 
 
 def _with_tax_note(review: HoldingReview, reasons: List[str]) -> List[str]:

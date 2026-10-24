@@ -104,18 +104,27 @@ def import_portfolio(ctx, exports, map_path, out_path, labels, verify):
 @click.option(
     "--save", is_flag=True, help="Also write review.json and review.md next to the portfolio file."
 )
+@click.option(
+    "--targets",
+    "targets_file",
+    default="portfolio/targets.toml",
+    show_default=True,
+    type=click.Path(dir_okay=False),
+    help="Limits and per-ticker targets (optional; defaults apply without it).",
+)
 @click.pass_context
-def review(ctx, portfolio_file, config_name, workers, base, as_json, save):
+def review(ctx, portfolio_file, config_name, workers, base, as_json, save, targets_file):
     """Review the holdings in a portfolio file: Exit / Review / Trim / Hold / Add.
 
     Runs `vet` on every holding, values them in --base, and compares each
-    weight to a risk-parity (inverse-volatility) target. The rules:
+    weight to its target: equal risk contribution (every holding the same
+    share of portfolio risk), within the limits in --targets. The rules:
 
     \b
       Exit   a Sell or Strong Sell signal
       Review a high-severity red flag with a Hold/Buy signal: look into it
       Trim   weight >= 1.5x target (and 2+ points over), or moves with a
-             larger holding (daily-return correlation >= 0.80)
+             larger holding (weekly-return correlation >= 0.80)
       Add    vet verdict Look deeper, below target, no overlap
       Hold   everything else (funds are only ever Trim or Hold)
       Check  no price data (usually a wrong ticker in the map)
@@ -132,10 +141,20 @@ def review(ctx, portfolio_file, config_name, workers, base, as_json, save):
     """
     import json as _json
 
-    from ..portfolio import load_portfolio, render_markdown, render_text, review_portfolio
+    from ..portfolio import (
+        load_portfolio,
+        load_targets,
+        render_markdown,
+        render_text,
+        review_portfolio,
+    )
 
     output_dir = ctx.obj["output_dir"]
     holdings, unmapped = load_portfolio(Path(portfolio_file))
+    try:
+        targets = load_targets(Path(targets_file))
+    except (ValueError, OSError) as e:
+        raise click.ClickException(f"{targets_file}: {e}") from e
     if not holdings:
         raise click.ClickException(f"No holdings with a ticker in {portfolio_file}")
 
@@ -159,6 +178,7 @@ def review(ctx, portfolio_file, config_name, workers, base, as_json, save):
         workers=workers,
         data_dir=output_dir,
         progress=progress,
+        targets=targets,
     )
     result.unmapped = unmapped
 

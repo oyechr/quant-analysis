@@ -400,7 +400,7 @@ Nordnet's API is closed to retail customers (paid partner access only), so the e
 
 ### ``quant review`` -- Exit / Review / Trim / Hold / Add for each holding
 
-Runs ``vet`` on every holding in ``portfolio/portfolio.csv``, values the holdings in one currency (NOK by default, using Yahoo FX rates), and compares each weight with a risk-parity (inverse-volatility) target. The output starts with one row per holding: action, weight, share of the portfolio's risk, target, gain, score, verdict and the main reason. Next comes the portfolio view, then details for every holding that isn't a Hold. The portfolio view shows:
+Runs ``vet`` on every holding in ``portfolio/portfolio.csv``, values the holdings in one currency (NOK by default, using Yahoo FX rates), and compares each weight with a target. The output starts with one row per holding: action, weight, share of the portfolio's risk, target, gain, score, verdict and the main reason. Next comes the portfolio view, then details for every holding that isn't a Hold. The portfolio view shows:
 
 - **Risk:** volatility, beta against Oslo (OSEBX) and the world (ACWI), and the effective number of positions, by value and by risk.
 - **Concentration:** the top-5 and top-10 weights.
@@ -424,6 +424,23 @@ quant review --json
 | Add | ``vet`` verdict is Look deeper, the weight is below target, and there's no overlap |
 | Hold | Everything else |
 | Check | No price data, usually a wrong ticker in ``portfolio/tickers.csv`` |
+
+**Targets** are equal risk contribution: the weights at which every holding contributes the same share of portfolio risk, using the same covariance as the risk numbers. Unlike plain inverse volatility, this accounts for correlation. Some holdings are set first:
+
+- Exits get 0.
+- Review holdings, and holdings with too little history, keep their current weight.
+- Targets you set yourself take their share.
+
+The rest is shared out by equal risk, within a maximum position (10%) and sector (35%; funds are exempt). What a cap removes goes to the other holdings. Limits and per-ticker targets are read from ``portfolio/targets.toml`` (gitignored, optional; ``--targets`` for another file):
+
+```toml
+[limits]
+max_position = 0.10
+max_sector = 0.35
+
+[ticker."XYZ.DE"]      # e.g. a broad ETF, which equal risk would keep small
+target = 0.10          # a fixed target; or max = 0.05 for a cap of its own
+```
 
 ETFs and funds have no statements to vet, so they are only ever Trim or Hold. Taxes are ignored, except for a note when a sale at a gain would happen in AF (label your accounts ASK/AF with ``import-portfolio --label``). These are rule-based suggestions, not advice. The first run fetches every holding and its peers, which takes a few minutes; later runs use the cache.
 
@@ -679,6 +696,7 @@ quant-analysis/
 |   |   +-- nordnet.py               # Nordnet holdings export -> portfolio.csv
 |   |   +-- review.py                # review_portfolio(): Exit / Trim / Hold / Add rules
 |   |   +-- exposure.py              # Risk, beta, concentration and factor tilts (weekly, base currency)
+|   |   +-- targets.py               # Equal-risk-contribution targets, limits (targets.toml)
 |   |   +-- render.py                # Terminal + Markdown output for review
 |   +-- reporting/
 |   |   +-- generator.py             # Report file writing (runs the pipeline)
@@ -734,6 +752,7 @@ quant-analysis/
     +-- test_review.py
     +-- test_scorer.py
     +-- test_screening.py
+    +-- test_targets.py
     +-- test_toon_serializer.py
     +-- test_tracking.py
     +-- test_vetting.py
