@@ -321,6 +321,13 @@ class TestTechnicalScorer:
         assert self._sub("MFI", MFI_14=75.4).label == "Neutral"
         assert self._sub("MFI", MFI_14=10.0).score >= 70.0
 
+    def test_williams_r_score_falls_steadily_into_overbought(self):
+        values = (-100.0, -85.0, -50.0, -21.0, -19.0, -1.5)
+        scores = [self._sub("Williams %R", Williams_R_14=v).score for v in values]
+        assert scores[2] == 65.0
+        assert scores[2:] == sorted(scores[2:], reverse=True)  # -50 onwards: no jump at -20
+        assert scores[0] > scores[1] >= 70.0  # deeper oversold scores higher
+
     def test_adx_label_matches_technical_signals(self):
         assert self._sub("ADX", ADX_14=23.5).label == "Moderate trend"
         assert self._sub("ADX", ADX_14=15.0).label == "Weak/no trend"

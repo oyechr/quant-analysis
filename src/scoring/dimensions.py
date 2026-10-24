@@ -418,17 +418,18 @@ class TechnicalScorer:
         if williams_r is None:
             return SubScore(name="Williams %R", score=50.0, weight=0.05, available=False)
 
-        # Williams %R ranges from -100 (oversold) to 0 (overbought)
+        # Williams %R ranges from -100 (oversold) to 0 (overbought). Same shape
+        # as RSI and MFI, so the score never jumps up when %R crosses into a band.
         if williams_r <= -80:
-            score = 80.0
+            score = 70.0 + _linear_scale(williams_r, -80, -100) * 0.30  # 70-100
             label = "Oversold"
         elif williams_r >= -20:
-            score = 20.0
+            score = 30.0 - _linear_scale(williams_r, -20, 0) * 0.30  # 0-30
             label = "Overbought"
             concerns.append(f"Williams %R at {williams_r:.1f}  -  overbought zone")
         else:
-            # Linear scale: -80 (80 score) to -20 (20 score)
-            score = _linear_scale(williams_r, -20, -80)
+            # Neutral zone: score peaks at -50
+            score = 65.0 - abs(williams_r + 50.0) * 0.5
             label = "Neutral"
 
         return SubScore(
