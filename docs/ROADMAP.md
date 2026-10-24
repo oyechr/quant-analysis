@@ -497,6 +497,13 @@ Phase 5 showed that the price-only part of the composite has no edge, and that f
 - **Decision journal:** record the thesis, entry and exit criteria per buy or sell; a check that flags theses that broke (using the score history); a yearly look-back at how picks did against the signal at the time.
 - **Automation:** run `quant changes` daily (Windows Task Scheduler) with a notification when something is worth a look.
 - **Quick wins:** the screen should name the tickers its filters dropped, with the reason (now only in the saved JSON).
+- **Faster backtest (when it starts to matter, e.g. for sp500):** about 54 ms per ticker-month, 80% of it in `TechnicalAnalyzer`, because `score_window` recomputes every indicator on a fresh 252-bar window at each month-end (`backtest/engine.py`). sp100 over 5 years takes about 5 minutes.
+  1. Compute the indicators once over each ticker's full history and read them at each month-end. The risk metrics stay on their one-year window, but as rolling calculations.
+  2. Score tickers in a process pool (the work is CPU-bound, so threads don't help).
+
+  EMA-based indicators (MACD, RSI, ADX) depend on where the series starts, so step 1 changes their values slightly; with full history they are arguably more correct. Check it with a test that compares the old and new signals within a tolerance. Rerun `quant backtest sp100` and `obx` to confirm the conclusions hold. Keep the no-look-ahead test.
+
+  Decided 2026-10-25: stay in Python. Use Rust (via PyO3) only for a hot spot that is still slow after both steps, and measure it first. A Go or Rust data fetcher wouldn't help, because Yahoo's rate limits are the bottleneck and yfinance handles Yahoo's unofficial API.
 
 ## Starting a new session
 

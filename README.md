@@ -185,7 +185,7 @@ A conversation about one ticker with an LLM that has the full report in context.
 
 ```bash
 quant chat EQNR.OL
-quant chat AAPL --model claude-sonnet-4-5
+quant chat AAPL --model claude-opus-5-5
 quant chat MSFT --no-intro            # skip the opening brief
 quant --no-cache chat TSLA            # fresh data first
 ```
@@ -418,7 +418,7 @@ Many companies report in one currency and trade in another; most Oslo energy nam
     "benchmark_by_suffix": {".OL": "OBX.OL"},
     "cache_ttl_hours": {"fundamentals": 336, "prices": 6},
     "edgar_user_agent": "PersonalResearch you@email.com",
-    "llm_model": "claude-haiku-3-5",
+    "llm_model": "claude-haiku-5-5",
     "llm_anthropic_api_key": "sk-ant-...",
     "llm_github_token": "ghp_..."
 }
@@ -430,7 +430,7 @@ Many companies report in one currency and trade in another; most Oslo energy nam
   - `benchmark_by_suffix` overrides the built-in exchange-to-index map.
 - **Cache:** `cache_ttl_hours` sets the maximum age per resource (`prices`, `info`, `earnings`, `analyst_ratings`, `dividends`, `fundamentals`, `holders`, `universe`, `industry`). `0` means never expire.
 - **Chat:**
-  - `llm_model` picks the model: `claude-*` uses Anthropic, and `gpt-*` uses OpenAI or GitHub Models.
+  - `llm_model` picks the model: `claude-*` uses Anthropic, and `gpt-*` uses OpenAI or GitHub Models. Without it, chat uses `gpt-4.1` through GitHub Models. For Anthropic, `claude-haiku-5-5` is the cheap option and `claude-opus-5-5` the most thorough.
   - The key comes from `llm_anthropic_api_key` or `llm_openai_api_key`.
   - Alternatively, `llm_github_token` gives free access through [GitHub Models](https://github.com/marketplace/models).
 

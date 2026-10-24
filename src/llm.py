@@ -6,13 +6,14 @@ model name: claude-* -> Anthropic, gpt-*/o*-* -> OpenAI.
 
 Configure in config.json:
     {
-        "llm_model": "claude-haiku-3-5",
+        "llm_model": "claude-haiku-5-5",
         "llm_anthropic_api_key": "sk-ant-...",
         "llm_openai_api_key": "sk-..."
     }
 
-Default model (claude-haiku-3-5) costs ~$0.004 per call at typical report size.
-Use claude-sonnet-4-5 or gpt-4.1 for richer analysis at ~5x cost.
+Without llm_model the default is gpt-4.1 through GitHub Models (free tier).
+claude-haiku-5-5 is the cheap Anthropic option (well under a cent per brief);
+claude-opus-5-5 gives richer analysis at about 40x the price.
 """
 
 import json
@@ -430,6 +431,19 @@ def explain(
     return _stream_openai(toon_text, resolved_model, key)
 
 
+# Current Claude models think before answering, and thinking counts toward
+# max_tokens, so leave room for both (the calls stream, so a large cap is safe).
+ANTHROPIC_MAX_TOKENS = 16000
+
+
+def _note_anthropic_stop(stop_reason: Optional[str]) -> None:
+    """Say so when a reply was cut off or declined instead of ending normally."""
+    if stop_reason == "max_tokens":
+        sys.stdout.write("\n  [Note: the reply hit the length limit and was cut off]")
+    elif stop_reason == "refusal":
+        sys.stdout.write("\n  [Note: the model declined to answer this request]")
+
+
 def _stream_anthropic(toon_text: str, model: str, api_key: str) -> str:
     try:
         import anthropic
@@ -441,7 +455,7 @@ def _stream_anthropic(toon_text: str, model: str, api_key: str) -> str:
 
     with client.messages.stream(
         model=model,
-        max_tokens=1024,
+        max_tokens=ANTHROPIC_MAX_TOKENS,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": toon_text}],
     ) as stream:
@@ -449,6 +463,7 @@ def _stream_anthropic(toon_text: str, model: str, api_key: str) -> str:
             sys.stdout.write(text)
             sys.stdout.flush()
             tokens.append(text)
+        _note_anthropic_stop(stream.get_final_message().stop_reason)
 
     sys.stdout.write("\n")
     sys.stdout.flush()
@@ -652,7 +667,7 @@ def _chat_anthropic(system: str, messages: List[Dict[str, str]], model: str, api
 
     with client.messages.stream(
         model=model,
-        max_tokens=1024,
+        max_tokens=ANTHROPIC_MAX_TOKENS,
         system=system,
         messages=cast(List[MessageParam], messages),
     ) as stream:
@@ -660,6 +675,7 @@ def _chat_anthropic(system: str, messages: List[Dict[str, str]], model: str, api
             sys.stdout.write(text)
             sys.stdout.flush()
             tokens.append(text)
+        _note_anthropic_stop(stream.get_final_message().stop_reason)
 
     sys.stdout.write("\n")
     sys.stdout.flush()

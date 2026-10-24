@@ -16,7 +16,7 @@ CHAT_HISTORY_ROWS = 12  # score history rows given to `quant chat`
 @click.option(
     "--model",
     default=None,
-    help="LLM model override (e.g. gpt-4o, claude-sonnet-4-5). Reads llm_model from config.json if not set.",
+    help="LLM model override (e.g. gpt-4o, claude-opus-5-5). Reads llm_model from config.json if not set.",
 )
 @click.option(
     "--no-intro",
@@ -45,10 +45,10 @@ def chat(ctx, ticker, model, no_intro, debug_context):
       /quit      Exit the session
 
     Configure API keys in config.json:
-        { "llm_anthropic_api_key": "sk-ant-...", "llm_model": "claude-haiku-3-5" }
+        { "llm_anthropic_api_key": "sk-ant-...", "llm_model": "claude-haiku-5-5" }
 
     Example: quant chat EQNR
-    Example: quant chat AAPL --model claude-sonnet-4-5 --no-intro
+    Example: quant chat AAPL --model claude-opus-5-5 --no-intro
     """
     import json as _json
 
