@@ -337,7 +337,7 @@ class TechnicalScorer:
         else:
             # Weak trend: 20-60 range
             score = 20.0 + (adx / self.params.adx_strong_trend) * 40.0
-            label = "Weak/no trend"
+            label = "Moderate trend" if adx >= self.params.adx_moderate_trend else "Weak/no trend"
 
         return SubScore(name="ADX", score=_clamp(score), weight=0.10, raw_value=adx, label=label)
 
@@ -347,17 +347,20 @@ class TechnicalScorer:
         if mfi is None:
             return SubScore(name="MFI", score=50.0, weight=0.10, available=False)
 
+        # Same shape as RSI, so the score never jumps up when MFI crosses into a band
         if mfi <= self.params.mfi_oversold:
-            score = 80.0
+            score = _linear_scale(mfi, 0, self.params.mfi_oversold, invert=True)
+            score = 70.0 + (score * 0.30)  # 70-100 range for oversold
             label = "Oversold (bullish)"
             strengths.append(f"MFI oversold at {mfi:.1f}  -  money flow suggests buying pressure")
         elif mfi >= self.params.mfi_overbought:
-            score = 20.0
+            score = _linear_scale(mfi, self.params.mfi_overbought, 100, invert=False)
+            score = 30.0 - (score * 0.30)  # 0-30 range for overbought
             label = "Overbought (bearish)"
             concerns.append(f"MFI overbought at {mfi:.1f}  -  heavy selling pressure possible")
         else:
-            # Linear scale in neutral zone
-            score = _linear_scale(mfi, self.params.mfi_overbought, self.params.mfi_oversold)
+            # Neutral zone: score peaks at 50 MFI
+            score = 65.0 - (abs(mfi - 50.0) * 0.5)
             label = "Neutral"
 
         return SubScore(name="MFI", score=_clamp(score), weight=0.10, raw_value=mfi, label=label)
@@ -1515,7 +1518,8 @@ class ValuationScorer:
 
         if score >= 70:
             label = "High quality"
-            strengths.append("High earnings quality with consistent beats")
+            beats = f", beat rate {beat_rate:.0f}%" if beat_rate is not None else ""
+            strengths.append(f"High earnings quality{beats}")
         elif score >= 45:
             label = "Moderate quality"
         else:

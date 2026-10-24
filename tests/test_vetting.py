@@ -850,6 +850,7 @@ def test_chat_context_reads_valuation_model_fields():
     context = build_brief_context(report, red_flags=[])
 
     assert "Report date: 2026-10-24" in context
+    assert "Beta" not in context.split("=== VALUATION RATIOS ===")[1].split("===")[0]
     assert "DDM value: 59.2  Premium to DDM: 583.2%" in context
     assert "Div yield: 3.6%  Payout ratio: 40.7%  Sustainability: Good" in context
     assert "EPS quality: High Quality  Beat rate: 50.0%" in context

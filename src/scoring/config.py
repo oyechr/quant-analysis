@@ -67,7 +67,8 @@ class TechnicalScoringParams:
     # Moving average alignment
     ma_weight: float = 0.25
 
-    # ADX trend strength
+    # ADX trend strength (moderate only changes the label, matching the technical signals)
+    adx_moderate_trend: float = 20.0
     adx_strong_trend: float = 25.0
     adx_very_strong: float = 40.0
 

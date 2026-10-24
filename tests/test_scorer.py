@@ -316,6 +316,23 @@ class TestTechnicalScorer:
         rsi_score = next(s for s in result.sub_scores if s.name == "RSI")
         assert 40.0 <= rsi_score.score <= 70.0
 
+    def _sub(self, name, **indicators):
+        result = TechnicalScorer().score(self._make_tech_data(indicators=indicators))
+        return next(s for s in result.sub_scores if s.name == name)
+
+    def test_mfi_score_falls_steadily_into_overbought(self):
+        """No jump up when MFI crosses 80, matching RSI's shape."""
+        scores = [self._sub("MFI", MFI_14=v).score for v in (50.0, 75.4, 79.9, 80.0, 95.0)]
+        assert scores == sorted(scores, reverse=True)
+        assert scores[0] == 65.0
+        assert self._sub("MFI", MFI_14=75.4).label == "Neutral"
+        assert self._sub("MFI", MFI_14=10.0).score >= 70.0
+
+    def test_adx_label_matches_technical_signals(self):
+        assert self._sub("ADX", ADX_14=23.5).label == "Moderate trend"
+        assert self._sub("ADX", ADX_14=15.0).label == "Weak/no trend"
+        assert self._sub("ADX", ADX_14=30.0).label == "Strong trend"
+
     def test_macd_bullish_high_score(self):
         scorer = TechnicalScorer()
         data = self._make_tech_data(signals={"MACD": "Bullish"})
@@ -583,6 +600,13 @@ class TestValuationScorer:
         result = scorer.score(self._make_val_data(), self._make_ticker_info())
         assert isinstance(result, DimensionResult)
         assert result.dimension == "Valuation"
+
+    def test_earnings_quality_strength_states_beat_rate(self):
+        result = ValuationScorer().score(
+            self._make_val_data(earnings_quality=90.0, beat_rate=50.0), self._make_ticker_info()
+        )
+        assert "High earnings quality, beat rate 50%" in result.strengths
+        assert not any("consistent beats" in s for s in result.strengths)
 
     def test_financials_skip_cash_flow_measures(self):
         """Banks/insurers: no FCF DCF; earnings quality from beat rate only."""

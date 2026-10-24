@@ -242,7 +242,8 @@ def build_brief_context(
         "=== VALUATION RATIOS ===",
         f"P/E: {_fmt(info.get('pe_ratio'))}  Forward P/E: {_fmt(info.get('forward_pe'))}  "
         f"PEG: {_fmt(info.get('peg_ratio'))}  P/B: {_fmt(info.get('price_to_book'))}  P/S: {_fmt(info.get('price_to_sales'))}",
-        f"Dividend yield: {_fmt(info.get('dividend_yield'))}%  Beta: {_fmt(info.get('beta'))}  "
+        # Beta is left to the RISK section: Yahoo's is vs the S&P 500, ours vs the home index
+        f"Dividend yield: {_fmt(info.get('dividend_yield'))}%  "
         f"52w range: {_fmt(info.get('52w_low'))} - {_fmt(info.get('52w_high'))}",
         "",
     ]
