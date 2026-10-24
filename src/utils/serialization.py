@@ -72,11 +72,6 @@ def dataframe_to_records(
         for col in df_copy.select_dtypes(include=["datetime64"]).columns:
             df_copy[col] = df_copy[col].astype(str)
 
-        # Also handle object columns that might contain Timestamps
-        for col in df_copy.select_dtypes(include=["object"]).columns:
-            if len(df_copy[col]) > 0 and pd.api.types.is_datetime64_any_dtype(df_copy[col]):
-                df_copy[col] = df_copy[col].astype(str)
-
     # Replace NaN with None for valid JSON
     df_clean = df_copy.replace({float("nan"): None})
 

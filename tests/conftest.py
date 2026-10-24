@@ -55,6 +55,125 @@ def make_prices(
     )
 
 
+def make_statements(years: int = 4, revenue: float = 100e9, growth: float = 0.08) -> Dict[str, Any]:
+    """Annual statements (newest year first, like yfinance) for a steadily growing company."""
+    dates = [pd.Timestamp(f"{2025 - i}-12-31") for i in range(years)]
+    income, balance, cashflow = {}, {}, {}
+    for i, d in enumerate(dates):
+        rev = revenue / (1 + growth) ** i
+        net = rev * 0.2
+        income[d] = {
+            "Total Revenue": rev,
+            "Cost Of Revenue": rev * 0.55,
+            "Gross Profit": rev * 0.45,
+            "Operating Income": rev * 0.28,
+            "EBIT": rev * 0.28,
+            "Interest Expense": rev * 0.01,
+            "Net Income": net,
+            "Reconciled Depreciation": rev * 0.04,
+            "Diluted Average Shares": 2.5e9,
+            "Basic Average Shares": 2.5e9,
+        }
+        balance[d] = {
+            "Total Assets": rev * 1.5,
+            "Current Assets": rev * 0.6,
+            "Current Liabilities": rev * 0.4,
+            "Total Liabilities Net Minority Interest": rev * 0.8,
+            "Long Term Debt": rev * 0.3,
+            "Total Debt": rev * 0.35,
+            "Accounts Receivable": rev * 0.1,
+            "Retained Earnings": rev * 0.5,
+            "Stockholders Equity": rev * 0.7,
+            "Common Stock Equity": rev * 0.7,
+            "Ordinary Shares Number": 2.5e9,
+            "Cash And Cash Equivalents": rev * 0.15,
+        }
+        cashflow[d] = {
+            "Operating Cash Flow": net * 1.3,
+            "Capital Expenditure": -rev * 0.05,
+            "Free Cash Flow": net * 1.3 - rev * 0.05,
+            "Cash Dividends Paid": -net * 0.3,
+        }
+    return {
+        "income_stmt": pd.DataFrame(income),
+        "balance_sheet": pd.DataFrame(balance),
+        "cashflow": pd.DataFrame(cashflow),
+    }
+
+
+def make_context(symbol: str) -> Dict[str, Any]:
+    """Earnings, dividends, holders and analyst ratings in yfinance's shapes."""
+    tz = _exchange_tz(symbol)
+    quarters = pd.date_range(end="2026-09-30", periods=8, freq="QE")
+    actual = np.linspace(1.2, 1.6, len(quarters))
+    estimate = actual * np.where(np.arange(len(quarters)) % 3 == 0, 1.05, 0.97)
+    earnings_history = pd.DataFrame(
+        {
+            "epsActual": actual,
+            "epsEstimate": estimate,
+            "epsDifference": actual - estimate,
+            "surprisePercent": (actual - estimate) / estimate,
+        },
+        index=pd.Index(quarters, name="quarter"),
+    )
+    report_dates = (quarters + pd.Timedelta(days=30)).tz_localize(tz)
+    earnings_dates = pd.DataFrame(
+        {
+            "EPS Estimate": estimate,
+            "Reported EPS": actual,
+            "Surprise(%)": (actual / estimate - 1) * 100,
+        },
+        index=pd.DatetimeIndex(report_dates, name="Earnings Date"),
+    ).sort_index(ascending=False)
+    dividend_dates = pd.date_range(end="2026-08-15", periods=12, freq="QS-FEB").tz_localize(tz)
+    dividends = pd.Series(
+        np.linspace(0.20, 0.26, len(dividend_dates)), index=dividend_dates, name="Dividends"
+    )
+    holders = pd.DataFrame(
+        {
+            "Date Reported": pd.Timestamp("2026-06-30"),
+            "Holder": [f"Fund {i}" for i in range(1, 11)],
+            "pctHeld": np.linspace(0.08, 0.01, 10),
+            "Shares": np.linspace(2e8, 2.5e7, 10).astype(int),
+            "Value": np.linspace(4e10, 5e9, 10).astype(int),
+            "pctChange": np.linspace(0.05, -0.04, 10),
+        }
+    )
+    recommendations = pd.DataFrame(
+        {
+            "period": ["0m", "-1m", "-2m", "-3m"],
+            "strongBuy": [8, 8, 7, 7],
+            "buy": [20, 19, 19, 18],
+            "hold": [10, 11, 11, 12],
+            "sell": [1, 1, 2, 2],
+            "strongSell": [0, 0, 1, 1],
+        }
+    )
+    upgrades = pd.DataFrame(
+        {
+            "Firm": ["Broker A", "Broker B", "Broker C"],
+            "ToGrade": ["Buy", "Overweight", "Hold"],
+            "FromGrade": ["Hold", "Equal-Weight", "Buy"],
+            "Action": ["up", "up", "down"],
+        },
+        index=pd.DatetimeIndex(
+            pd.date_range(end="2026-10-01", periods=3, freq="MS"), name="GradeDate"
+        ),
+    )
+    return {
+        "earnings_history": earnings_history,
+        "earnings_dates": earnings_dates,
+        "dividends": dividends,
+        "institutional_holders": holders,
+        "mutualfund_holders": holders.assign(Holder=[f"Index Fund {i}" for i in range(1, 11)]),
+        "recommendations": recommendations,
+        "upgrades_downgrades": upgrades,
+    }
+
+
+SAMPLE_TICKERS = ("AAPL", "EXE.TO", "GJF.OL")
+
+
 class FakeMarket:
     """Configurable stand-in for Yahoo Finance; counts calls per (attribute, symbol)."""
 
@@ -163,6 +282,36 @@ def fake_market(monkeypatch: pytest.MonkeyPatch, default_config: AnalysisConfig)
     monkeypatch.setattr("src.data_fetcher.yf.Industry", market.industry)
     monkeypatch.setattr("src.data_fetcher.yf.Sector", market.sector)
     return market
+
+
+@pytest.fixture(scope="session")
+def sample_data_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A data dir with full reports for SAMPLE_TICKERS, built once by the real pipeline."""
+    from src.reporting import ReportGenerator
+
+    data_dir = tmp_path_factory.mktemp("sample_data")
+    market = FakeMarket()
+    news = [
+        {"id": "1", "content": {"title": "Results beat estimates", "provider": {"name": "Wire"}}}
+    ]
+    for symbol in SAMPLE_TICKERS:
+        market.attribute_overrides[symbol] = {
+            **make_statements(),
+            **make_context(symbol),
+            "news": news,
+        }
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("src.data_fetcher.yf.Ticker", market.ticker)
+        mp.setattr("src.data_fetcher.yf.Industry", market.industry)
+        mp.setattr("src.data_fetcher.yf.Sector", market.sector)
+        set_config(AnalysisConfig())
+        try:
+            generator = ReportGenerator(output_dir=str(data_dir))
+            for symbol in SAMPLE_TICKERS:
+                generator.generate_full_report(symbol, output_format="all", use_cache=False)
+        finally:
+            set_config(AnalysisConfig())
+    return data_dir
 
 
 @pytest.fixture

@@ -12,23 +12,16 @@ import json
 import math
 from pathlib import Path
 
-import pytest
 from toon import DecodeOptions
 from toon import decode as toon_decode
 
 from src.utils.toon_serializer import TOON_EXCLUDED_SECTIONS, report_to_toon
 
-# Path to sample report data
-SAMPLE_REPORTS_DIR = Path(__file__).parent.parent / "data"
 
-
-def _load_sample_report(ticker: str = "AAPL") -> dict:
-    """Load a sample full_report.json for testing."""
-    report_path = SAMPLE_REPORTS_DIR / ticker / "reports" / "full_report.json"
-    if not report_path.exists():
-        pytest.skip(f"Sample report not found: {report_path}")
-    with open(report_path) as f:
-        return json.load(f)
+def _load_sample_report(sample_data_dir: Path, ticker: str = "AAPL") -> dict:
+    """Load a sample full_report.json (built by the `sample_data_dir` fixture)."""
+    report_path = sample_data_dir / ticker / "reports" / "full_report.json"
+    return json.loads(report_path.read_text(encoding="utf-8"))
 
 
 def _values_equal(a, b, float_tolerance: float = 1e-9) -> bool:
@@ -152,48 +145,48 @@ class TestReportToToon:
 class TestFullReportToon:
     """Test TOON conversion with actual full report data."""
 
-    def test_encode_full_report(self):
+    def test_encode_full_report(self, sample_data_dir):
         """Full report should encode to TOON without errors."""
-        data = _load_sample_report()
+        data = _load_sample_report(sample_data_dir)
         result = report_to_toon(data)
         assert isinstance(result, str)
         assert len(result) > 100  # Should produce substantial output
 
-    def test_full_report_contains_key_sections(self):
+    def test_full_report_contains_key_sections(self, sample_data_dir):
         """TOON output should contain all major report sections (except excluded ones)."""
-        data = _load_sample_report()
+        data = _load_sample_report(sample_data_dir)
         result = report_to_toon(data)
 
         expected_keys = ["ticker", "info", "price_data", "technical_analysis"]
         for key in expected_keys:
             assert key in result, f"Missing key '{key}' in TOON output"
 
-    def test_full_report_excludes_news(self):
+    def test_full_report_excludes_news(self, sample_data_dir):
         """News section should be excluded from TOON output by default."""
-        data = _load_sample_report()
+        data = _load_sample_report(sample_data_dir)
         result = report_to_toon(data)
         # The top-level "news:" key should not appear
         lines = result.split("\n")
         top_level_keys = [line.rstrip(":") for line in lines if line and not line.startswith(" ")]
         assert "news" not in top_level_keys, "news section should be excluded from TOON"
 
-    def test_full_report_includes_news_when_not_excluded(self):
+    def test_full_report_includes_news_when_not_excluded(self, sample_data_dir):
         """News section should be included when excluded_sections is empty."""
-        data = _load_sample_report()
+        data = _load_sample_report(sample_data_dir)
         result = report_to_toon(data, excluded_sections=())
         assert "news:" in result
 
-    def test_news_exclusion_reduces_toon_size(self):
+    def test_news_exclusion_reduces_toon_size(self, sample_data_dir):
         """Excluding news should make TOON smaller than compact JSON (sans news)."""
-        data = _load_sample_report()
+        data = _load_sample_report(sample_data_dir)
         toon_default = report_to_toon(data)
         toon_with_news = report_to_toon(data, excluded_sections=())
         # Default (no news) should be smaller
         assert len(toon_default) < len(toon_with_news)
 
-    def test_toon_default_is_smaller_than_compact_json_without_news(self):
+    def test_toon_default_is_smaller_than_compact_json_without_news(self, sample_data_dir):
         """TOON (excluding news) should be smaller than compact JSON of the same sections."""
-        data = _load_sample_report()
+        data = _load_sample_report(sample_data_dir)
         toon_str = report_to_toon(data)
         # Build equivalent compact JSON without excluded sections
         data_no_excluded = {k: v for k, v in data.items() if k not in TOON_EXCLUDED_SECTIONS}
@@ -202,9 +195,9 @@ class TestFullReportToon:
             f"TOON ({len(toon_str)}) should be smaller than compact JSON ({len(compact_json)})"
         )
 
-    def test_full_report_roundtrip(self):
+    def test_full_report_roundtrip(self, sample_data_dir):
         """Full report (sans excluded sections) should roundtrip through TOON."""
-        data = _load_sample_report()
+        data = _load_sample_report(sample_data_dir)
         toon_str = report_to_toon(data)
         decoded = toon_decode(toon_str, DecodeOptions(strict=False))
 
@@ -213,9 +206,9 @@ class TestFullReportToon:
         assert set(decoded.keys()) == expected_keys
         assert decoded["ticker"] == data["ticker"]
 
-    def test_full_report_preserves_numeric_values(self):
+    def test_full_report_preserves_numeric_values(self, sample_data_dir):
         """Key numeric values should survive TOON roundtrip."""
-        data = _load_sample_report()
+        data = _load_sample_report(sample_data_dir)
         toon_str = report_to_toon(data)
         decoded = toon_decode(toon_str, DecodeOptions(strict=False))
 
@@ -226,9 +219,9 @@ class TestFullReportToon:
             if original_pe is not None:
                 assert abs(float(original_pe) - float(decoded_pe)) < 0.01
 
-    def test_toon_is_more_compact_than_pretty_json(self):
+    def test_toon_is_more_compact_than_pretty_json(self, sample_data_dir):
         """TOON should be smaller than pretty-printed JSON (of same sections)."""
-        data = _load_sample_report()
+        data = _load_sample_report(sample_data_dir)
         toon_str = report_to_toon(data)
         data_no_excluded = {k: v for k, v in data.items() if k not in TOON_EXCLUDED_SECTIONS}
         pretty_json = json.dumps(data_no_excluded, indent=2, default=str)

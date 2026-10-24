@@ -29,22 +29,15 @@ from src.scoring.scorer import ScoringResult
 # ============================================================
 
 
-def _load_sample_report(ticker: str = "AAPL") -> dict:
-    """Load a sample full report JSON for testing"""
-    report_path = Path(__file__).parent.parent / "data" / ticker / "reports" / "full_report.json"
-    if not report_path.exists():
-        pytest.skip(f"Sample report not found: {report_path}")
-    with open(report_path) as f:
-        return json.load(f)
+def _load_sample_report(sample_data_dir: Path, ticker: str = "AAPL") -> dict:
+    """Load a sample full report (built by the `sample_data_dir` fixture)"""
+    return _load_analysis_json(sample_data_dir, ticker, "full_report")
 
 
-def _load_analysis_json(ticker: str, analysis_type: str) -> dict:
-    """Load a specific analysis JSON file"""
-    path = Path(__file__).parent.parent / "data" / ticker / "reports" / f"{analysis_type}.json"
-    if not path.exists():
-        pytest.skip(f"Analysis file not found: {path}")
-    with open(path) as f:
-        return json.load(f)
+def _load_analysis_json(sample_data_dir: Path, ticker: str, analysis_type: str) -> dict:
+    """Load a specific analysis JSON file from the sample reports"""
+    path = sample_data_dir / ticker / "reports" / f"{analysis_type}.json"
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 # ============================================================
@@ -362,8 +355,8 @@ class TestTechnicalScorer:
         assert result.score == 50.0
         assert result.data_coverage == 0.0
 
-    def test_with_sample_data(self):
-        data = _load_analysis_json("AAPL", "technical_analysis")
+    def test_with_sample_data(self, sample_data_dir):
+        data = _load_analysis_json(sample_data_dir, "AAPL", "technical_analysis")
         scorer = TechnicalScorer()
         result = scorer.score(data)
         assert 0 <= result.score <= 100
@@ -464,8 +457,8 @@ class TestFundamentalScorer:
         prof_sub = next(s for s in result.sub_scores if s.name == "Profitability")
         assert prof_sub.score >= 75.0
 
-    def test_with_sample_data(self):
-        data = _load_analysis_json("AAPL", "fundamental_analysis")
+    def test_with_sample_data(self, sample_data_dir):
+        data = _load_analysis_json(sample_data_dir, "AAPL", "fundamental_analysis")
         scorer = FundamentalScorer()
         result = scorer.score(data)
         assert 0 <= result.score <= 100
@@ -552,8 +545,8 @@ class TestRiskScorer:
         vol_sub = next(s for s in result.sub_scores if s.name == "Volatility")
         assert vol_sub.score >= 85.0
 
-    def test_with_sample_data(self):
-        data = _load_analysis_json("AAPL", "risk_analysis")
+    def test_with_sample_data(self, sample_data_dir):
+        data = _load_analysis_json(sample_data_dir, "AAPL", "risk_analysis")
         scorer = RiskScorer()
         result = scorer.score(data)
         assert 0 <= result.score <= 100
@@ -689,10 +682,10 @@ class TestValuationScorer:
         dcf_sub = next(s for s in result.sub_scores if s.name == "DCF Valuation")
         assert not dcf_sub.available
 
-    def test_with_sample_data(self):
-        data = _load_analysis_json("AAPL", "valuation_analysis")
+    def test_with_sample_data(self, sample_data_dir):
+        data = _load_analysis_json(sample_data_dir, "AAPL", "valuation_analysis")
         scorer = ValuationScorer()
-        info = _load_sample_report("AAPL").get("info", {})
+        info = _load_sample_report(sample_data_dir, "AAPL").get("info", {})
         result = scorer.score(data, info)
         assert 0 <= result.score <= 100
 
@@ -705,8 +698,8 @@ class TestValuationScorer:
 class TestStockScorer:
     """Tests for the main StockScorer composite scorer"""
 
-    def test_score_full_report(self):
-        report = _load_sample_report("AAPL")
+    def test_score_full_report(self, sample_data_dir):
+        report = _load_sample_report(sample_data_dir, "AAPL")
         scorer = StockScorer()
         result = scorer.score(report)
         assert 0 <= result.composite_score <= 100
@@ -714,24 +707,24 @@ class TestStockScorer:
         assert result.confidence in ["High", "Medium", "Low"]
         assert result.ticker == "AAPL"
 
-    def test_score_all_sample_tickers(self):
+    def test_score_all_sample_tickers(self, sample_data_dir):
         """Test scoring works for all sample tickers"""
         for ticker in ["AAPL", "EXE.TO", "GJF.OL"]:
-            report = _load_sample_report(ticker)
+            report = _load_sample_report(sample_data_dir, ticker)
             scorer = StockScorer()
             result = scorer.score(report)
             assert 0 <= result.composite_score <= 100, f"Failed for {ticker}"
             assert result.dimensions_available >= 1, f"No dimensions for {ticker}"
 
-    def test_dimensions_available(self):
-        report = _load_sample_report("AAPL")
+    def test_dimensions_available(self, sample_data_dir):
+        report = _load_sample_report(sample_data_dir, "AAPL")
         scorer = StockScorer()
         result = scorer.score(report)
         assert result.dimensions_available >= 3  # At least tech, fund, risk
         assert result.dimensions_total == 4
 
-    def test_confidence_with_full_data(self):
-        report = _load_sample_report("AAPL")
+    def test_confidence_with_full_data(self, sample_data_dir):
+        report = _load_sample_report(sample_data_dir, "AAPL")
         scorer = StockScorer()
         result = scorer.score(report)
         assert result.confidence_score >= 0.5
@@ -743,9 +736,9 @@ class TestStockScorer:
         assert result.confidence == "Low"
         assert result.dimensions_available == 0
 
-    def test_partial_data_still_scores(self):
+    def test_partial_data_still_scores(self, sample_data_dir):
         """Test that scorer works with only some dimensions available"""
-        report = _load_sample_report("AAPL")
+        report = _load_sample_report(sample_data_dir, "AAPL")
         # Remove some data
         report.pop("risk_analysis", None)
         report.pop("valuation_analysis", None)
@@ -756,13 +749,13 @@ class TestStockScorer:
         assert result.valuation is None
         assert result.technical is not None
 
-    def test_score_from_analyses(self):
+    def test_score_from_analyses(self, sample_data_dir):
         """Test scoring from individual analysis files"""
-        tech = _load_analysis_json("AAPL", "technical_analysis")
-        fund = _load_analysis_json("AAPL", "fundamental_analysis")
-        risk = _load_analysis_json("AAPL", "risk_analysis")
-        val = _load_analysis_json("AAPL", "valuation_analysis")
-        info = _load_sample_report("AAPL").get("info", {})
+        tech = _load_analysis_json(sample_data_dir, "AAPL", "technical_analysis")
+        fund = _load_analysis_json(sample_data_dir, "AAPL", "fundamental_analysis")
+        risk = _load_analysis_json(sample_data_dir, "AAPL", "risk_analysis")
+        val = _load_analysis_json(sample_data_dir, "AAPL", "valuation_analysis")
+        info = _load_sample_report(sample_data_dir, "AAPL").get("info", {})
 
         scorer = StockScorer()
         result = scorer.score_from_analyses(
@@ -776,8 +769,8 @@ class TestStockScorer:
         assert 0 <= result.composite_score <= 100
         assert result.ticker == "AAPL"
 
-    def test_different_configs_produce_different_scores(self):
-        report = _load_sample_report("AAPL")
+    def test_different_configs_produce_different_scores(self, sample_data_dir):
+        report = _load_sample_report(sample_data_dir, "AAPL")
 
         default_scorer = StockScorer()
         value_scorer = StockScorer(ScoringConfig.value_investor())
@@ -805,13 +798,13 @@ class TestStockScorer:
 class TestOutputFormatting:
     """Tests for scoring result output formats"""
 
-    def _get_result(self) -> "ScoringResult":
-        report = _load_sample_report("AAPL")
+    def _get_result(self, sample_data_dir) -> "ScoringResult":
+        report = _load_sample_report(sample_data_dir, "AAPL")
         scorer = StockScorer()
         return scorer.score(report)
 
-    def test_to_dict_structure(self):
-        result = self._get_result()
+    def test_to_dict_structure(self, sample_data_dir):
+        result = self._get_result(sample_data_dir)
         d = result.to_dict()
         assert "ticker" in d
         assert "composite_score" in d
@@ -822,15 +815,15 @@ class TestOutputFormatting:
         assert "concerns" in d
         assert "metadata" in d
 
-    def test_to_dict_is_json_serializable(self):
-        result = self._get_result()
+    def test_to_dict_is_json_serializable(self, sample_data_dir):
+        result = self._get_result(sample_data_dir)
         d = result.to_dict()
         # Should not raise
         json_str = json.dumps(d, default=str)
         assert len(json_str) > 0
 
-    def test_format_scorecard(self):
-        result = self._get_result()
+    def test_format_scorecard(self, sample_data_dir):
+        result = self._get_result(sample_data_dir)
         scorecard = result.format_scorecard()
         assert "STOCK SCORE: AAPL" in scorecard
         assert "Composite Score:" in scorecard
@@ -839,29 +832,29 @@ class TestOutputFormatting:
         assert "Technical" in scorecard
         assert "Fundamental" in scorecard
 
-    def test_format_for_toon(self):
-        result = self._get_result()
+    def test_format_for_toon(self, sample_data_dir):
+        result = self._get_result(sample_data_dir)
         toon = result.format_for_toon()
         assert "composite_score" in toon
         assert "signal" in toon
         assert "confidence" in toon
         assert "dimension_scores" in toon
 
-    def test_format_llm_context(self):
-        result = self._get_result()
+    def test_format_llm_context(self, sample_data_dir):
+        result = self._get_result(sample_data_dir)
         llm = result.format_llm_context()
         assert "QUANTITATIVE ASSESSMENT:" in llm
         assert "Overall Score:" in llm
         assert "Confidence:" in llm
 
-    def test_scorecard_includes_strengths(self):
-        result = self._get_result()
+    def test_scorecard_includes_strengths(self, sample_data_dir):
+        result = self._get_result(sample_data_dir)
         if result.strengths:
             scorecard = result.format_scorecard()
             assert "STRENGTHS" in scorecard
 
-    def test_scorecard_includes_concerns(self):
-        result = self._get_result()
+    def test_scorecard_includes_concerns(self, sample_data_dir):
+        result = self._get_result(sample_data_dir)
         if result.concerns:
             scorecard = result.format_scorecard()
             assert "CONCERNS" in scorecard
