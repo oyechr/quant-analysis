@@ -168,9 +168,8 @@ class FundamentalAnalyzer:
         self, current: Optional[float], past: Optional[float], years: int
     ) -> Optional[float]:
         """Calculate Compound Annual Growth Rate"""
-        if current is None or past is None or past == 0 or years == 0:
-            return None
-        if past < 0:
+        # No compound rate into or out of a loss (and pow() would go complex)
+        if current is None or past is None or past <= 0 or current <= 0 or years == 0:
             return None
         return calculate_cagr(current, past, years)
 

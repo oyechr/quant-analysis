@@ -149,9 +149,16 @@ def calculate_cagr(ending_value: float, beginning_value: float, num_periods: int
         num_periods: Number of periods (years)
 
     Returns:
-        CAGR as percentage, or 0.0 if calculation invalid
+        CAGR as percentage, or 0.0 if calculation invalid (including a non-positive
+        start or end: growth into or out of a loss has no compound rate)
     """
-    if ending_value is None or beginning_value is None or beginning_value <= 0 or num_periods <= 0:
+    if (
+        ending_value is None
+        or beginning_value is None
+        or beginning_value <= 0
+        or ending_value <= 0
+        or num_periods <= 0
+    ):
         return 0.0
     return float((pow(ending_value / beginning_value, 1 / num_periods) - 1) * 100)
 

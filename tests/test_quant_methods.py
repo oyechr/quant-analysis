@@ -409,3 +409,30 @@ class TestBeneish:
 
     def test_skipped_when_sales_more_than_tripled(self, default_config):
         assert self._analyzer(310.0, 1.0).calculate_beneish_m_score() is None
+
+
+class TestGrowthRates:
+    def test_cagr_needs_positive_start_and_end(self):
+        from src.utils.financial import calculate_cagr
+
+        assert calculate_cagr(121.0, 100.0, 2) == pytest.approx(10.0)
+        assert calculate_cagr(-5.0, 10.0, 2) == 0.0  # into a loss: no compound rate
+        assert calculate_cagr(5.0, -10.0, 2) == 0.0
+
+    def test_earnings_turning_into_a_loss_has_no_cagr(self, default_config):
+        from conftest import make_statements
+
+        from src.analysis.fundamental import FundamentalAnalyzer
+
+        statements = make_statements()
+        income = statements["income_stmt"].copy()
+        income.loc["Net Income", income.columns[0]] = -5e9
+        analyzer = FundamentalAnalyzer(
+            {}, {"income_stmt_annual": income, "cash_flow_annual": statements["cashflow"]}
+        )
+
+        growth = analyzer.calculate_growth_rates()
+
+        assert growth["earnings"]["3y_cagr"] is None
+        assert growth["earnings"]["1y"] < 0
+        assert growth["revenue"]["3y_cagr"] == pytest.approx(8.0)
