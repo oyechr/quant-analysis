@@ -16,6 +16,10 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 4 | Track: watchlist, score history, `quant changes` | Done (second-day `changes` deltas verified live, 2026-10-24) |
 | 5 | Trust: price-only backtest, calibrate signal thresholds | Done (live on sp100 and OBX, 2026-10-23; thresholds documented as heuristics) |
 | 6 | Cleanup (do alongside the others) | Done (2026-10-24) |
+| 6b | Correctness review of the decision code | In progress (2026-10-24) |
+| 7 | Construct: portfolio exposure and rebalance proposals | Planned (outline only) |
+| 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
+| - | Side items: decision journal, automation, quick wins | Planned (outline only) |
 
 ## Current state and next session (updated 2026-10-24)
 
@@ -23,7 +27,7 @@ Phases 0-6 are done and on `main`. All tests pass offline (578 passed, none skip
 
 On 2026-10-24 the second-day `quant changes` run was verified live, which closed Phase 4. That session also fixed `chat`: it now rebuilds a report from an earlier day, prints the report date, and reads the right DDM, dividend and EPS fields. The chat quirks were fixed too: MFI is scored like RSI (it used to jump from about 2 to 20 at MFI 80), the ADX labels match the technical signals, the earnings strength states the beat rate, and the context no longer shows Yahoo's S&P beta. Then Phase 6 cleanup was completed (see Phase 6 below).
 
-Next: the smaller follow-ups listed under Phases 3, 4 and 5, or a new phase.
+Next (agreed 2026-10-24): Phase 6b, a correctness review of the code that drives decisions, then Phases 7 and 8. The side items can be done alongside. Phases 7, 8 and the side items are outlines, to be planned in detail before they're built.
 
 **Portfolio input:** Nordnet's API is closed to retail customers (paid partner access only), and there is no API code in this repo. The supported input is the holdings export downloaded from Nordnet's web app, one file per account, combined with `quant import-portfolio`. Rerun the import whenever holdings change.
 
@@ -297,8 +301,34 @@ Price-only walk-forward test of the signals that can be computed point-in-time.
 - Typing: the user switched Pylance to `standard` (2026-09-28) and wants lint issues fixed in whatever file is being edited. `pandas-stubs`/`types-requests` are in the dev extras (install with `pip install -e .[dev]`), and mypy skips untyped libraries (yfinance, finta, toon, seaborn, matplotlib). Earlier note: the user ran Pylance in `strict` mode. The pandas/yfinance-heavy modules show many "partially unknown" warnings. Options: `pip install pandas-stubs types-requests`, and/or a `[tool.pyright]` section in pyproject that keeps strict for `src/vetting` (already clean under `mypy --strict`) and standard elsewhere. **Decided 2026-10-24: no pyright config;** mypy (blocking in CI) covers it.
 - **Done (2026-10-24):** the seven exploratory `examples/` scripts (one called a private method, the README listed a missing file) are replaced by `examples/python_api.py`: `analyze_ticker`, the analyzers, `vet_ticker` and `Screener`. `tests/test_examples.py` runs it on the fake market.
 
+## Phase 6b: Correctness review of the decision code
+
+Every live run so far has turned up a calculation bug the tests didn't catch (Altman X4, FCF yield never scored, DCF growth, MFI scoring, stale chat context). Review only the code that drives verdicts: the scoring dimensions, valuation (DCF/DDM/reverse DCF), the fundamental quality scores, the risk metrics, and the `review` actions. For each, check the formula against its standard definition, check units and currencies, and check edge cases (negative equity, banks and insurers, funds, missing data). Fix each finding with a test.
+
+## Phase 7: Construct (portfolio exposure and rebalancing), outline
+
+For restructuring the portfolio. `review` judges each holding alone and suggests risk-parity weights; this phase looks at the portfolio as a whole.
+
+- Exposure: by sector, country, currency and factor (value, quality, momentum, low volatility), concentration (top holdings, effective number of positions), portfolio beta and volatility, and groups of highly correlated holdings.
+- Rebalance proposal: from the holdings, `review` actions and candidates (screen output or watchlist), suggest concrete trades within user limits (maximum position, sector caps, cash to keep), with before/after risk and exposure.
+- Possibly a per-ticker target or cap in the portfolio file (a broad ETF deserves a larger weight than a single stock; see the Phase 3 follow-ups).
+
+## Phase 8: Evidence (point-in-time fundamentals), outline
+
+Phase 5 showed that the price-only part of the composite has no edge, and that fundamentals and valuation can't be tested honestly with Yahoo's restated statements.
+
+- Use SEC EDGAR's free XBRL company facts, which record when each figure was filed, to rebuild the fundamental and valuation inputs as they were known at each month-end (US listings only).
+- Extend the backtest to those dimensions; keep, reweight or drop measures based on the results. Oslo stays heuristic (no free point-in-time source).
+- Also from Phase 5: a total-return benchmark (`^SP500TR`), since `^GSPC` has no dividends.
+
+## Side items (alongside the phases), outline
+
+- **Decision journal:** record the thesis, entry and exit criteria per buy or sell; a check that flags theses that broke (using the score history); a yearly look-back at how picks did against the signal at the time.
+- **Automation:** run `quant changes` daily (Windows Task Scheduler) with a notification when something is worth a look.
+- **Quick wins:** the screen should name the tickers its filters dropped, with the reason (now only in the saved JSON).
+
 ## Starting a new session
 
 Paste something like:
 
-> Read docs/ROADMAP.md, starting with "Current state and next session", then pick up the listed follow-ups or propose the next phase. Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings or the watchlist.
+> Read docs/ROADMAP.md, starting with "Current state and next session", then continue with the next open phase in the status table. Follow its conventions: offline tests with the fake_market fixture and synthetic data; give me live commands to run, since your shell can't reach Yahoo; never commit real holdings or the watchlist.
