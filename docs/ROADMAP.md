@@ -20,10 +20,19 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 7 | Construct: portfolio exposure and rebalance proposals | Done (7a-7c live-checked 2026-10-24; review score history 2026-10-25); optional: rebalance --fill |
 | 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
 | S1 | Habit: daily `changes` run with a notification, decision journal | Built offline (2026-11-04); live check pending |
-| R | Best-practice review fixes (docs/REVIEW-2026-11.md, batches A-I) | A done (2026-11-05); B-E next, F-I later |
+| R | Best-practice review fixes (docs/REVIEW-2026-11.md, batches A-I) | A done (2026-11-05, live-checked); **next: B, then C**; D-E after, F-I later |
 | - | Side items: quick wins, faster backtest | Planned (outline only) |
 
-## Current state and next session (updated 2026-11-04)
+## Current state and next session (updated 2026-11-05)
+
+**Next session, in order:**
+
+1. **Review Batch B** (docs/REVIEW-2026-11.md): rebalance and review bookkeeping. Per-account shares reduced between sales, Check holdings frozen, unlabeled accounts warned, after-trade weights on the same basis as the limits, zero-variance series kept out of the covariance, `max_sector` from targets.toml. Do it before acting on a `rebalance` proposal.
+2. **Review Batch C**: scoring and vetting consistency, H rows first (see the batch's note). Includes weighting a dimension by its data coverage: live on 2026-11-05, EQNR.OL with no statements scored Fund 84 from 25% coverage and turned Buy.
+3. Then Batches D (price cache timezone) and E (report.md); F-I as time allows; then plan Phase 8.
+
+**2026-11-05:** S1 live-checked: the daily `changes` covers the 37 holdings, the journal works on a real entry. The first holdings run had been throttled and cached empty statements for every holding; fixed with the Batch A follow-ups (see REVIEW-2026-11.md, Batch A), and the bad history rows removed. Every holding now has a correct baseline from 2026-11-05. Still to do: register the scheduled task (README, "Daily check").
+
 
 **2026-11-04: direction.** Every phase through 7 is built and live-checked, and `main` is pushed. The gap is no longer features but evidence: the price-only signals showed no edge (Phase 5), fundamentals and valuation are untested, and the score history had only two days in it. So the order is: (1) S1, the habit: a daily scheduled `changes` over the watchlist and holdings, and a decision journal, so the history and a record of decisions build up from now on; (2) Phase 8, planned in detail with a smaller first scope (Piotroski, profitability, value and the red flags on EDGAR data). Its result decides whether the composite score keeps its weight, or the tool leans on risk control and red flags instead.
 
@@ -528,7 +537,7 @@ The user's choices (2026-11-04): `changes` covers the holdings too; a Windows to
 - **`src/tracking/journal.py`** and `quant journal add/ls/lookback`:
   - `portfolio/journal.toml` (gitignored with `/portfolio/`) has one `[[decision]]` per buy, add, trim or sell: thesis, exit_if, price, shares, stop, target, min_score, review_by, and a snapshot (preset, score, signal, currency, flags: every red flag title, since rows before 2026-11 have no high_flags; the first entries used a high_flags key, still read). A sell sets `closed` on the open buys and adds.
   - `journal add` scores the ticker now and records that history row (source "journal"). A backdated `--date` takes the history row within `SNAPSHOT_MAX_DAYS` (7). A buy or add needs a thesis; the watchlist's thesis, target and stop fill in the gaps.
-  - `check_thesis` rules: broken = below the stop, under min_score, or a Sell/Strong Sell signal or high red flag that wasn't there at the decision (after the first live entry, 2026-11-04: ORK.OL was already a 48 Sell, so it read as broken every day). `journal add` warns when a thesis is broken from the start. Check = target or review date reached, the score down `THESIS_SCORE_DROP` (10) since the decision, or no score for `STALE_DAYS` (7). `exit_if` is shown, not checked.
+  - `check_thesis` rules: broken = below the stop, under min_score, or a Sell/Strong Sell signal or high red flag that wasn't there at the decision (after the first live entry, 2026-11-04: the stock was already a Sell, so it read as broken every day). `journal add` warns when a thesis is broken from the start. Check = target or review date reached, the score down `THESIS_SCORE_DROP` (10) since the decision, or no score for `STALE_DAYS` (7). `exit_if` is shown, not checked.
   - `look_back`: the decision-date close to the close at `closed` or today, against `benchmark_for`; a good call is a buy that beat it, or a trim or sell that lagged it. `summarize_outcomes` groups by side and the signal at the time.
 - **Tests:** `tests/test_journal.py`. The old `changes` CLI tests now run in `tmp_path`: in the repo they had read the real portfolio and written 37 rows to the real `data/_history/scores.csv` (removed again; see the DEVELOPMENT.md convention).
 
