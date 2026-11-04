@@ -197,9 +197,10 @@ def track_changes(
     tickers = list(dict.fromkeys(t.upper() for t in tickers))
 
     # Latest row per ticker from an earlier day, read before today's rows go in
+    before_run = load_history(data_dir)
     previous: Dict[str, Row] = {}
-    for row in load_history(data_dir, preset=preset):
-        if row["date"] < today.isoformat():
+    for row in before_run:
+        if row["preset"] == preset and row["date"] < today.isoformat():
             previous[row["ticker"]] = row
 
     def analyze(ticker: str) -> Any:
@@ -238,7 +239,8 @@ def track_changes(
     record_scores(rows, data_dir)
     result.changes.sort(key=TickerChange.sort_key)
     if journal:
-        result.theses = check_journal(journal, load_history(data_dir), today)
+        # Against the rows before this run too, so a second run today doesn't repeat "new"
+        result.theses = check_journal(journal, load_history(data_dir), today, before_run)
     return result
 
 

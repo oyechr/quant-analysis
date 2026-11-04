@@ -26,7 +26,7 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 
 **2026-11-04: direction.** Every phase through 7 is built and live-checked, and `main` is pushed. The gap is no longer features but evidence: the price-only signals showed no edge (Phase 5), fundamentals and valuation are untested, and the score history had only two days in it. So the order is: (1) S1, the habit: a daily scheduled `changes` over the watchlist and holdings, and a decision journal, so the history and a record of decisions build up from now on; (2) Phase 8, planned in detail with a smaller first scope (Piotroski, profitability, value and the red flags on EDGAR data). Its result decides whether the composite score keeps its weight, or the tool leans on risk control and red flags instead.
 
-**S1 is built offline** (see "S1: Habit" below): 690 tests pass, ruff and mypy are clean. Next session: the user's live check (commands in S1), then plan Phase 8 in detail.
+**S1 is built offline** (see "S1: Habit" below): 698 tests pass (after a code review, see S1), ruff and mypy are clean. Next session: the user's live check (commands in S1), then plan Phase 8 in detail.
 
 **Earlier notes (2026-10-24):** Phases 0-6 are done and on `main`. All tests pass offline (578 passed, none skipped), and ruff and mypy (now blocking in CI) are clean. Claude's shell can't reach Yahoo (TLS interception), so live checks are for the user to run. It can run mypy and pip, though, and the backtest can be rerun offline from the cached 10-year prices.
 
@@ -525,11 +525,20 @@ The user's choices (2026-11-04): `changes` covers the holdings too; a Windows to
 - **`utils/notify.py`:** a Windows toast through Windows PowerShell's WinRT bindings (`-EncodedCommand`, with the text in environment variables), under PowerShell's own app ID. No new dependency. It never raises, and it's a no-op off Windows. A test toast from Claude's shell returned success; that it shows on screen is the user's to confirm.
 - **`scripts/daily.ps1`** runs `quant -q changes --save --notify` from the repo root and appends to `data/_changes/changes.log` (through `cmd /c`, so the log is UTF-8). The README's "Daily check" has the `Register-ScheduledTask` commands: weekdays at 07:30, `-StartWhenAvailable`, only while logged on (toasts need the session).
 - **`src/tracking/journal.py`** and `quant journal add/ls/lookback`:
-  - `portfolio/journal.toml` (gitignored with `/portfolio/`) has one `[[decision]]` per buy, add, trim or sell: thesis, exit_if, price, shares, stop, target, min_score, review_by, and a snapshot (preset, score, signal, currency, high_flags). A sell sets `closed` on the open buys and adds.
+  - `portfolio/journal.toml` (gitignored with `/portfolio/`) has one `[[decision]]` per buy, add, trim or sell: thesis, exit_if, price, shares, stop, target, min_score, review_by, and a snapshot (preset, score, signal, currency, flags: every red flag title, since rows before 2026-11 have no high_flags; the first entries used a high_flags key, still read). A sell sets `closed` on the open buys and adds.
   - `journal add` scores the ticker now and records that history row (source "journal"). A backdated `--date` takes the history row within `SNAPSHOT_MAX_DAYS` (7). A buy or add needs a thesis; the watchlist's thesis, target and stop fill in the gaps.
   - `check_thesis` rules: broken = below the stop, under min_score, or a Sell/Strong Sell signal or high red flag that wasn't there at the decision (after the first live entry, 2026-11-04: ORK.OL was already a 48 Sell, so it read as broken every day). `journal add` warns when a thesis is broken from the start. Check = target or review date reached, the score down `THESIS_SCORE_DROP` (10) since the decision, or no score for `STALE_DAYS` (7). `exit_if` is shown, not checked.
   - `look_back`: the decision-date close to the close at `closed` or today, against `benchmark_for`; a good call is a buy that beat it, or a trim or sell that lagged it. `summarize_outcomes` groups by side and the signal at the time.
 - **Tests:** `tests/test_journal.py`. The old `changes` CLI tests now run in `tmp_path`: in the repo they had read the real portfolio and written 37 rows to the real `data/_history/scores.csv` (removed again; see the DEVELOPMENT.md convention).
+
+**Code review (2026-11-04), all fixed with tests:**
+- `previous_status` judged the earlier row as of today, so a review date or a stale score never read as new; it now uses that row's date.
+- Two runs in one day both reported a thesis as newly broken; `track_changes` passes the history from before the run (`check_journal(..., previous=)`).
+- `journal add --config` stored theses under a preset the daily run never rescores; `journal add` now always uses the default preset.
+- The snapshot keeps every red flag title (`flags`), since old history rows have no `high_flags` and every existing high flag read as new.
+- `--stop inf` or `nan` wrote invalid TOML; non-finite numbers are refused before anything is written, and the journal is written atomically. A TOML datetime in a date field is read as its date.
+- `journal add` with a broken watchlist.toml gave a traceback; `changes TICKERS` failed on an unreadable portfolio file (it now warns and goes on).
+- Not changed: a rewrite drops comments and unknown keys (documented), and the small `_fmt` helper is duplicated in changes.py and journal.py.
 
 **Live check for the user:**
 

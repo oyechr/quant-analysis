@@ -191,7 +191,7 @@ def changes(
         decisions = load_journal(journal_file)
     except ValueError as e:
         raise click.ClickException(str(e)) from e
-    held = _held_tickers(portfolio_file)
+    held = _held_tickers(portfolio_file, strict=not tickers)
     open_tickers = [d.ticker for d in decisions if d.is_open]
     if tickers:
         tickers_list = list(dict.fromkeys(t.upper() for t in tickers))
@@ -253,8 +253,12 @@ def changes(
             click.echo("  ! Notification not shown (see the log; Windows only).", err=True)
 
 
-def _held_tickers(portfolio_file: Path) -> list[str]:
-    """Tickers in the portfolio file; none if it doesn't exist."""
+def _held_tickers(portfolio_file: Path, strict: bool) -> list[str]:
+    """
+    Tickers in the portfolio file; none if it doesn't exist. An unreadable
+    file stops the run when the holdings are what it checks (strict), and
+    only warns when they just mark the tickers given.
+    """
     from ..portfolio import load_portfolio
 
     if not portfolio_file.exists():
@@ -262,7 +266,10 @@ def _held_tickers(portfolio_file: Path) -> list[str]:
     try:
         holdings, _ = load_portfolio(portfolio_file)
     except (ValueError, OSError) as e:
-        raise click.ClickException(f"{portfolio_file}: {e}") from e
+        if strict:
+            raise click.ClickException(f"{portfolio_file}: {e}") from e
+        click.echo(f"  ! Holdings not read ({portfolio_file}: {e})", err=True)
+        return []
     return [h.ticker for h in holdings]
 
 
@@ -281,7 +288,8 @@ def journal(ctx, journal_file):
 
     Each buy or add records a thesis and what would prove it wrong: a stop,
     a minimum score, a review date, or a free-text --exit-if. The score,
-    signal and high red flags at the time are saved with it. `quant changes`
+    signal and red flags at the time are saved with it (default preset, the
+    one the daily `quant changes` run uses). `quant changes`
     then checks every open thesis against the latest scores, and
     `journal lookback` shows how each decision did against its benchmark.
 
@@ -326,7 +334,6 @@ def journal(ctx, journal_file):
     default=None,
     help="Decision date (default today). An earlier date takes its snapshot from the history.",
 )
-@config_option()
 @click.pass_context
 def journal_add(
     ctx,
@@ -341,7 +348,6 @@ def journal_add(
     min_score,
     review_by,
     day,
-    config_name,
 ):
     """Record a decision on TICKER, with a snapshot of its score."""
     from datetime import date
@@ -362,7 +368,10 @@ def journal_add(
     today = date.today()
     decided = day.date() if day else today
     if action in OPENING:
-        watched = load_watchlist(Path(DEFAULT_WATCHLIST)).get(ticker)
+        try:
+            watched = load_watchlist(Path(DEFAULT_WATCHLIST)).get(ticker)
+        except ValueError as e:
+            raise click.ClickException(str(e)) from e
         if watched is not None:
             thesis = thesis or watched.thesis
             target = target if target is not None else watched.target
@@ -385,8 +394,9 @@ def journal_add(
         min_score=min_score,
         review_by=review_by.date() if review_by else None,
     )
-    preset = get_scoring_config(config_name).name
-    row = _score_now(ctx, ticker, config_name) if decided == today else None
+    # The default preset only: the daily `changes` run keeps those rows fresh
+    preset = get_scoring_config("default").name
+    row = _score_now(ctx, ticker) if decided == today else None
     if row is None:
         row = snapshot_row(load_history(ctx.obj["output_dir"], ticker, preset), decided)
     decision.take_snapshot(row)
@@ -416,7 +426,7 @@ def journal_add(
             )
 
 
-def _score_now(ctx, ticker: str, config_name: str):
+def _score_now(ctx, ticker: str):
     """Score the ticker and record it in the history; None (with a warning) if that fails."""
     from ..pipeline import analyze_ticker
     from ..tracking import history_row
@@ -427,7 +437,7 @@ def _score_now(ctx, ticker: str, config_name: str):
         period=ctx.obj["period"],
         use_cache=ctx.obj["use_cache"],
         include_context=False,
-        scoring_config=get_scoring_config(config_name),
+        scoring_config=get_scoring_config("default"),
     )
     try:
         bundle = analyze_ticker(ticker, DataFetcher(cache_dir=output_dir), options)

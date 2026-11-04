@@ -73,14 +73,38 @@ class TestJournalFile:
             min_score=50.0,
             review_by=date(2027, 4, 1),
         )
-        decision.take_snapshot(_row(DAY1, flags=[_flag("Altman Z-Score in distress zone", "high")]))
+        decision.take_snapshot(
+            _row(
+                DAY1, flags=[_flag("Altman Z-Score in distress zone", "high"), _flag("Stale data")]
+            )
+        )
         save_journal([decision], path)
 
         (loaded,) = load_journal(path)
 
         assert loaded == decision
-        assert loaded.high_flags == ["Altman Z-Score in distress zone"]
+        assert loaded.flags == ["Altman Z-Score in distress zone", "Stale data"]
         assert loaded.price == 100.0  # given price kept over the snapshot's
+
+    def test_unusable_number_leaves_the_file_alone(self, tmp_path):
+        path = tmp_path / "journal.toml"
+        add_decision(path, _buy())
+        with pytest.raises(ValueError, match="Not a usable number"):
+            add_decision(path, _buy(stop=float("inf")))
+        assert len(load_journal(path)) == 1
+
+    def test_first_entries_high_flags_key_and_datetimes(self, tmp_path):
+        path = tmp_path / "journal.toml"
+        path.write_text(
+            '[[decision]]\ndate = 2026-10-20T10:30:00\nticker = "AAPL"\naction = "buy"\n'
+            'high_flags = ["Share count dilution"]\nreview_by = 2027-01-01T00:00:00\n',
+            encoding="utf-8",
+        )
+        (d,) = load_journal(path)
+        assert (d.date, d.review_by) == (DAY1, date(2027, 1, 1))
+        assert d.flags == ["Share count dilution"]
+        add_decision(path, Decision("AAPL", DAY2, "sell"))  # compares the dates
+        assert load_journal(path)[0].closed == DAY2
 
     def test_hand_written_entry(self, tmp_path):
         path = tmp_path / "journal.toml"
@@ -207,6 +231,29 @@ class TestCheckThesis:
         # No earlier row since the decision: a broken thesis counts as new
         (first,) = check_journal([_buy(min_score=50, date=DAY2)], history, DAY2)
         assert first.previous_status is None and first.is_new
+
+    def test_previous_status_as_of_that_rows_date(self):
+        # The review date falls due today: yesterday's row was still OK then
+        decisions = [_buy(review_by=DAY2)]
+        history = [_row(DAY1), _row(DAY2)]
+        (check,) = check_journal(decisions, history, DAY2)
+        assert (check.status, check.previous_status, check.is_new) == ("Check", "OK", True)
+
+    def test_second_run_today_compares_with_the_first(self):
+        decisions = [_buy(min_score=50)]
+        first_run = [_row(DAY1, score=60), _row(DAY2, score=45)]
+        second_run = [_row(DAY1, score=60), _row(DAY2, score=44)]
+        (check,) = check_journal(decisions, second_run, DAY2, previous=first_run)
+        assert (check.status, check.previous_status, check.is_new) == ("Broken", "Broken", False)
+
+    def test_flag_known_at_the_decision_from_an_old_row(self):
+        # Rows before 2026-11 have no high_flags, but their flags list the titles
+        old = _row(DAY1, flags=[_flag("Share count dilution", "high")])
+        old["high_flags"] = None
+        decision = _buy()
+        decision.take_snapshot(old)
+        now = _row(flags=[_flag("Share count dilution", "high")])
+        assert check_thesis(decision, now, DAY2) == ([], [])
 
     def test_return_needs_same_currency(self):
         decision = _buy(price=100.0)
@@ -386,6 +433,28 @@ class TestDailyChanges:
         assert title.startswith("quant changes ") and line == "1 thesis broken"
         assert digest.suffix == ".md" and digest.exists()
 
+        # A second run the same day: still broken, but not news
+        again = CliRunner().invoke(
+            cli,
+            ["--output-dir", str(tmp_path), "changes", "AAPL", "--journal", str(journal)]
+            + ["--notify"],
+        )
+        assert again.exit_code == 0, again.output
+        assert len(sent) == 1 and "Nothing worth a notification" in again.output
+
+    def test_tickers_given_survive_a_broken_portfolio(self, fake_market, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        portfolio = tmp_path / "portfolio.csv"
+        portfolio.write_text("name\nhalf-written\n", encoding="utf-8")
+        base = ["--output-dir", str(tmp_path), "changes", "--portfolio", str(portfolio)]
+
+        out = CliRunner().invoke(cli, [*base, "AAPL"])
+        assert out.exit_code == 0, out.output
+        assert "Holdings not read" in out.output
+
+        out = CliRunner().invoke(cli, base)  # the holdings are the point: stop
+        assert out.exit_code == 1 and "missing column" in out.output
+
 
 # ==================== Journal CLI ====================
 
@@ -457,6 +526,18 @@ class TestJournalCli:
     def test_empty_journal(self, tmp_path):
         assert "is empty" in self._invoke(tmp_path, "ls").output
         assert "No decisions" in self._invoke(tmp_path, "lookback").output
+
+    def test_broken_watchlist_is_a_clean_error(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "watchlist.toml").write_text("not [valid", encoding="utf-8")
+        out = self._invoke(tmp_path, "add", "AAPL", "--thesis", "x")
+        assert out.exit_code == 1 and "Can't read watchlist.toml" in out.output
+
+    def test_bad_number_is_a_clean_error(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        out = self._invoke(tmp_path, "add", "AAPL", "--thesis", "x", "--stop", "inf")
+        assert out.exit_code == 1 and "Not a usable number" in out.output
+        assert not (tmp_path / "j.toml").exists()
 
 
 # ==================== Toast ====================

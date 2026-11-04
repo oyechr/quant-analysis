@@ -22,16 +22,18 @@ benchmark.
     score = 62.0
     signal = "Hold"
     currency = "NOK"
-    high_flags = []
+    flags = ["Weak interest coverage"]
 
 Prices are in the listing currency. preset, score, signal, currency and
-high_flags are a snapshot of the score history at the decision. A sell sets
-`closed` on the ticker's open buys and adds. The file is meant to be
-editable by hand; `quant journal add` rewrites it in the same layout.
+flags (every red flag's title) are a snapshot of the score history at the
+decision. A sell sets `closed` on the ticker's open buys and adds. The file
+is meant to be editable by hand; `quant journal add` rewrites it in the same
+layout, without comments or keys it doesn't know.
 """
 
 import datetime as dt
-import json
+import math
+import os
 import tomllib
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -44,6 +46,7 @@ import pandas as pd
 from ..utils.financial import trading_dates
 from ..vetting.render import Section, Table, sections_to_text
 from .history import Row, flag_titles
+from .watchlist import _toml_string
 
 DEFAULT_JOURNAL = "portfolio/journal.toml"
 ACTIONS = ("buy", "add", "trim", "sell")
@@ -80,7 +83,8 @@ class Decision:
     score: Optional[float] = None
     signal: Optional[str] = None
     currency: Optional[str] = None
-    high_flags: List[str] = field(default_factory=list)
+    # Every red flag's title: history rows before 2026-11 don't say which were high
+    flags: List[str] = field(default_factory=list)
     closed: Optional[dt.date] = None
 
     @property
@@ -88,14 +92,14 @@ class Decision:
         return self.action in OPENING and self.closed is None
 
     def take_snapshot(self, row: Optional[Row]) -> None:
-        """Copy the score, signal and high flags from a history row (and the price, if unset)."""
+        """Copy the score, signal and red flags from a history row (and the price, if unset)."""
         if not row:
             return
         self.preset = row.get("preset")
         self.score = row.get("score")
         self.signal = row.get("signal")
         self.currency = row.get("currency")
-        self.high_flags = flag_titles(row, "high_flags")
+        self.flags = flag_titles(row)
         if self.price is None:
             self.price = row.get("price")
 
@@ -107,7 +111,7 @@ class Decision:
             **{name: getattr(self, name) for name in _OPTIONAL_FIELDS},
             "review_by": self.review_by.isoformat() if self.review_by else None,
             **{name: getattr(self, name) for name in _SNAPSHOT_FIELDS},
-            "high_flags": self.high_flags,
+            "flags": self.flags,
             "closed": self.closed.isoformat() if self.closed else None,
         }
 
@@ -129,9 +133,9 @@ def load_journal(path: Path) -> List[Decision]:
         if not isinstance(entry, dict):
             raise ValueError(f"{path}: decision {i} should be a [[decision]] table")
         ticker = str(entry.get("ticker") or "").strip().upper()
-        day = entry.get("date")
+        day = _date(entry.get("date"))
         action = str(entry.get("action") or "").lower()
-        if not ticker or not isinstance(day, date) or action not in ACTIONS:
+        if not ticker or day is None or action not in ACTIONS:
             raise ValueError(
                 f"{path}: decision {i} needs a ticker, a date (2026-11-04) and an action "
                 f"({', '.join(ACTIONS)})"
@@ -153,7 +157,8 @@ def load_journal(path: Path) -> List[Decision]:
                 score=_number(entry.get("score")),
                 signal=_text(entry.get("signal")),
                 currency=_text(entry.get("currency")),
-                high_flags=[str(t) for t in entry.get("high_flags") or []],
+                # high_flags: the key in the first entries (2026-11-04)
+                flags=[str(t) for t in entry.get("flags") or entry.get("high_flags") or []],
                 closed=_date(entry.get("closed")),
             )
         )
@@ -173,13 +178,15 @@ def save_journal(decisions: Sequence[Decision], path: Path) -> None:
         for name in _SNAPSHOT_FIELDS:
             if (value := getattr(d, name)) is not None:
                 lines.append(f"{name} = {_toml(value)}")
-        if d.score is not None or d.high_flags:
-            lines.append(f"high_flags = {_toml(d.high_flags)}")
+        if d.score is not None or d.flags:
+            lines.append(f"flags = {_toml(d.flags)}")
         if d.closed:
             lines.append(f"closed = {d.closed.isoformat()}")
         lines.append("")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines), encoding="utf-8")
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text("\n".join(lines), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def add_decision(path: Path, decision: Decision) -> List[Decision]:
@@ -274,7 +281,7 @@ def check_thesis(
     broken += [
         f"new high red flag: {t}"
         for t in flag_titles(current, "high_flags")
-        if t not in decision.high_flags
+        if t not in decision.flags
     ]
 
     if price is not None and decision.target is not None and price >= decision.target:
@@ -292,22 +299,23 @@ def check_thesis(
 
 
 def check_journal(
-    decisions: Sequence[Decision], history: Sequence[Row], today: Optional[date] = None
+    decisions: Sequence[Decision],
+    history: Sequence[Row],
+    today: Optional[date] = None,
+    previous: Optional[Sequence[Row]] = None,
 ) -> List[ThesisCheck]:
     """
-    Check every open buy and add against its ticker's latest history row,
-    and against the latest row before today for `previous_status`; broken
-    first.
+    Check every open buy and add against its ticker's latest history row;
+    broken first. `previous_status` is the same check on the latest row in
+    `previous` (the history before this run; default: the rows before
+    today), as of that row's date.
     """
     today = today or date.today()
-    latest: Dict[Tuple[str, str], Row] = {}
-    before: Dict[Tuple[str, str], Row] = {}
-    for row in history:  # oldest first, so the last one wins
-        key = (row["ticker"], row["preset"])
-        if row["date"] < today.isoformat():
-            before[key] = row
-        if row["date"] <= today.isoformat():
-            latest[key] = row
+    latest = _latest_rows(history, today, include_today=True)
+    if previous is None:
+        before = _latest_rows(history, today, include_today=False)
+    else:
+        before = _latest_rows(previous, today, include_today=True)
 
     checks: List[ThesisCheck] = []
     for d in decisions:
@@ -318,10 +326,22 @@ def check_journal(
         broken, warnings = check_thesis(d, current, today)
         check = ThesisCheck(d, current, broken, warnings)
         if (earlier := before.get(key)) is not None and earlier["date"] >= d.date.isoformat():
-            was_broken, was_warned = check_thesis(d, earlier, today)
+            as_of = date.fromisoformat(earlier["date"])
+            was_broken, was_warned = check_thesis(d, earlier, as_of)
             check.previous_status = BROKEN if was_broken else CHECK if was_warned else OK
         checks.append(check)
     return sorted(checks, key=lambda c: (_RANK[c.status], c.decision.date))
+
+
+def _latest_rows(
+    rows: Sequence[Row], today: date, include_today: bool
+) -> Dict[Tuple[str, str], Row]:
+    """The latest row per (ticker, preset) up to today, or up to yesterday."""
+    latest: Dict[Tuple[str, str], Row] = {}
+    for row in rows:  # oldest first, so the last one wins
+        if row["date"] < today.isoformat() or (include_today and row["date"] == today.isoformat()):
+            latest[(row["ticker"], row["preset"])] = row
+    return latest
 
 
 # ==================== Look-back ====================
@@ -562,8 +582,14 @@ def _return_pct(decision: Decision, current: Optional[Row]) -> Optional[float]:
 
 
 def _toml(value: Any) -> str:
-    # JSON strings, numbers and string arrays are valid TOML values
-    return json.dumps(value, ensure_ascii=False)
+    """A string, number or list of strings as a TOML value."""
+    if isinstance(value, str):
+        return _toml_string(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_string(str(v)) for v in value) + "]"
+    if not math.isfinite(value):
+        raise ValueError(f"Not a usable number: {value}")
+    return repr(float(value))
 
 
 def _text(value: Any) -> Optional[str]:
@@ -573,10 +599,13 @@ def _text(value: Any) -> Optional[str]:
 def _number(value: Any) -> Optional[float]:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value)
+    return float(value) if math.isfinite(value) else None
 
 
 def _date(value: Any) -> Optional[date]:
+    # A TOML datetime is a date subclass that doesn't compare with plain dates
+    if isinstance(value, dt.datetime):
+        return value.date()
     return value if isinstance(value, date) else None
 
 

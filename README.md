@@ -338,7 +338,7 @@ quant journal lookback --since 2026-01-01
 ```
 
 - **Actions:** `buy` and `add` need a thesis. If the ticker is on the watchlist, its thesis, target and stop are used when none are given. `trim` and `sell` take the reason as `--thesis`, and a sell closes the ticker's open buys and adds.
-- **Snapshot:** `add` scores the ticker and saves the score, signal, high red flags and last close (or your `--price`) with the decision. With `--date` for an earlier decision, the snapshot comes from the score history, if there's a row within a week.
+- **Snapshot:** `add` scores the ticker on the default preset (the one the daily run keeps fresh) and saves the score, signal, red flags and last close, or your `--price`, with the decision. With `--date` for an earlier decision, the snapshot comes from the score history, if there's a row within a week.
 - **Checks** (in `journal ls` and every `changes` run), against the latest history row:
   - **Broken:** below the stop, under `--min-score`, or a Sell signal or high red flag that wasn't there at the decision. `add` warns when a thesis is broken from the start, for example a minimum above today's score.
   - **Check:** the target or `--review-by` date reached, the score down 10+ points since the decision, or no score in a week.
@@ -525,7 +525,7 @@ preset = "default"      # the snapshot from here on
 score = 62.0
 signal = "Hold"
 currency = "NOK"
-high_flags = []
+flags = []           # every red flag title at the decision
 ```
 
 **`data/` layout:** `data/TICKER/cache/` (API responses) and `data/TICKER/reports/` (from `report` and `vet --save`). Shared folders: `_history/scores.csv`, `_changes/` (daily digests and the task log), `_screens/`, `_backtests/`, `_discovery/` (13F filings and results), `_universes/`, and `_peer_groups/`. Delete any of them to start fresh.
