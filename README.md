@@ -29,7 +29,7 @@ Extras: `llm` (anthropic, openai; needed for `quant chat`), `viz` (matplotlib, s
 quant screen sp100 --top 10          # the best-scoring names in an index
 quant vet EQNR.OL                    # one-screen verdict on a ticker
 quant watchlist add AAPL --thesis "Services growth"
-quant changes                        # what moved on the watchlist since last time
+quant changes                        # what moved on the watchlist and holdings since last time
 quant review                         # your holdings: Exit / Review / Trim / Hold / Add
 ```
 
@@ -46,6 +46,7 @@ quant review                         # your holdings: Exit / Review / Trim / Hol
 | What to do with the stocks you own | `quant review` |
 | Turn the review into trades | `quant rebalance --cash N --candidates watchlist` |
 | Follow names, and see what moved | `quant watchlist add T`, `quant changes` |
+| Record why you bought, and check it later | `quant journal add T --thesis "..."`, `quant journal ls` |
 | How much to trust the signals | `quant backtest sp100` |
 
 **Finding and vetting new ideas:**
@@ -66,7 +67,13 @@ quant review --save
 quant rebalance --cash 20000 --candidates watchlist
 ```
 
-**Following up**, daily or weekly: `quant changes`.
+**Following up:**
+
+```bash
+quant journal add NVDA --thesis "AI capex cycle" --exit-if "Hyperscaler capex cut" --stop 150 --min-score 50
+quant changes                                    # daily; or let Task Scheduler run it (see Daily check)
+quant journal lookback                           # once a year: how the decisions did
+```
 
 ## Commands
 
@@ -281,20 +288,62 @@ The list lives in `watchlist.toml` (`--file` for another file). Target and stop 
 
 #### `quant changes`
 
-Rescores the watchlist (or the tickers given) and compares each one with its last run from an earlier day, on the same preset. Tickers with something worth a look come first:
+Rescores the watchlist, your holdings (`portfolio/portfolio.csv`, marked "held") and the tickers with an open journal thesis, or only the tickers given. Each one is compared with its last run from an earlier day, on the same preset. Tickers with something worth a look come first:
 
 - a signal change, or a score move of 3+ points (with the dimensions that moved 5+);
 - red flags that appeared or cleared;
 - a price within 5% of, or past, the target or stop;
 - earnings in the next 14 days.
 
+Open journal theses that broke or need a recheck are listed under THESES TO RECHECK (see `quant journal`).
+
 ```bash
 quant changes
 quant changes EQNR.OL AAPL --config value
+quant -q changes --save --notify        # what the daily task runs
 ```
 
-- **Score history:** every scoring command (`report`, `score`, `vet`, `screen`, `changes`, `review` and `rebalance`) adds a row per ticker to `data/_history/scores.csv`. A later run the same day replaces the earlier one.
+- **Score history:** every scoring command (`report`, `score`, `vet`, `screen`, `changes`, `review`, `rebalance` and `journal add`) adds a row per ticker to `data/_history/scores.csv`. A later run the same day replaces the earlier one.
 - **Comparable scores:** `vet` stores its score before the peer adjustment, so rows from every command compare like with like.
+- **`--save`** writes `data/_changes/changes_DATE.md` and `.json`. **`--notify`** shows a Windows notification when something is worth a look, a thesis newly broke or needs a recheck, or nothing could be scored. A thesis that was already broken on the previous run is listed in the digest (without "(new)") but doesn't notify again. Clicking it opens the saved digest.
+
+#### Daily check
+
+The history is only as good as the days it covers, so let Windows run `changes` every weekday morning. By then the previous day's closes are final in both Oslo and New York. `scripts/daily.ps1` runs `quant -q changes --save --notify` and appends the output to `data/_changes/changes.log`. Register it once, from the repo folder, in PowerShell:
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -WorkingDirectory $PWD `
+  -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PWD\scripts\daily.ps1`""
+$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 07:30
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+Register-ScheduledTask -TaskName "quant changes" -Action $action -Trigger $trigger -Settings $settings
+```
+
+- **Missed runs:** `-StartWhenAvailable` runs a missed morning at the next login.
+- **Logged on only:** the task runs only while you're logged on, because notifications need your session. A PowerShell window may flash briefly as it starts.
+- **Try it now:** `Start-ScheduledTask "quant changes"`, then look at the end of `data\_changes\changes.log`.
+- **Remove it:** `Unregister-ScheduledTask "quant changes"`.
+
+#### `quant journal`
+
+A record of why you bought or sold, and what would prove you wrong, so that later checks can test the thesis instead of your memory.
+
+```bash
+quant journal add EQNR.OL --thesis "Cheap vs peers if oil holds" --exit-if "Capex guidance up again" \
+  --stop 380 --min-score 50 --review-by 2027-05-01 --price 431.5
+quant journal add EQNR.OL --action trim --thesis "Over the position limit"
+quant journal add EQNR.OL --action sell --thesis "Oil below 60"    # closes the open buys
+quant journal ls                       # open theses: entry vs now, score then vs now, status
+quant journal lookback --since 2026-01-01
+```
+
+- **Actions:** `buy` and `add` need a thesis. If the ticker is on the watchlist, its thesis, target and stop are used when none are given. `trim` and `sell` take the reason as `--thesis`, and a sell closes the ticker's open buys and adds.
+- **Snapshot:** `add` scores the ticker and saves the score, signal, high red flags and last close (or your `--price`) with the decision. With `--date` for an earlier decision, the snapshot comes from the score history, if there's a row within a week.
+- **Checks** (in `journal ls` and every `changes` run), against the latest history row:
+  - **Broken:** below the stop, under `--min-score`, or a Sell signal or high red flag that wasn't there at the decision. `add` warns when a thesis is broken from the start, for example a minimum above today's score.
+  - **Check:** the target or `--review-by` date reached, the score down 10+ points since the decision, or no score in a week.
+  - `--exit-if` isn't checked automatically. It's shown next to the flagged theses, so you can judge it yourself.
+- **Look-back:** each decision from the close on its date to the close when it was sold, or today, against its home benchmark. A buy or add was a good call if it beat the benchmark, and a trim or sell if the stock lagged it afterwards. The results are grouped by the signal at the time, which shows over the years whether following the signal helped. Dividends, costs and currency moves aren't included.
 
 #### `quant watch`
 
@@ -406,6 +455,7 @@ Many companies report in one currency and trade in another; most Oslo energy nam
 | `watchlist.toml` | The watchlist (`quant watchlist`) | No |
 | `portfolio/portfolio.csv`, `tickers.csv` | Your holdings and the name-to-ticker map (`quant import-portfolio`) | No |
 | `portfolio/targets.toml` | Limits and per-ticker targets for `review` and `rebalance` (optional) | No |
+| `portfolio/journal.toml` | Your decisions and theses (`quant journal`) | No |
 | `portfolio/review.*`, `rebalance.*` | Saved with `--save` | No |
 | `data/` | The cache, reports, score history, screens and backtests | No |
 
@@ -458,7 +508,27 @@ target = 450.0
 stop = 380.0
 ```
 
-**`data/` layout:** `data/TICKER/cache/` (API responses) and `data/TICKER/reports/` (from `report` and `vet --save`). Shared folders: `_history/scores.csv`, `_screens/`, `_backtests/`, `_discovery/` (13F filings and results), `_universes/`, and `_peer_groups/`. Delete any of them to start fresh.
+**`portfolio/journal.toml`** (written by `quant journal add`; fix mistakes by hand):
+
+```toml
+[[decision]]
+date = 2026-11-04
+ticker = "EQNR.OL"
+action = "buy"
+thesis = "Cheap vs peers if oil holds"
+exit_if = "Capex guidance up again"
+price = 431.5
+stop = 380.0
+min_score = 50.0
+review_by = 2027-05-01
+preset = "default"      # the snapshot from here on
+score = 62.0
+signal = "Hold"
+currency = "NOK"
+high_flags = []
+```
+
+**`data/` layout:** `data/TICKER/cache/` (API responses) and `data/TICKER/reports/` (from `report` and `vet --save`). Shared folders: `_history/scores.csv`, `_changes/` (daily digests and the task log), `_screens/`, `_backtests/`, `_discovery/` (13F filings and results), `_universes/`, and `_peer_groups/`. Delete any of them to start fresh.
 
 Report files come as JSON, Markdown and [TOON](https://github.com/toon-format/spec). TOON is a compact format for LLM input, and leaves out the news section.
 

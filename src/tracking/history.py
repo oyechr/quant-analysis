@@ -3,7 +3,9 @@ Score History
 
 Every scoring run (`report`, `score`, `vet`, `screen` stage 2, `changes`)
 appends one row per ticker to `<data>/_history/scores.csv`, keeping one row
-per ticker, preset and day (the latest run that day wins).
+per ticker, preset and day (the latest run that day wins). `flags` lists every
+red flag's title, `high_flags` the high-severity ones (rows from before
+2026-11 have none recorded).
 
 The score recorded is the composite with the standard valuation cutoffs.
 `vet` also rescales P/E against peers, but that score isn't stored, so rows
@@ -36,6 +38,7 @@ HISTORY_COLUMNS = [
     "currency",
     "red_flags",
     "flags",
+    "high_flags",
 ]
 DIMENSIONS = ("technical", "fundamental", "risk", "valuation")
 _NUMERIC = {"score", "price", *DIMENSIONS}
@@ -68,6 +71,7 @@ def history_row(
         red_flags = find_red_flags(report)
     # One rule can fire several times (e.g. one "Stale data" flag per warning)
     titles = list(dict.fromkeys(f.title for f in red_flags))
+    high = list(dict.fromkeys(f.title for f in red_flags if f.severity == "high"))
 
     def _dim(name: str) -> Optional[float]:
         dim = getattr(scoring, name)
@@ -86,6 +90,7 @@ def history_row(
         "currency": (report.get("info") or {}).get("currency"),
         "red_flags": len(red_flags),
         "flags": _FLAG_SEPARATOR.join(titles),
+        "high_flags": _FLAG_SEPARATOR.join(high) or None,
     }
 
 
@@ -128,10 +133,11 @@ def load_history(
     ]
 
 
-def flag_titles(row: Optional[Row]) -> List[str]:
-    if not row or not row.get("flags"):
+def flag_titles(row: Optional[Row], column: str = "flags") -> List[str]:
+    """Red flag titles in a row: all of them, or the high ones with column="high_flags"."""
+    if not row or not row.get(column):
         return []
-    return [t for t in str(row["flags"]).split(_FLAG_SEPARATOR) if t]
+    return [t for t in str(row[column]).split(_FLAG_SEPARATOR) if t]
 
 
 def _key(row: Row) -> tuple[str, str, str]:

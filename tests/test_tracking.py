@@ -312,6 +312,11 @@ class TestTrackChanges:
 
 
 class TestCli:
+    @pytest.fixture(autouse=True)
+    def _in_tmp_path(self, tmp_path, monkeypatch):
+        # `changes` reads portfolio/ and writes data/ relative to the working directory
+        monkeypatch.chdir(tmp_path)
+
     def test_watchlist_add_ls_rm(self, tmp_path):
         path = str(tmp_path / "w.toml")
         runner = CliRunner()

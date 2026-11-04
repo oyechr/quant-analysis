@@ -2,7 +2,7 @@
 CLI Interface for Quantitative Analysis Tool
 
 Provides subcommands: report, score, screen, vet, compare, chat, discover, watch,
-import-portfolio, review, watchlist, changes, backtest
+import-portfolio, review, rebalance, watchlist, changes, journal, backtest
 Install with: pip install -e .
 Usage: quant report AAPL
 
@@ -57,6 +57,7 @@ COMMANDS = (
     portfolio.rebalance,
     track.watchlist,
     track.changes,
+    track.journal,
     backtest.backtest,
 )
 for _command in COMMANDS:

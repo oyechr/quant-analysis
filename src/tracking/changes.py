@@ -1,15 +1,16 @@
 """
 What Changed
 
-`quant changes`: rescore the watchlist (or given tickers), record the run in
-the score history, and compare each ticker with its latest row from an
-earlier day: score and signal, red flags that appeared or cleared, the price
-move, price against the watchlist target/stop, and earnings coming up.
+`quant changes`: rescore the watchlist and holdings (or given tickers),
+record the run in the score history, and compare each ticker with its latest
+row from an earlier day: score and signal, red flags that appeared or
+cleared, the price move, price against the watchlist target/stop, and
+earnings coming up. Open journal theses are checked against the new rows.
 """
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Collection, Dict, List, Optional, Sequence
 
 import pandas as pd
 
@@ -18,9 +19,10 @@ from ..pipeline import AnalysisOptions, analyze_ticker
 from ..scoring import ScoringConfig
 from ..utils.concurrency import DEFAULT_WORKERS, run_concurrently
 from ..vetting.red_flags import find_red_flags
-from ..vetting.render import Section, Table, sections_to_text
+from ..vetting.render import Section, Table, sections_to_markdown, sections_to_text
 from ..vetting.vet import EARNINGS_SOON_DAYS, next_earnings_date
 from .history import DIMENSIONS, Row, flag_titles, history_row, load_history, record_scores
+from .journal import BROKEN, OK, Decision, ThesisCheck, check_journal, thesis_sections
 from .watchlist import WatchItem
 
 SCORE_MOVE = 3.0  # composite points worth mentioning
@@ -36,6 +38,7 @@ class TickerChange:
     current: Optional[Row] = None
     previous: Optional[Row] = None
     watch: Optional[WatchItem] = None
+    held: bool = False
     next_earnings: Optional[str] = None
     error: Optional[str] = None
 
@@ -136,6 +139,7 @@ class TickerChange:
         return {
             "ticker": self.ticker,
             "name": self.name,
+            "held": self.held,
             "current": self.current,
             "previous": self.previous,
             "score_delta": self.score_delta,
@@ -157,12 +161,14 @@ class ChangesResult:
     preset: str
     today: date
     changes: List[TickerChange] = field(default_factory=list)
+    theses: List[ThesisCheck] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "preset": self.preset,
             "date": self.today.isoformat(),
             "changes": [c.to_dict() for c in self.changes],
+            "theses": [t.to_dict() for t in self.theses],
         }
 
 
@@ -175,8 +181,14 @@ def track_changes(
     workers: int = DEFAULT_WORKERS,
     today: Optional[date] = None,
     progress: Optional[Callable[[str, Optional[Exception]], None]] = None,
+    held: Collection[str] = (),
+    journal: Sequence[Decision] = (),
 ) -> ChangesResult:
-    """Rescore each ticker, record it, and compare with its last earlier run."""
+    """
+    Rescore each ticker, record it, and compare with its last earlier run.
+    `held` marks the tickers you own; the open theses in `journal` are
+    checked against the history once today's rows are in.
+    """
     fetcher = fetcher or DataFetcher(cache_dir=data_dir)
     options = options or AnalysisOptions(include_context=False)
     preset = (options.scoring_config or ScoringConfig()).name
@@ -198,7 +210,11 @@ def track_changes(
     rows: List[Row] = []
     for ticker, outcome, error in run_concurrently(analyze, tickers, workers=workers):
         change = TickerChange(
-            ticker=ticker, today=today, previous=previous.get(ticker), watch=watchlist.get(ticker)
+            ticker=ticker,
+            today=today,
+            previous=previous.get(ticker),
+            watch=watchlist.get(ticker),
+            held=ticker in held,
         )
         if error is not None or outcome is None:
             change.error = str(error or "no result")
@@ -221,6 +237,8 @@ def track_changes(
 
     record_scores(rows, data_dir)
     result.changes.sort(key=TickerChange.sort_key)
+    if journal:
+        result.theses = check_journal(journal, load_history(data_dir), today)
     return result
 
 
@@ -229,6 +247,38 @@ def track_changes(
 
 def render_text(data: Dict[str, Any]) -> str:
     """Terminal layout from `ChangesResult.to_dict()`."""
+    return sections_to_text(build_sections(data))
+
+
+def render_markdown(data: Dict[str, Any]) -> str:
+    return sections_to_markdown(build_sections(data))
+
+
+def summary_line(data: Dict[str, Any]) -> Optional[str]:
+    """
+    One line for a notification: theses newly broken or to recheck, tickers
+    worth a look, or that nothing could be scored. None when all is quiet. A
+    thesis that was already broken on the previous run isn't repeated.
+    """
+    changes = data.get("changes") or []
+    scored = [c for c in changes if not c.get("error")]
+    if changes and not scored:
+        return f"Nothing scored ({len(changes)} failed): check the log"
+    flagged = [t for t in data.get("theses") or [] if t["status"] != OK and t.get("new")]
+    broken = sum(1 for t in flagged if t["status"] == BROKEN)
+    moved = [c["ticker"] for c in scored if c.get("notes")]
+    parts: List[str] = []
+    if broken:
+        parts.append(f"{broken} {'thesis' if broken == 1 else 'theses'} broken")
+    if len(flagged) > broken:
+        parts.append(f"{len(flagged) - broken} to recheck")
+    if moved:
+        shown = ", ".join(moved[:4]) + (", ..." if len(moved) > 4 else "")
+        parts.append(f"{len(moved)} worth a look: {shown}")
+    return "; ".join(parts) or None
+
+
+def build_sections(data: Dict[str, Any]) -> List[Section]:
     changes = data.get("changes") or []
     scored = [c for c in changes if not c.get("error")]
     rows = []
@@ -240,6 +290,7 @@ def render_text(data: Dict[str, Any]) -> str:
         rows.append(
             [
                 c["ticker"],
+                "held" if c.get("held") else "",
                 _fmt(cur.get("score"), "{:.0f}"),
                 _fmt(c.get("score_delta"), "{:+.0f}") if prev else "new",
                 signal,
@@ -249,11 +300,18 @@ def render_text(data: Dict[str, Any]) -> str:
             ]
         )
     summary: List[Any] = (
-        [Table(["Ticker", "Score", "Chg", "Signal", "Price", "Chg %", "Since"], rows, "lrrlrrl")]
+        [
+            Table(
+                ["Ticker", "", "Score", "Chg", "Signal", "Price", "Chg %", "Since"],
+                rows,
+                "llrrlrrl",
+            )
+        ]
         if rows
         else ["Nothing scored."]
     )
     sections = [Section(f"CHANGES  {data.get('date')}  (preset: {data.get('preset')})", summary)]
+    sections += thesis_sections(data.get("theses") or [])
 
     moved = [c for c in scored if c.get("notes")]
     if moved:
@@ -282,7 +340,7 @@ def render_text(data: Dict[str, Any]) -> str:
     if moved:
         notes.append(f"Dig in: quant vet {moved[0]['ticker']}")
     sections.append(Section("NOTES", notes))
-    return sections_to_text(sections)
+    return sections
 
 
 def _delta(current: Optional[Row], previous: Optional[Row], column: str) -> Optional[float]:

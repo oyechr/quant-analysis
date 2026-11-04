@@ -24,6 +24,7 @@ Chain them with `&&` locally, so a failure stops the rest. `ruff check --fix` an
 - **Tests run offline:**
   - The `fake_market` fixture in `tests/conftest.py` replaces `yfinance.Ticker`, `Industry` and `Sector` with a synthetic market. You can configure its prices, info, statements and failures, and it counts calls. With it, the real fetcher, cache, analyzers and scorer all run without the network.
   - Use `tmp_path` as the cache dir. `default_config` keeps tests away from any local `config.json`.
+  - CLI tests that run `changes` or `journal` must `monkeypatch.chdir(tmp_path)`: without tickers, `changes` reads `portfolio/`, `watchlist.toml` and writes `data/` in the working directory, so a test run from the repo would score your real holdings into your real history.
   - `sample_data_dir` builds full reports for a few tickers once per session.
 - **Live checks:** run against Yahoo by hand, with the commands in the README. A refactor is checked with before/after snapshots of the help pages, the CLI output and the report files.
 - **Private data stays out of git:**
@@ -48,7 +49,7 @@ Chain them with `&&` locally, so a failure stops the rest. `ruff check --fix` an
   - `rebalance.propose_trades` turns the review into trades.
   - `review.MarketData` memoizes FX rates and the 2-year closes for a run.
 - **`screening.Screener`** ranks a universe with `discovery.FactorRanker`, then runs `analyze_ticker` on the top N.
-- **`tracking`** holds the watchlist, the score history (`data/_history/scores.csv`) and `track_changes`.
+- **`tracking`** holds the watchlist, the score history (`data/_history/scores.csv`), `track_changes` and the decision journal (`journal.check_thesis` holds the broken/recheck rules). `utils.notify.toast` sends the Windows notification for `changes --notify`.
 - **`backtest.run_backtest`** scores price-only signals at past month-ends; `stats` computes IC, spreads and bands with Newey-West errors.
 - **Concurrency:** `utils.concurrency.run_concurrently(fn, items, workers)` yields `(item, result, error)` and never raises.
 - **Rendering:** each command's output is built as `vetting.render` sections (text and Markdown from the same `Section` list).
@@ -109,6 +110,7 @@ quant-analysis/
 |   |   +-- watchlist.py             # watchlist.toml
 |   |   +-- history.py               # score history
 |   |   +-- changes.py               # what moved since the last run
+|   |   +-- journal.py               # decisions, thesis checks, look-back
 |   +-- backtest/
 |   |   +-- engine.py                # point-in-time signals, forward returns
 |   |   +-- stats.py                 # IC, quintile spread, hit rate, bands
@@ -120,7 +122,9 @@ quant-analysis/
 |   |   +-- generator.py             # report files
 |   |   +-- markdown.py              # report.md
 |   |   +-- sections.py              # report sections
-|   +-- utils/                       # concurrency, fx, financial maths, serialization, TOON
+|   +-- utils/                       # concurrency, fx, financial maths, notify, serialization, TOON
++-- scripts/
+|   +-- daily.ps1                    # the daily `changes` run for Task Scheduler
 +-- examples/
 |   +-- python_api.py                # the Python API, end to end (see examples/README.md)
 +-- tests/                           # one test_*.py per area; conftest.py has the fake market

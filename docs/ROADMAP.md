@@ -19,11 +19,16 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 6b | Correctness review of the decision code | Done (2026-10-24; 10 fixes, live-checked) |
 | 7 | Construct: portfolio exposure and rebalance proposals | Done (7a-7c live-checked 2026-10-24; review score history 2026-10-25); optional: rebalance --fill |
 | 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
-| - | Side items: decision journal, automation, quick wins | Planned (outline only) |
+| S1 | Habit: daily `changes` run with a notification, decision journal | Built offline (2026-11-04); live check pending |
+| - | Side items: quick wins, faster backtest | Planned (outline only) |
 
-## Current state and next session (updated 2026-10-24)
+## Current state and next session (updated 2026-11-04)
 
-Phases 0-6 are done and on `main`. All tests pass offline (578 passed, none skipped), and ruff and mypy (now blocking in CI) are clean. Claude's shell can't reach Yahoo (TLS interception), so live checks are for the user to run. It can run mypy and pip, though, and the backtest can be rerun offline from the cached 10-year prices.
+**2026-11-04: direction.** Every phase through 7 is built and live-checked, and `main` is pushed. The gap is no longer features but evidence: the price-only signals showed no edge (Phase 5), fundamentals and valuation are untested, and the score history had only two days in it. So the order is: (1) S1, the habit: a daily scheduled `changes` over the watchlist and holdings, and a decision journal, so the history and a record of decisions build up from now on; (2) Phase 8, planned in detail with a smaller first scope (Piotroski, profitability, value and the red flags on EDGAR data). Its result decides whether the composite score keeps its weight, or the tool leans on risk control and red flags instead.
+
+**S1 is built offline** (see "S1: Habit" below): 690 tests pass, ruff and mypy are clean. Next session: the user's live check (commands in S1), then plan Phase 8 in detail.
+
+**Earlier notes (2026-10-24):** Phases 0-6 are done and on `main`. All tests pass offline (578 passed, none skipped), and ruff and mypy (now blocking in CI) are clean. Claude's shell can't reach Yahoo (TLS interception), so live checks are for the user to run. It can run mypy and pip, though, and the backtest can be rerun offline from the cached 10-year prices.
 
 On 2026-10-24 the second-day `quant changes` run was verified live, which closed Phase 4. That session also fixed `chat`: it now rebuilds a report from an earlier day, prints the report date, and reads the right DDM, dividend and EPS fields. The chat quirks were fixed too: MFI is scored like RSI (it used to jump from about 2 to 20 at MFI 80), the ADX labels match the technical signals, the earnings strength states the beat rate, and the context no longer shows Yahoo's S&P beta. Then Phase 6 cleanup was completed (see Phase 6 below).
 
@@ -494,8 +499,7 @@ Phase 5 showed that the price-only part of the composite has no edge, and that f
 
 ## Side items (alongside the phases), outline
 
-- **Decision journal:** record the thesis, entry and exit criteria per buy or sell; a check that flags theses that broke (using the score history); a yearly look-back at how picks did against the signal at the time.
-- **Automation:** run `quant changes` daily (Windows Task Scheduler) with a notification when something is worth a look.
+- **Decision journal and automation:** done as S1 (below).
 - **Quick wins:** the screen should name the tickers its filters dropped, with the reason (now only in the saved JSON).
 - **Faster backtest (when it starts to matter, e.g. for sp500):** about 54 ms per ticker-month, 80% of it in `TechnicalAnalyzer`, because `score_window` recomputes every indicator on a fresh 252-bar window at each month-end (`backtest/engine.py`). sp100 over 5 years takes about 5 minutes.
   1. Compute the indicators once over each ticker's full history and read them at each month-end. The risk metrics stay on their one-year window, but as rolling calculations.
@@ -504,6 +508,42 @@ Phase 5 showed that the price-only part of the composite has no edge, and that f
   EMA-based indicators (MACD, RSI, ADX) depend on where the series starts, so step 1 changes their values slightly; with full history they are arguably more correct. Check it with a test that compares the old and new signals within a tolerance. Rerun `quant backtest sp100` and `obx` to confirm the conclusions hold. Keep the no-look-ahead test.
 
   Decided 2026-10-25: stay in Python. Use Rust (via PyO3) only for a hot spot that is still slow after both steps, and measure it first. A Go or Rust data fetcher wouldn't help, because Yahoo's rate limits are the bottleneck and yfinance handles Yahoo's unofficial API.
+
+## S1: Habit (daily check and decision journal)
+
+The user's choices (2026-11-04): `changes` covers the holdings too; a Windows toast plus a saved digest; weekday mornings at 07:30; checkable exit criteria plus free text.
+
+**As built (2026-11-04, offline):**
+
+- **History:** a `high_flags` column (titles of the high-severity red flags), so a thesis check can tell a new high flag from one that was there at the decision. Older rows have it empty; `flag_titles(row, "high_flags")` reads it.
+- **`quant changes`:**
+  - Without TICKERS it checks the watchlist, the holdings in `--portfolio` (default `portfolio/portfolio.csv`, skipped if missing; marked "held") and the tickers with an open thesis in `--journal`.
+  - `track_changes(..., held, journal)` checks the open theses after today's rows are recorded (`ChangesResult.theses`), and the output gets a THESES TO RECHECK section.
+  - `--save` writes `data/_changes/changes_DATE.md/.json`.
+  - `--notify` calls `utils.notify.toast` with `summary_line(data)`, only when there's something to say: theses newly broken or to recheck (`ThesisCheck.is_new`: worse than on the ticker's latest row before today, since the decision), tickers worth a look, or nothing scored. Clicking the toast opens the digest.
+  - `render_text` is now `build_sections` plus text or Markdown.
+- **`utils/notify.py`:** a Windows toast through Windows PowerShell's WinRT bindings (`-EncodedCommand`, with the text in environment variables), under PowerShell's own app ID. No new dependency. It never raises, and it's a no-op off Windows. A test toast from Claude's shell returned success; that it shows on screen is the user's to confirm.
+- **`scripts/daily.ps1`** runs `quant -q changes --save --notify` from the repo root and appends to `data/_changes/changes.log` (through `cmd /c`, so the log is UTF-8). The README's "Daily check" has the `Register-ScheduledTask` commands: weekdays at 07:30, `-StartWhenAvailable`, only while logged on (toasts need the session).
+- **`src/tracking/journal.py`** and `quant journal add/ls/lookback`:
+  - `portfolio/journal.toml` (gitignored with `/portfolio/`) has one `[[decision]]` per buy, add, trim or sell: thesis, exit_if, price, shares, stop, target, min_score, review_by, and a snapshot (preset, score, signal, currency, high_flags). A sell sets `closed` on the open buys and adds.
+  - `journal add` scores the ticker now and records that history row (source "journal"). A backdated `--date` takes the history row within `SNAPSHOT_MAX_DAYS` (7). A buy or add needs a thesis; the watchlist's thesis, target and stop fill in the gaps.
+  - `check_thesis` rules: broken = below the stop, under min_score, or a Sell/Strong Sell signal or high red flag that wasn't there at the decision (after the first live entry, 2026-11-04: ORK.OL was already a 48 Sell, so it read as broken every day). `journal add` warns when a thesis is broken from the start. Check = target or review date reached, the score down `THESIS_SCORE_DROP` (10) since the decision, or no score for `STALE_DAYS` (7). `exit_if` is shown, not checked.
+  - `look_back`: the decision-date close to the close at `closed` or today, against `benchmark_for`; a good call is a buy that beat it, or a trim or sell that lagged it. `summarize_outcomes` groups by side and the signal at the time.
+- **Tests:** `tests/test_journal.py`. The old `changes` CLI tests now run in `tmp_path`: in the repo they had read the real portfolio and written 37 rows to the real `data/_history/scores.csv` (removed again; see the DEVELOPMENT.md convention).
+
+**Live check for the user:**
+
+```
+quant changes --save --notify                  # holdings marked "held"; a toast if anything moved
+quant journal add EQNR.OL --thesis "Cheap vs peers" --stop 380 --min-score 50   # use a real holding, a stop in its currency
+quant journal ls
+quant changes                                  # THESES TO RECHECK if any broke
+powershell -ExecutionPolicy Bypass -File scripts\daily.ps1   # then read data\_changes\changes.log
+```
+
+Then register the task (README, "Daily check") and run `Start-ScheduledTask "quant changes"` once.
+
+**Not done:** a journal entry straight from `rebalance` trades; the look-back has nothing to measure until decisions are a few months old.
 
 ## Starting a new session
 
