@@ -3,9 +3,11 @@ Shared fixtures.
 
 `fake_market` replaces yfinance.Ticker, Industry and Sector (the network
 boundary) with a synthetic in-memory market so the real DataFetcher, cache,
-analyzers, and scorer run offline.
+analyzers, and scorer run offline. `_isolated` (autouse) gives every test
+its own working directory and default settings, and blocks the network.
 """
 
+import socket
 import sys
 from collections import Counter
 from pathlib import Path
@@ -264,6 +266,33 @@ class FakeTicker:
         if name in ("dividends", "splits"):
             return pd.Series(dtype=float)
         return pd.DataFrame()
+
+
+def _no_yahoo(*args: Any, **kwargs: Any) -> Any:
+    raise RuntimeError("A test tried to reach Yahoo; use the fake_market fixture")
+
+
+def _no_network(*args: Any, **kwargs: Any) -> Any:
+    raise RuntimeError("A test tried to open a network connection")
+
+
+@pytest.fixture(autouse=True)
+def _isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """
+    Every test runs in its own temp directory, with default settings and no
+    network. Commands read portfolio/, watchlist.toml and config.json, and
+    write data/, relative to the working directory; a test run from the repo
+    once wrote into the real score history. yfinance goes through curl_cffi,
+    which a socket block doesn't catch, so its entry points raise too until
+    `fake_market` replaces them.
+    """
+    monkeypatch.chdir(tmp_path)
+    set_config(AnalysisConfig())
+    for name in ("Ticker", "Industry", "Sector"):
+        monkeypatch.setattr(f"src.data_fetcher.yf.{name}", _no_yahoo)
+    monkeypatch.setattr(socket.socket, "connect", _no_network)
+    yield
+    set_config(AnalysisConfig())
 
 
 @pytest.fixture

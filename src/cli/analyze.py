@@ -22,6 +22,7 @@ from ..pipeline import AnalysisOptions
 from ..reporting import ReportGenerator
 from ..scoring import format_score_table
 from ..utils.concurrency import run_concurrently
+from ..utils.files import atomic_write_text
 from .common import (
     config_option,
     echo_freshness_warnings,
@@ -217,10 +218,8 @@ def vet(ctx, ticker, peers, config_name, brief, as_json, save):
     if save:
         reports_dir = Path(output_dir) / ticker / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
-        (reports_dir / "vet.json").write_text(
-            _json.dumps(data, indent=2, default=str), encoding="utf-8"
-        )
-        (reports_dir / "vet.md").write_text(render_markdown(data), encoding="utf-8")
+        atomic_write_text((reports_dir / "vet.json"), _json.dumps(data, indent=2, default=str))
+        atomic_write_text((reports_dir / "vet.md"), render_markdown(data))
         click.echo(f"  Saved: {reports_dir / 'vet.json'}, {reports_dir / 'vet.md'}", err=True)
 
 

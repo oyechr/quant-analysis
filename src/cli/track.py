@@ -6,7 +6,9 @@ import click
 
 from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisOptions
+from ..utils.files import atomic_write_text
 from .common import (
+    FINITE_FLOAT,
     config_option,
     get_scoring_config,
     workers_option,
@@ -61,8 +63,8 @@ def watchlist(ctx, watchlist_file):
 @watchlist.command("add")
 @click.argument("tickers", nargs=-1, required=True)
 @click.option("--thesis", default=None, help="One line on why you're watching it.")
-@click.option("--target", type=float, default=None, help="Target price (listing currency).")
-@click.option("--stop", type=float, default=None, help="Stop price (listing currency).")
+@click.option("--target", type=FINITE_FLOAT, default=None, help="Target price (listing currency).")
+@click.option("--stop", type=FINITE_FLOAT, default=None, help="Stop price (listing currency).")
 @click.pass_context
 def watchlist_add(ctx, tickers, thesis, target, stop):
     """Add TICKERS, or update the thesis/target/stop of ones already listed."""
@@ -238,10 +240,8 @@ def changes(
         out_dir = Path(output_dir) / "_changes"
         out_dir.mkdir(parents=True, exist_ok=True)
         digest = out_dir / f"changes_{data['date']}.md"
-        digest.write_text(render_markdown(data), encoding="utf-8")
-        digest.with_suffix(".json").write_text(
-            _json.dumps(data, indent=2, default=str), encoding="utf-8"
-        )
+        atomic_write_text(digest, render_markdown(data))
+        atomic_write_text(digest.with_suffix(".json"), _json.dumps(data, indent=2, default=str))
         click.echo(f"  Saved: {digest}, {digest.with_suffix('.json')}", err=True)
     if notify:
         from ..utils.notify import toast
@@ -321,11 +321,13 @@ def journal(ctx, journal_file):
     "listed there), the reason for a trim or sell.",
 )
 @click.option("--exit-if", default=None, help="What would prove the thesis wrong, in words.")
-@click.option("--price", type=float, default=None, help="Your price (default: the last close).")
-@click.option("--shares", type=float, default=None, help="Shares bought or sold.")
-@click.option("--stop", type=float, default=None, help="Broken below this price.")
-@click.option("--target", type=float, default=None, help="Recheck at this price.")
-@click.option("--min-score", type=float, default=None, help="Broken below this score.")
+@click.option(
+    "--price", type=FINITE_FLOAT, default=None, help="Your price (default: the last close)."
+)
+@click.option("--shares", type=FINITE_FLOAT, default=None, help="Shares bought or sold.")
+@click.option("--stop", type=FINITE_FLOAT, default=None, help="Broken below this price.")
+@click.option("--target", type=FINITE_FLOAT, default=None, help="Recheck at this price.")
+@click.option("--min-score", type=FINITE_FLOAT, default=None, help="Broken below this score.")
 @click.option("--review-by", type=_date_type(), default=None, help="Recheck by this date.")
 @click.option(
     "--date",

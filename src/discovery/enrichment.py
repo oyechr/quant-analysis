@@ -13,6 +13,7 @@ from typing import Optional
 
 import yfinance as yf
 
+from ..utils.files import atomic_write_text
 from .models import Holding, TrackedPortfolio
 
 logger = logging.getLogger(__name__)
@@ -59,18 +60,14 @@ class HoldingEnricher:
     def _save_cusip_cache(self):
         """Persist CUSIP map to disk."""
         try:
-            self._cusip_cache_file.write_text(
-                json.dumps(self._cusip_map, indent=2), encoding="utf-8"
-            )
+            atomic_write_text(self._cusip_cache_file, json.dumps(self._cusip_map, indent=2))
         except OSError as e:
             logger.warning(f"Failed to save CUSIP cache: {e}")
 
     def _save_sector_cache(self):
         """Persist sector map to disk."""
         try:
-            self._sector_cache_file.write_text(
-                json.dumps(self._sector_map, indent=2), encoding="utf-8"
-            )
+            atomic_write_text(self._sector_cache_file, json.dumps(self._sector_map, indent=2))
         except OSError as e:
             logger.warning(f"Failed to save sector cache: {e}")
 

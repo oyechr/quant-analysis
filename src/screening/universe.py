@@ -20,6 +20,7 @@ import requests
 
 from ..config import get_config
 from ..tracking.watchlist import DEFAULT_WATCHLIST, load_watchlist
+from ..utils.files import atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -206,12 +207,12 @@ def load_index(
             continue
 
         cache_file.parent.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(
+        atomic_write_text(
+            cache_file,
             json.dumps(
                 {"source": url, "fetched_at": datetime.now().isoformat(), "tickers": tickers},
                 indent=2,
             ),
-            encoding="utf-8",
         )
         return tickers
 

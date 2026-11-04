@@ -370,7 +370,6 @@ class TestDailyChanges:
         assert summary_line(failed) == "Nothing scored (1 failed): check the log"
 
     def test_cli_covers_watchlist_holdings_and_journal(self, fake_market, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
         portfolio = tmp_path / "portfolio.csv"
         portfolio.write_text("ticker,name,account,shares\nMSFT,Microsoft,1,10\n", encoding="utf-8")
         journal = tmp_path / "journal.toml"
@@ -416,7 +415,6 @@ class TestDailyChanges:
         assert len(sent) == 1 and "Nothing worth a notification" in quiet.output
 
     def test_cli_notifies_with_the_digest(self, fake_market, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
         journal = tmp_path / "journal.toml"
         save_journal([_buy(min_score=99)], journal)
         sent = []
@@ -443,7 +441,6 @@ class TestDailyChanges:
         assert len(sent) == 1 and "Nothing worth a notification" in again.output
 
     def test_tickers_given_survive_a_broken_portfolio(self, fake_market, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
         portfolio = tmp_path / "portfolio.csv"
         portfolio.write_text("name\nhalf-written\n", encoding="utf-8")
         base = ["--output-dir", str(tmp_path), "changes", "--portfolio", str(portfolio)]
@@ -474,7 +471,6 @@ class TestJournalCli:
         )
 
     def test_add_scores_now_and_ls(self, fake_market, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
 
         out = self._invoke(tmp_path, "add", "aapl", "--thesis", "Moat", "--min-score", "10")
         assert out.exit_code == 0, out.output
@@ -489,13 +485,11 @@ class TestJournalCli:
         assert "JOURNAL" in out.output and "OK" in out.output
 
     def test_add_warns_when_broken_from_the_start(self, fake_market, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
         out = self._invoke(tmp_path, "add", "AAPL", "--thesis", "x", "--min-score", "99")
         assert out.exit_code == 0, out.output
         assert "Broken from the start: score" in out.output and "under the minimum 99" in out.output
 
     def test_buy_needs_a_thesis_unless_watched(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
         out = self._invoke(tmp_path, "add", "AAPL", "--date", "2026-10-20")
         assert out.exit_code != 0 and "needs a thesis" in out.output
 
@@ -510,7 +504,6 @@ class TestJournalCli:
         assert (d.thesis, d.stop, d.score) == ("From the watchlist", 90.0, 60.0)
 
     def test_sell_closes_and_lookback(self, fake_market, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
         save_journal([_buy(date=date(2026, 6, 1))], tmp_path / "j.toml")
 
         out = self._invoke(tmp_path, "add", "AAPL", "--action", "sell", "--date", "2026-09-01")
@@ -528,15 +521,13 @@ class TestJournalCli:
         assert "No decisions" in self._invoke(tmp_path, "lookback").output
 
     def test_broken_watchlist_is_a_clean_error(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
         (tmp_path / "watchlist.toml").write_text("not [valid", encoding="utf-8")
         out = self._invoke(tmp_path, "add", "AAPL", "--thesis", "x")
         assert out.exit_code == 1 and "Can't read watchlist.toml" in out.output
 
     def test_bad_number_is_a_clean_error(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
         out = self._invoke(tmp_path, "add", "AAPL", "--thesis", "x", "--stop", "inf")
-        assert out.exit_code == 1 and "Not a usable number" in out.output
+        assert out.exit_code == 2 and "'inf' is not a usable number" in out.output
         assert not (tmp_path / "j.toml").exists()
 
 

@@ -23,6 +23,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
 
+from .utils.files import atomic_write_text
+
 _USAGE_FILE = Path(__file__).parent.parent / "data" / ".llm_usage.json"
 
 # RPD limits for known GitHub Models (free tier)
@@ -488,7 +490,7 @@ def _read_github_usage() -> Dict[str, Any]:
 
 def _write_github_usage(data: Dict[str, Any]) -> None:
     _USAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _USAGE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_text(_USAGE_FILE, json.dumps(data, indent=2))
 
 
 def _select_and_increment_github_model(preferred: str) -> tuple:

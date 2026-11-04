@@ -1,6 +1,7 @@
 """Options and helpers shared by the command modules."""
 
 import logging
+import math
 import sys
 
 import click
@@ -30,6 +31,21 @@ def configure_logging(verbose: bool, quiet: bool):
     # yfinance logs its own ERRORs for delisted/unknown symbols; our commands already
     # report those per ticker, so only show them when debugging.
     logging.getLogger("yfinance").setLevel(logging.DEBUG if verbose else logging.CRITICAL)
+
+
+class FiniteFloat(click.ParamType):
+    """A float that isn't inf or nan (click.FLOAT accepts both)."""
+
+    name = "float"
+
+    def convert(self, value, param, ctx):
+        number = click.FLOAT.convert(value, param, ctx)
+        if not math.isfinite(number):
+            self.fail(f"{value!r} is not a usable number", param, ctx)
+        return number
+
+
+FINITE_FLOAT = FiniteFloat()
 
 
 def get_scoring_config(config_name: str) -> ScoringConfig:

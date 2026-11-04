@@ -33,7 +33,6 @@ layout, without comments or keys it doesn't know.
 
 import datetime as dt
 import math
-import os
 import tomllib
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -43,6 +42,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
+from ..utils.files import atomic_write_text
 from ..utils.financial import trading_dates
 from ..vetting.render import Section, Table, sections_to_text
 from .history import Row, flag_titles
@@ -184,9 +184,7 @@ def save_journal(decisions: Sequence[Decision], path: Path) -> None:
             lines.append(f"closed = {d.closed.isoformat()}")
         lines.append("")
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text("\n".join(lines), encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_text(path, "\n".join(lines))
 
 
 def add_decision(path: Path, decision: Decision) -> List[Decision]:

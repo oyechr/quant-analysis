@@ -23,8 +23,8 @@ Chain them with `&&` locally, so a failure stops the rest. `ruff check --fix` an
 
 - **Tests run offline:**
   - The `fake_market` fixture in `tests/conftest.py` replaces `yfinance.Ticker`, `Industry` and `Sector` with a synthetic market. You can configure its prices, info, statements and failures, and it counts calls. With it, the real fetcher, cache, analyzers and scorer all run without the network.
-  - Use `tmp_path` as the cache dir. `default_config` keeps tests away from any local `config.json`.
-  - CLI tests that run `changes` or `journal` must `monkeypatch.chdir(tmp_path)`: without tickers, `changes` reads `portfolio/`, `watchlist.toml` and writes `data/` in the working directory, so a test run from the repo would score your real holdings into your real history.
+  - The autouse `_isolated` fixture runs every test in its own `tmp_path` working directory with default settings, and blocks the network. yfinance's `Ticker`, `Industry` and `Sector` raise until `fake_market` replaces them (yfinance goes through curl_cffi, which a socket block alone misses). Commands read `portfolio/`, `watchlist.toml` and `config.json` and write `data/` in the working directory; before this, a test run from the repo once wrote into the real score history.
+  - Use `tmp_path` as the cache dir.
   - `sample_data_dir` builds full reports for a few tickers once per session.
 - **Live checks:** run against Yahoo by hand, with the commands in the README. A refactor is checked with before/after snapshots of the help pages, the CLI output and the report files.
 - **Private data stays out of git:**
@@ -32,6 +32,8 @@ Chain them with `&&` locally, so a failure stops the rest. `ruff check --fix` an
   - `portfolio/`, `watchlist.toml`, `config.json` and `data/` are gitignored.
   - Tests use made-up tickers and amounts.
 - **Yahoo units:** `debtToEquity` is a percentage (150 = 1.5x), and `risk_free_rate` is a decimal (0.04). Market cap is in the major currency unit, even for a GBp listing.
+- **Writing files:** go through `utils.files.atomic_write_text` (or `atomic_write` for `to_csv`): a unique temp file in the same folder, then `os.replace`. A crash or two writers at once never leave a truncated cache, history, watchlist, journal or portfolio file.
+- **Empty results from yfinance:** yfinance hides most failures, throttling included, behind empty frames or a near-empty `info`. `DataFetcher` treats an all-empty refresh as a failure when a cached copy exists: it returns the expired cache and leaves the file's age alone, so the freshness warning shows.
 - **Cache version:** bump `INFO_CACHE_VERSION` in `data_fetcher.py` whenever `get_ticker_info` gains a field, so older cached info is refetched.
 - **Style:** match the surrounding code. Decision rules are explicit, testable functions with their thresholds as module constants (see `vetting/red_flags.py`, `portfolio/review.py::decide_action` and `portfolio/rebalance.py::propose_trades`). Every rule gets a test with synthetic data.
 

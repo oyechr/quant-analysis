@@ -28,6 +28,7 @@ from typing import Any, Optional
 
 import requests
 
+from ...utils.files import atomic_write_text
 from ..models import Holding, TrackedPortfolio
 from .base import PortfolioSource
 
@@ -228,9 +229,8 @@ class Edgar13FSource(PortfolioSource):
 
         # Cache the result
         try:
-            cache_file.write_text(
-                json.dumps(self._serialize_portfolio(portfolio), indent=2),
-                encoding="utf-8",
+            atomic_write_text(
+                cache_file, json.dumps(self._serialize_portfolio(portfolio), indent=2)
             )
         except OSError as e:
             logger.warning(f"Failed to cache portfolio for {name}: {e}")

@@ -6,6 +6,7 @@ import click
 
 from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisOptions
+from ..utils.files import atomic_write_text
 from .common import (
     config_option,
     get_scoring_config,
@@ -306,6 +307,6 @@ def _to_json(data) -> str:
 
 
 def _save(out_dir: Path, name: str, data, markdown: str) -> None:
-    (out_dir / f"{name}.json").write_text(_to_json(data), encoding="utf-8")
-    (out_dir / f"{name}.md").write_text(markdown, encoding="utf-8")
+    atomic_write_text((out_dir / f"{name}.json"), _to_json(data))
+    atomic_write_text((out_dir / f"{name}.md"), markdown)
     click.echo(f"  Saved: {out_dir / (name + '.json')}, {out_dir / (name + '.md')}", err=True)

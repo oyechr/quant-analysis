@@ -14,6 +14,7 @@ import pandas as pd
 import yfinance as yf
 
 from .config import get_config
+from .utils.files import atomic_write, atomic_write_text
 from .utils.serialization import dataframe_to_json_dict, dataframe_to_records, series_to_dataframe
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,13 @@ def clean_price_bars(data: pd.DataFrame) -> pd.DataFrame:
             if bad.any():
                 out.loc[bad, column] = out.loc[bad, "Close"]
     return out
+
+
+def _is_empty(value: Any) -> bool:
+    """An empty frame or series, or no value at all."""
+    if isinstance(value, (pd.DataFrame, pd.Series)):
+        return bool(value.empty)
+    return not value
 
 
 class DataFetcher:
@@ -192,8 +200,7 @@ class DataFetcher:
 
             # Save to cache
             try:
-                cache_file.parent.mkdir(parents=True, exist_ok=True)
-                data.to_csv(cache_file)
+                atomic_write(cache_file, lambda tmp: data.to_csv(tmp))
                 logger.info(f"Cached data saved to {cache_file}")
             except PermissionError:
                 logger.warning(f"Permission denied writing cache to {cache_file}")
@@ -300,8 +307,13 @@ class DataFetcher:
             info = stock.info
 
             # Validate we got meaningful data (callers decide whether it matters:
-            # a delisted name in a Yahoo peer list shouldn't warn)
+            # a delisted name in a Yahoo peer list shouldn't warn). Throttled,
+            # Yahoo answers with a near-empty dict, so an expired cache wins.
             if not info or len(info) < 5:
+                stale = self._load_json_cache(cache_file, ignore_ttl=True)
+                if stale:
+                    logger.warning(f"Info for {ticker} came back nearly empty; using expired cache")
+                    return dict(stale)
                 logger.info(
                     f"Minimal or no information returned for {ticker}. "
                     f"Ticker may be invalid or delisted."
@@ -579,23 +591,9 @@ class DataFetcher:
         Returns:
             Dictionary with 'dividends', 'splits', and 'actions' DataFrames
         """
-        ticker = ticker.upper()
-        cache_file = self._get_cache_file_path(ticker, "dividends.json")
+        keys = ["dividends", "splits", "actions"]
 
-        # Check cache
-        if use_cache:
-            cached = self._load_json_cache(cache_file)
-            if cached is not None:
-                return {
-                    "dividends": pd.DataFrame(cached.get("dividends", {})),
-                    "splits": pd.DataFrame(cached.get("splits", {})),
-                    "actions": pd.DataFrame(cached.get("actions", {})),
-                }
-
-        try:
-            logger.info(f"Fetching dividends for {ticker}")
-            stock = yf.Ticker(ticker)
-
+        def fetch_fn(stock: yf.Ticker) -> Dict[str, pd.DataFrame]:
             # Get data and convert Series to DataFrame if needed
             dividends_data = getattr(stock, "dividends", pd.Series())
             splits_data = getattr(stock, "splits", pd.Series())
@@ -620,28 +618,20 @@ class DataFetcher:
                 if not actions_df.empty:
                     actions_df.index.name = "Date"
 
-            result = {
-                "dividends": dividends_df,
-                "splits": splits_df,
-                "actions": actions_df,
-            }
+            return {"dividends": dividends_df, "splits": splits_df, "actions": actions_df}
 
-            # Cache as JSON using serialization utility
-            cache_data = {
-                k: dataframe_to_records(v) if not v.empty else [] for k, v in result.items()
-            }
-
-            self._save_json_cache(cache_file, cache_data)
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error fetching dividends for {ticker}: {e}")
-            return {
-                "dividends": pd.DataFrame(),
-                "splits": pd.DataFrame(),
-                "actions": pd.DataFrame(),
-            }
+        return self._fetch_resource(
+            ticker=ticker,
+            resource_name="dividends",
+            cache_filename="dividends.json",
+            fetch_fn=fetch_fn,
+            serialize_fn=lambda r: {
+                k: dataframe_to_records(v) if not v.empty else [] for k, v in r.items()
+            },
+            deserialize_fn=lambda c: {k: pd.DataFrame(c.get(k, {})) for k in keys},
+            empty_result={k: pd.DataFrame() for k in keys},
+            use_cache=use_cache,
+        )
 
     def fetch_analyst_ratings(self, ticker: str, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
         """
@@ -843,9 +833,7 @@ class DataFetcher:
         """
         self._record_fetch(cache_path.parent.parent.name, cache_path.stem, datetime.now())
         try:
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(cache_path, "w") as f:
-                json.dump(data, f, indent=2, default=str)
+            atomic_write_text(cache_path, json.dumps(data, indent=2, default=str))
             logger.info(f"Saved to cache: {cache_path}")
         except PermissionError:
             logger.warning(f"Permission denied writing cache to {cache_path}")
@@ -901,6 +889,17 @@ class DataFetcher:
                 k: v if v is not None else empty_result.get(k, pd.DataFrame())
                 for k, v in fetch_fn(stock).items()
             }
+            # yfinance hides most failures (throttling included) behind empty
+            # frames. Empty everywhere while the cache has data is a failed
+            # refresh, not news: keep the old file, so its age shows as stale.
+            if all(_is_empty(v) for v in result.values()):
+                stale = self._load_json_cache(cache_file, ignore_ttl=True)
+                if isinstance(stale, dict) and any(stale.values()):
+                    logger.warning(
+                        f"{resource_name.capitalize()} for {ticker} came back empty; "
+                        "using expired cache"
+                    )
+                    return deserialize_fn(stale)
             cache_data = serialize_fn(result)
             self._save_json_cache(cache_file, cache_data)
             return result

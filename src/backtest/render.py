@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from ..utils.files import atomic_write, atomic_write_text
 from ..vetting.render import Section, Table, sections_to_markdown, sections_to_text
 from .engine import BacktestResult
 from .stats import summarize
@@ -146,9 +147,9 @@ def save_backtest(result: BacktestResult, data: Dict[str, Any], output_dir: str)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base = out / f"backtest_{_slug(result.universe)}_{result.years}y_{stamp}"
     paths = [base.with_suffix(".json"), base.with_suffix(".md"), Path(f"{base}_observations.csv")]
-    paths[0].write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
-    paths[1].write_text(render_markdown(data), encoding="utf-8")
-    result.observations.to_csv(paths[2], index=False)
+    atomic_write_text(paths[0], json.dumps(data, indent=2, default=str))
+    atomic_write_text(paths[1], render_markdown(data))
+    atomic_write(paths[2], lambda tmp: result.observations.to_csv(tmp, index=False))
     return paths
 
 

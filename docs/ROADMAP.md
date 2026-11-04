@@ -20,6 +20,7 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 7 | Construct: portfolio exposure and rebalance proposals | Done (7a-7c live-checked 2026-10-24; review score history 2026-10-25); optional: rebalance --fill |
 | 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
 | S1 | Habit: daily `changes` run with a notification, decision journal | Built offline (2026-11-04); live check pending |
+| R | Best-practice review fixes (docs/REVIEW-2026-11.md, batches A-I) | A done (2026-11-05); B-E next, F-I later |
 | - | Side items: quick wins, faster backtest | Planned (outline only) |
 
 ## Current state and next session (updated 2026-11-04)

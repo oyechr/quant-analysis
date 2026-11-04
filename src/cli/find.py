@@ -6,6 +6,7 @@ import click
 
 from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisOptions
+from ..utils.files import atomic_write_text
 from .common import (
     config_option,
     get_scoring_config,
@@ -350,7 +351,7 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
 
         out_path = Path(output_dir) / "_discovery" / "discovery_result.json"
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(_json.dumps(result.to_dict(), indent=2), encoding="utf-8")
+        atomic_write_text(out_path, _json.dumps(result.to_dict(), indent=2))
         click.echo(f"  Results saved to: {out_path}")
 
     if output_format in ("toon", "all"):
@@ -359,7 +360,7 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
 
             out_path = Path(output_dir) / "_discovery" / "discovery_result.toon"
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(toon.encode(result.to_dict()), encoding="utf-8")
+            atomic_write_text(out_path, toon.encode(result.to_dict()))
             click.echo(f"  TOON output:  {out_path}")
         except ImportError:
             pass

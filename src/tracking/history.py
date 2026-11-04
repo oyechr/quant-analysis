@@ -13,14 +13,17 @@ from every command compare like with like.
 """
 
 import csv
-import os
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from ..scoring.scorer import ScoringResult
+from ..utils.files import atomic_write
 from ..vetting.red_flags import RedFlag
 from ..vetting.verdict import current_price
+
+logger = logging.getLogger(__name__)
 
 HISTORY_COLUMNS = [
     "date",
@@ -104,13 +107,13 @@ def record_scores(rows: Iterable[Optional[Row]], data_dir: str = "data") -> Opti
     kept = [row for row in load_history(data_dir) if _key(row) not in keys]
     merged = sorted(kept + new, key=lambda r: r["date"])  # stable: run order within a day
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with tmp.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=HISTORY_COLUMNS, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows({k: "" if v is None else v for k, v in row.items()} for row in merged)
-    os.replace(tmp, path)
+    def write(tmp: Path) -> None:
+        with tmp.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=HISTORY_COLUMNS, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows({k: "" if v is None else v for k, v in row.items()} for row in merged)
+
+    atomic_write(path, write)
     return path
 
 
@@ -124,11 +127,13 @@ def load_history(
     if not path.exists():
         return []
     with path.open(newline="", encoding="utf-8") as f:
-        rows = [_parse(raw) for raw in csv.DictReader(f)]
+        # Line 1 is the header
+        parsed = [_parse(raw, path, line) for line, raw in enumerate(csv.DictReader(f), 2)]
     return [
         row
-        for row in rows
-        if (ticker is None or row["ticker"] == ticker.upper())
+        for row in parsed
+        if row is not None
+        and (ticker is None or row["ticker"] == ticker.upper())
         and (preset is None or row["preset"] == preset)
     ]
 
@@ -144,14 +149,26 @@ def _key(row: Row) -> tuple[str, str, str]:
     return row["date"], row["ticker"], row["preset"]
 
 
-def _parse(raw: Dict[str, str]) -> Row:
+def _parse(raw: Dict[str, str], path: Path, line: int) -> Optional[Row]:
+    """
+    One row from the CSV. A cell that isn't a number is read as missing, and
+    a row without a date, ticker or preset is skipped: one hand-edited or
+    half-written line shouldn't stop every command that reads the history.
+    """
     row: Row = {}
     for column in HISTORY_COLUMNS:
         value = (raw.get(column) or "").strip()
-        if column in _NUMERIC:
-            row[column] = float(value) if value else None
-        elif column == "red_flags":
-            row[column] = int(value) if value else 0
-        else:
-            row[column] = value or None
+        try:
+            if column in _NUMERIC:
+                row[column] = float(value) if value else None
+            elif column == "red_flags":
+                row[column] = int(value) if value else 0
+            else:
+                row[column] = value or None
+        except ValueError:
+            logger.warning(f"{path}, line {line}: {column} {value!r} isn't a number; ignored")
+            row[column] = 0 if column == "red_flags" else None
+    if not (row["date"] and row["ticker"] and row["preset"]):
+        logger.warning(f"{path}, line {line}: no date, ticker or preset; row skipped")
+        return None
     return row

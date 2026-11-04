@@ -202,6 +202,59 @@ class TestCacheExpiry:
         assert config.cache_ttl_hours["prices"] == 12
 
 
+class TestFailedRefreshKeepsCache:
+    """yfinance hides most failures behind empty results instead of raising."""
+
+    def test_empty_statements_keep_the_expired_cache(self, fake_market, tmp_path):
+        from tests.conftest import make_statements
+
+        fake_market.attribute_overrides["AAPL"] = make_statements()
+        fetcher = DataFetcher(cache_dir=str(tmp_path))
+        assert not fetcher.fetch_fundamentals("AAPL")["income_stmt_annual"].empty
+        cache = tmp_path / "AAPL" / "cache" / "fundamentals.json"
+        _age_file(cache, hours=24 * 30)
+        aged = cache.stat().st_mtime
+        fake_market.attribute_overrides["AAPL"] = {}  # throttled: empty frames
+
+        refreshed = fetcher.fetch_fundamentals("AAPL")
+
+        assert not refreshed["income_stmt_annual"].empty
+        assert cache.stat().st_mtime == aged  # still reads as stale
+
+    def test_empty_statements_without_a_cache_are_cached(self, fake_market, tmp_path):
+        fetcher = DataFetcher(cache_dir=str(tmp_path))
+        fetcher.fetch_fundamentals("FUND")
+        fetcher.fetch_fundamentals("FUND")
+        assert fake_market.calls[("income_stmt", "FUND")] == 1
+
+    def test_near_empty_info_falls_back_to_expired_cache(self, fake_market, tmp_path, monkeypatch):
+        fetcher = DataFetcher(cache_dir=str(tmp_path))
+        fetcher.get_ticker_info("AAPL")
+        _age_file(tmp_path / "AAPL" / "cache" / "info.json", hours=48)
+        throttled = property(lambda self: {"trailingPegRatio": None})
+        monkeypatch.setattr(type(fake_market.ticker("AAPL")), "info", throttled)
+
+        info = fetcher.get_ticker_info("AAPL")
+
+        assert info["currency"] == "USD" and info["market_cap"]
+
+    def test_failed_dividends_fall_back_to_expired_cache(self, fake_market, tmp_path):
+        dates = pd.date_range("2024-01-15", periods=8, freq="QS", tz="America/New_York")
+        fake_market.attribute_overrides["AAPL"] = {"dividends": pd.Series(0.25, index=dates)}
+        fetcher = DataFetcher(cache_dir=str(tmp_path))
+        assert len(fetcher.fetch_dividends("AAPL")["dividends"]) == 8
+        _age_file(tmp_path / "AAPL" / "cache" / "dividends.json", hours=24 * 30)
+        fake_market.failing.add("AAPL")
+
+        assert len(fetcher.fetch_dividends("AAPL")["dividends"]) == 8
+
+
+def test_tests_cannot_reach_yahoo(tmp_path):
+    # Without fake_market, the autouse _isolated fixture blocks yfinance
+    with pytest.raises(RuntimeError, match="use the fake_market fixture"):
+        DataFetcher(cache_dir=str(tmp_path)).fetch_ticker("AAPL")
+
+
 # ============================================================
 # Benchmarks and return alignment
 # ============================================================

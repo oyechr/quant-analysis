@@ -21,6 +21,7 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
+from ..utils.files import atomic_write_text
 from ..vetting.render import Section, Table, sections_to_text
 from .history import Row
 
@@ -72,7 +73,7 @@ def save_watchlist(items: Dict[str, WatchItem], path: Path) -> None:
         if item.stop is not None:
             lines.append(f"stop = {item.stop!r}")
         lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    atomic_write_text(path, "\n".join(lines))
 
 
 def add_to_watchlist(

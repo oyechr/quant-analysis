@@ -29,6 +29,8 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 
+from ..utils.files import atomic_write
+
 PORTFOLIO_COLUMNS = ["ticker", "name", "account", "shares", "cost_basis", "currency"]
 
 # Nordnet export header -> portfolio column (only the columns we keep)
@@ -112,7 +114,9 @@ def combine_holdings(
 def write_portfolio(holdings: pd.DataFrame, path: Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    holdings[PORTFOLIO_COLUMNS].to_csv(path, index=False, encoding="utf-8")
+    atomic_write(
+        path, lambda tmp: holdings[PORTFOLIO_COLUMNS].to_csv(tmp, index=False, encoding="utf-8")
+    )
 
 
 def _nordnet_number(value: object) -> float:

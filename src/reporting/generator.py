@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisBundle, AnalysisOptions, analyze_ticker
 from ..scoring import ScoringConfig
+from ..utils.files import atomic_write_text
 from ..utils.toon_serializer import report_to_toon
 from .markdown import render_report_markdown
 
@@ -147,8 +148,7 @@ class ReportGenerator:
 
         if json_data is not None:
             output_file = reports_dir / f"{report_type}.json"
-            with open(output_file, "w") as f:
-                json.dump(json_data, f, indent=2, default=str)
+            atomic_write_text(output_file, json.dumps(json_data, indent=2, default=str))
             logger.info(f"{report_type.replace('_', ' ').title()} JSON saved: {output_file}")
 
         if markdown_lines is not None:
@@ -159,16 +159,14 @@ class ReportGenerator:
                 f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             ]
             md.extend(markdown_lines)
-            with open(output_file, "w", encoding="utf-8") as f:
-                f.write("\n".join(md))
+            atomic_write_text(output_file, "\n".join(md))
             logger.info(f"{report_type.replace('_', ' ').title()} markdown saved: {output_file}")
 
     def _save_json_report(self, ticker: str, data: Dict[str, Any]):
         """Save report as JSON"""
         reports_dir = self._get_reports_dir(ticker)
         output_file = reports_dir / "full_report.json"
-        with open(output_file, "w") as f:
-            json.dump(data, f, indent=2, default=str)
+        atomic_write_text(output_file, json.dumps(data, indent=2, default=str))
         logger.info(f"JSON report saved: {output_file}")
 
     def _save_toon_report(self, ticker: str, data: Dict[str, Any]):
@@ -191,8 +189,7 @@ class ReportGenerator:
                     toon_data[key] = value
 
         toon_str = report_to_toon(toon_data)
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(toon_str)
+        atomic_write_text(output_file, toon_str)
         logger.info(f"TOON report saved: {output_file}")
 
     def _save_markdown_report(
@@ -210,8 +207,7 @@ class ReportGenerator:
         reports_dir.mkdir(parents=True, exist_ok=True)
         output_file = reports_dir / "report.md"
 
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(render_report_markdown(ticker, data, scoring_result))
+        atomic_write_text(output_file, render_report_markdown(ticker, data, scoring_result))
 
         logger.info(f"Markdown report saved: {output_file}")
 
@@ -356,7 +352,6 @@ class ReportGenerator:
         md.append("```")
         md.append("")
 
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(md))
+        atomic_write_text(output_file, "\n".join(md))
 
         logger.info(f"Scoring markdown saved: {output_file}")

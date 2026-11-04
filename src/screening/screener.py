@@ -25,6 +25,7 @@ from ..discovery.factor_ranking import FactorRanker, FactorScore, FactorWeights
 from ..pipeline import AnalysisOptions, analyze_ticker
 from ..scoring.scorer import ScoringResult
 from ..utils.concurrency import DEFAULT_WORKERS, run_concurrently
+from ..utils.files import atomic_write_text
 from ..utils.fx import conversion_rate, major_currency
 from ..utils.toon_serializer import report_to_toon
 
@@ -385,7 +386,7 @@ def save_screen(result: ScreenResult, output_dir: str, output_format: str = "all
     def _write(suffix: str, content: str):
         for name in (f"{base}.{suffix}", f"latest.{suffix}"):
             path = screens_dir / name
-            path.write_text(content, encoding="utf-8")
+            atomic_write_text(path, content)
         written.append(screens_dir / f"{base}.{suffix}")
 
     _write("csv", pd.DataFrame(data["results"]).to_csv(index=False))

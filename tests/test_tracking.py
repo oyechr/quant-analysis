@@ -135,7 +135,6 @@ class TestWatchlist:
             load_watchlist(path)
 
     def test_watchlist_universe(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
         with pytest.raises(ValueError, match="No tickers"):
             resolve_universe(["watchlist"])
 
@@ -184,6 +183,20 @@ class TestHistory:
             ("2026-10-22", "value", 60.0),
         ]
         assert len(load_history(str(tmp_path), preset="default")) == 3
+
+    def test_a_bad_line_does_not_break_the_history(self, tmp_path):
+        record_scores([_row(DAY1, score=61)], str(tmp_path))
+        path = history_path(str(tmp_path))
+        with path.open("a", encoding="utf-8") as f:
+            f.write("2026-10-21,MSFT,default,hand,n/a,,,,,Hold,,oops,USD,x,,\n")
+            f.write(",,,half-written\n")
+
+        rows = load_history(str(tmp_path))
+
+        assert [(r["ticker"], r["score"], r["price"], r["red_flags"]) for r in rows] == [
+            ("AAPL", 61.0, 100.0, 0),
+            ("MSFT", None, None, 0),
+        ]
 
     def test_values_survive_the_csv(self, tmp_path):
         row = history_row(
@@ -312,11 +325,6 @@ class TestTrackChanges:
 
 
 class TestCli:
-    @pytest.fixture(autouse=True)
-    def _in_tmp_path(self, tmp_path, monkeypatch):
-        # `changes` reads portfolio/ and writes data/ relative to the working directory
-        monkeypatch.chdir(tmp_path)
-
     def test_watchlist_add_ls_rm(self, tmp_path):
         path = str(tmp_path / "w.toml")
         runner = CliRunner()
@@ -367,7 +375,6 @@ class TestCli:
         assert load_history(str(tmp_path), "AAPL")[0]["source"] == "changes"
 
     def test_screen_records_history_and_adds_to_watchlist(self, fake_market, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
         add_to_watchlist(Path("watchlist.toml"), ["MSFT"], thesis="mine")
 
         out = CliRunner().invoke(
