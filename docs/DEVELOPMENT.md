@@ -33,7 +33,7 @@ Chain them with `&&` locally, so a failure stops the rest. `ruff check --fix` an
   - Tests use made-up tickers and amounts.
 - **Yahoo units:** `debtToEquity` is a percentage (150 = 1.5x), and `risk_free_rate` is a decimal (0.04). Market cap is in the major currency unit, even for a GBp listing.
 - **Writing files:** go through `utils.files.atomic_write_text` (or `atomic_write` for `to_csv`): a unique temp file in the same folder, then `os.replace`. A crash or two writers at once never leave a truncated cache, history, watchlist, journal or portfolio file.
-- **Empty results from yfinance:** yfinance hides most failures, throttling included, behind empty frames or a near-empty `info`. `DataFetcher` treats an all-empty refresh as a failure when a cached copy exists: it returns the expired cache and leaves the file's age alone, so the freshness warning shows.
+- **Empty results from yfinance:** yfinance hides most failures, throttling included, behind empty frames or a near-empty `info`. `DataFetcher` treats an all-empty refresh as a failure when a cached copy exists: it returns the expired cache and leaves the file's age alone, so the freshness warning shows. An all-empty result with no older copy is cached, but only trusted for `EMPTY_RESULT_TTL_HOURS` (12), so a throttled first fetch heals at the next daily run.
 - **Cache version:** bump `INFO_CACHE_VERSION` in `data_fetcher.py` whenever `get_ticker_info` gains a field, so older cached info is refetched.
 - **Style:** match the surrounding code. Decision rules are explicit, testable functions with their thresholds as module constants (see `vetting/red_flags.py`, `portfolio/review.py::decide_action` and `portfolio/rebalance.py::propose_trades`). Every rule gets a test with synthetic data.
 

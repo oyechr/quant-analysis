@@ -65,13 +65,19 @@ class FundamentalAnalyzer:
         self.price_data = price_data
         self.config = config or get_config()
 
-        # Extract financial statements
-        self.income_stmt_q = self.fundamentals.get("income_stmt_quarterly")
-        self.income_stmt_a = self.fundamentals.get("income_stmt_annual")
-        self.balance_sheet_q = self.fundamentals.get("balance_sheet_quarterly")
-        self.balance_sheet_a = self.fundamentals.get("balance_sheet_annual")
-        self.cash_flow_q = self.fundamentals.get("cash_flow_quarterly")
-        self.cash_flow_a = self.fundamentals.get("cash_flow_annual")
+        # Extract financial statements. An empty frame (a fund, or a failed
+        # fetch) is missing data: checks test `is None`, and an empty
+        # statement used to pass them and score Piotroski 0/9.
+        def statement(key: str) -> Optional[pd.DataFrame]:
+            frame = self.fundamentals.get(key)
+            return frame if frame is not None and not frame.empty else None
+
+        self.income_stmt_q = statement("income_stmt_quarterly")
+        self.income_stmt_a = statement("income_stmt_annual")
+        self.balance_sheet_q = statement("balance_sheet_quarterly")
+        self.balance_sheet_a = statement("balance_sheet_annual")
+        self.cash_flow_q = statement("cash_flow_quarterly")
+        self.cash_flow_a = statement("cash_flow_annual")
         self._all: Optional[Dict[str, Any]] = None
 
     # ==================== Helper Methods ====================
@@ -436,7 +442,8 @@ class FundamentalAnalyzer:
             Z-Score value or None if insufficient data
         """
         if self.balance_sheet_a is None or self.income_stmt_a is None:
-            logger.warning(
+            # Routine for funds and new listings; the data coverage shows it
+            logger.info(
                 f"Cannot calculate Altman Z-Score: Missing financial statements "
                 f"(balance_sheet={self.balance_sheet_a is not None}, "
                 f"income_stmt={self.income_stmt_a is not None})"

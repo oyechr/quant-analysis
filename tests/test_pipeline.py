@@ -227,6 +227,24 @@ class TestFailedRefreshKeepsCache:
         fetcher.fetch_fundamentals("FUND")
         assert fake_market.calls[("income_stmt", "FUND")] == 1
 
+    def test_an_empty_cache_is_retried_after_half_a_day(self, fake_market, tmp_path):
+        # A throttled first fetch would otherwise leave no statements for a week
+        from tests.conftest import make_statements
+
+        fetcher = DataFetcher(cache_dir=str(tmp_path))
+        assert fetcher.fetch_fundamentals("AAPL")["income_stmt_annual"].empty
+        _age_file(tmp_path / "AAPL" / "cache" / "fundamentals.json", hours=13)
+        fake_market.attribute_overrides["AAPL"] = make_statements()
+
+        assert not fetcher.fetch_fundamentals("AAPL")["income_stmt_annual"].empty
+
+    def test_no_statements_means_no_piotroski_score(self):
+        from src.analysis.fundamental import FundamentalAnalyzer
+
+        empty = {k: pd.DataFrame() for k in ("income_stmt_annual", "balance_sheet_annual")}
+        empty["cash_flow_annual"] = pd.DataFrame()
+        assert FundamentalAnalyzer({}, empty).calculate_piotroski_f_score() is None
+
     def test_near_empty_info_falls_back_to_expired_cache(self, fake_market, tmp_path, monkeypatch):
         fetcher = DataFetcher(cache_dir=str(tmp_path))
         fetcher.get_ticker_info("AAPL")

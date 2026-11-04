@@ -44,6 +44,15 @@ def clean_price_bars(data: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+# How long an all-empty statements/earnings/dividends result counts as fresh,
+# however long the resource's own TTL
+EMPTY_RESULT_TTL_HOURS = 12
+
+
+def _age_hours(path: Path) -> float:
+    return (datetime.now().timestamp() - path.stat().st_mtime) / 3600
+
+
 def _is_empty(value: Any) -> bool:
     """An empty frame or series, or no value at all."""
     if isinstance(value, (pd.DataFrame, pd.Series)):
@@ -874,10 +883,15 @@ class DataFetcher:
         ticker = ticker.upper()
         cache_file = self._get_cache_file_path(ticker, cache_filename)
 
-        # Check cache
+        # Check cache. An all-empty result is often a throttled fetch rather
+        # than a company without statements, so it's only trusted briefly.
         if use_cache:
             cached = self._load_json_cache(cache_file)
-            if cached is not None:
+            if cached is not None and not (
+                isinstance(cached, dict)
+                and not any(cached.values())
+                and _age_hours(cache_file) >= EMPTY_RESULT_TTL_HOURS
+            ):
                 return deserialize_fn(cached)
 
         try:

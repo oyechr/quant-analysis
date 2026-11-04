@@ -350,9 +350,8 @@ class TestDailyChanges:
         assert data["theses"][0]["broken"][0].endswith("under the minimum 99")
         markdown = render_markdown(data)
         assert "## Theses To Recheck" in markdown and "Needs a high score" in markdown
-        # The fake market scores both as Sell, so MSFT's thesis broke too
-        assert data["theses"][1]["broken"] == ["signal ? -> Sell"]
-        assert summary_line(data) == "2 theses broken"
+        assert data["theses"][1]["status"] == "OK"  # MSFT: no criteria to break
+        assert summary_line(data) == "1 thesis broken"
 
     def test_summary_line(self):
         quiet = {"changes": [{"ticker": "A", "notes": []}], "theses": []}
@@ -373,7 +372,7 @@ class TestDailyChanges:
         portfolio = tmp_path / "portfolio.csv"
         portfolio.write_text("ticker,name,account,shares\nMSFT,Microsoft,1,10\n", encoding="utf-8")
         journal = tmp_path / "journal.toml"
-        save_journal([_buy(ticker="NVDA")], journal)
+        save_journal([_buy(ticker="NVDA", min_score=99)], journal)
         watchlist = tmp_path / "w.toml"
         watchlist.write_text('["AAPL"]\nadded = 2026-10-20\n', encoding="utf-8")
         sent = []
@@ -402,7 +401,7 @@ class TestDailyChanges:
         assert sorted(p.suffix for p in digests) == [".json", ".md"]
         data = json.loads(next(p for p in digests if p.suffix == ".json").read_text("utf-8"))
         assert [c["held"] for c in data["changes"] if c["ticker"] == "MSFT"] == [True]
-        # The fake market scores NVDA as Sell, which breaks its thesis
+        # NVDA's minimum score is out of reach, so its thesis is broken
         assert [line for _, line, _ in sent] == ["1 thesis broken"]
 
         # Without the journal, a first run has nothing to report
