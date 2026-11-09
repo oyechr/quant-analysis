@@ -271,10 +271,11 @@ def format_correlation_heatmap(
     lines.append("  " + "-" * (col_width + (col_width + 2) * len(corr_df.columns)))
 
     # Rows
-    for idx in corr_df.index:
+    # A float array, not .at: pandas-stubs types .at as any scalar (bytes too)
+    values = corr_df.to_numpy(dtype=float)
+    for idx, row_values in zip(corr_df.index, values):
         row = f"  {str(idx):>{col_width}}"
-        for col in corr_df.columns:
-            val = corr_df.at[idx, col]
+        for val in row_values:
             row += f"  {val:>{col_width}.3f}"
         lines.append(row)
 
