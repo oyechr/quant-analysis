@@ -136,8 +136,8 @@ A one-screen verdict on one ticker. It writes nothing to disk unless you pass `-
 
 ```bash
 quant vet EQNR.OL
-quant vet AAPL --peers MSFT,GOOGL,META
-quant vet EQNR.OL --peers AKRBP.OL,VAR.OL    # home-market peers
+quant vet AAPL --peers "MSFT,GOOGL,META"
+quant vet EQNR.OL --peers "AKRBP.OL,VAR.OL"  # home-market peers
 quant vet NVDA --config growth --save        # also writes data/NVDA/reports/vet.json + vet.md
 quant vet AAPL --brief                       # verdict, key facts and next steps only
 ```
@@ -180,7 +180,7 @@ quant --format toon report MSFT --exclude-technical
 ```bash
 quant score AAPL MSFT TSLA --config growth     # one summary row per ticker
 quant compare AAPL MSFT GOOGL                  # side by side, with return correlation
-quant compare AAPL MSFT --weights 0.6,0.4      # plus a portfolio view
+quant compare AAPL MSFT --weights "0.6,0.4"    # plus a portfolio view
 quant compare EQNR BP --save-chart data/corr.png
 ```
 
@@ -258,7 +258,7 @@ Runs `review`, then turns its actions into trades, in this order:
 ```bash
 quant rebalance                                       # trades from the review alone
 quant rebalance --cash 50000 --candidates watchlist   # new money and new names
-quant rebalance --candidates AAPL,MSFT --save         # writes portfolio/rebalance.json + .md
+quant rebalance --candidates "AAPL,MSFT" --save       # writes portfolio/rebalance.json + .md
 ```
 
 - **The output:**

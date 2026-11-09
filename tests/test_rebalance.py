@@ -384,8 +384,12 @@ def test_rebalance_portfolio_end_to_end(rebalance_market, tmp_path):
     assert "NEW" in {t.ticker for t in proposal.trades} or any(
         n.startswith("NEW:") for n in proposal.notes
     )
-    # A held ticker isn't a candidate
-    assert not any(n.startswith("BIG.OL: not bought") for n in proposal.notes)
+    # A held ticker isn't a candidate, and the notes say so
+    assert "NEW" not in {r.holding.ticker for r in review.holdings}
+    big = next(r for r in review.holdings if r.holding.ticker == "BIG.OL")
+    held_note = f"BIG.OL: not bought as a new name (already held; its action is {big.action})"
+    assert held_note in proposal.notes
+    assert "BIG.OL" not in {t.ticker for t in proposal.trades if t.new}
     text = render_proposal_text(data)
     assert "REBALANCE PROPOSAL" in text and "BEFORE / AFTER" in text and "NOTES" in text
     json.dumps(data, default=str)

@@ -175,8 +175,8 @@ def vet(ctx, ticker, peers, config_name, brief, as_json, save):
     Examples:
       quant vet EQNR.OL
       quant vet EQNR.OL --brief
-      quant vet AAPL --peers MSFT,GOOGL,META
-      quant vet EQNR.OL --peers AKRBP.OL,VAR.OL
+      quant vet AAPL --peers "MSFT,GOOGL,META"
+      quant vet EQNR.OL --peers "AKRBP.OL,VAR.OL"
       quant vet NVDA --config growth --save
     """
     import json as _json
@@ -245,7 +245,7 @@ def compare(ctx, tickers, config_name, save_chart, weights):
     Shows scoring comparison, relative valuation, correlation matrix,
     highly correlated pairs and hedges, and risk-parity suggested weights.
 
-    Example: quant compare AAPL MSFT GOOGL --weights 0.5,0.3,0.2
+    Example: quant compare AAPL MSFT GOOGL --weights "0.5,0.3,0.2"
     """
     if len(tickers) < 2:
         raise click.UsageError("At least 2 tickers are required for comparison.")

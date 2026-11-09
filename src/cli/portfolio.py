@@ -209,7 +209,7 @@ def rebalance(
     Examples:
       quant rebalance
       quant rebalance --cash 50000 --candidates watchlist
-      quant rebalance --candidates EQNR.OL,AAPL --save
+      quant rebalance --candidates "EQNR.OL,AAPL" --save
     """
     from ..portfolio import (
         rebalance_portfolio,

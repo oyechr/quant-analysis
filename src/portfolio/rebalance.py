@@ -421,9 +421,10 @@ def rebalance_portfolio(
     fetcher = fetcher or DataFetcher(cache_dir=data_dir)
     options = options or AnalysisOptions(include_context=False)
     market = MarketData(fetcher, review.base_currency, options.use_cache)
-    held = {r.holding.ticker for r in review.holdings}
+    held = {r.holding.ticker: r for r in review.holdings}
+    wanted = list(dict.fromkeys(c.upper() for c in candidates))
     vetted = _vet_candidates(
-        [t for t in dict.fromkeys(c.upper() for c in candidates) if t not in held],
+        [t for t in wanted if t not in held],
         fetcher,
         options,
         workers,
@@ -445,6 +446,11 @@ def rebalance_portfolio(
             c.moves_with = _moves_with(converted, exposure.returns)
 
     proposal = propose_trades(review.holdings, vetted, settings, cash, review.base_currency)
+    proposal.notes += [
+        f"{t}: not bought as a new name (already held; its action is {held[t].action})"
+        for t in wanted
+        if t in held
+    ]
     proposal.before = review.summary.get("exposure") or {}
     after = _after_trades([*review.holdings, *vetted], proposal.shares_after, proposal.cash_left)
     benchmarks = exposure.benchmarks if exposure else market.benchmarks()
