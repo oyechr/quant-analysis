@@ -102,6 +102,23 @@ class TestRelativeStrength:
         assert rs is not None
         assert 1 <= rs["rs_rating"] <= 99
 
+    def test_a_short_benchmark_history_isnt_a_zero_return(self):
+        # The same series as the stock, but only the last 100 days of it
+        days = pd.bdate_range("2025-06-02", periods=300)
+        stock = pd.DataFrame({"Close": [100.0 * 1.001**i for i in range(300)]}, index=days)
+        rs = calculate_relative_strength(stock, stock.iloc[-100:])
+        assert rs["relative_return_pct"] == pytest.approx(0.0, abs=1e-9)
+        assert set(rs["components"]) == {"return_3mo"}  # the longer horizons need both
+
+    def test_benchmark_is_read_on_the_stocks_dates(self):
+        days = pd.bdate_range("2025-06-02", periods=300)
+        prices = pd.Series([100.0 * 1.002**i for i in range(300)], index=days)
+        oslo = prices.drop(days[[50, 120, 180, 250]])  # four local holidays
+        rs = calculate_relative_strength(oslo.to_frame("Close"), prices.to_frame("Close"))
+        # An index moving exactly like the stock: no relative strength either way
+        assert rs["relative_return_pct"] == pytest.approx(0.0, abs=1e-9)
+        assert rs["rs_rating"] == 50
+
     def test_components_present(self, sample_price_data, sample_benchmark):
         rs = calculate_relative_strength(sample_price_data, sample_benchmark)
         components = rs["components"]

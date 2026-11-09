@@ -7,12 +7,17 @@ Each scorer normalizes metrics to a 0-100 scale and tracks data coverage for con
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..analysis.fundamental import altman_zones
 from .config import ScoringConfig
 
 logger = logging.getLogger(__name__)
+
+# Sub-score points for a cross on the last bar (the state itself is scored
+# continuously; see TechnicalScorer._score_macd and _score_ma_alignment)
+MACD_CROSS_BONUS = 10.0
+MA_CROSS_BONUS = 10.0
 
 
 @dataclass
@@ -101,6 +106,35 @@ def is_financial(ticker_info: Optional[Dict[str, Any]]) -> bool:
     return sector in FINANCIAL_SECTORS
 
 
+QUALITY_MODELS = ("piotroski_f", "altman_z", "beneish_m", "accruals_quality")
+# Fewer Beneish inputs and the M-Score is mostly defaults
+BENEISH_MIN_COMPONENTS = 5
+
+
+def applicable_quality_models(ticker_info: Optional[Dict[str, Any]]) -> Tuple[str, ...]:
+    """
+    The quality models that apply to a company, the one rule for both the
+    scorer and the red flags:
+
+    - banks and insurers: Piotroski only (see `is_financial`);
+    - utilities: no Altman Z. Altman's samples left them out, and regulated
+      utilities run on heavy debt and negative working capital without
+      being distressed;
+    - everyone else: all of `QUALITY_MODELS`.
+    """
+    if is_financial(ticker_info):
+        return ("piotroski_f",)
+    if str((ticker_info or {}).get("sector") or "").lower() == "utilities":
+        return tuple(m for m in QUALITY_MODELS if m != "altman_z")
+    return QUALITY_MODELS
+
+
+def beneish_is_partial(beneish: Optional[Dict[str, Any]]) -> bool:
+    """An M-Score from fewer than `BENEISH_MIN_COMPONENTS` of its 8 inputs: a weak signal."""
+    components = (beneish or {}).get("components_available")
+    return components is not None and components < BENEISH_MIN_COMPONENTS
+
+
 def _linear_scale(value: float, worst: float, best: float, invert: bool = False) -> float:
     """
     Linearly scale a value to 0-100.
@@ -147,7 +181,7 @@ class TechnicalScorer:
         # Extract latest indicator values
         latest = technical_data.get("latest_values", {})
         indicators = latest.get("indicators", {})
-        signals = technical_data.get("signals", {})
+        state = technical_data.get("state") or {}
         close = _safe_float(latest.get("close_price") or indicators.get("close_price"))
 
         # 1. RSI Score (weight: 0.20)
@@ -156,16 +190,18 @@ class TechnicalScorer:
 
         # 2. MACD Score (weight: 0.20)
         macd_diff = _safe_float(indicators.get("MACD_diff"))
-        macd_signal_str = signals.get("MACD", "")
-        sub_scores.append(self._score_macd(macd_diff, macd_signal_str, close, strengths, concerns))
+        sub_scores.append(
+            self._score_macd(macd_diff, state.get("macd_cross"), close, strengths, concerns)
+        )
 
         # 3. Moving Average Alignment (weight: 0.25)
         sma_20 = _safe_float(indicators.get("SMA_20"))
         sma_50 = _safe_float(indicators.get("SMA_50"))
         sma_200 = _safe_float(indicators.get("SMA_200"))
-        ma_signal = signals.get("MA_Trend", "")
         sub_scores.append(
-            self._score_ma_alignment(close, sma_20, sma_50, sma_200, ma_signal, strengths, concerns)
+            self._score_ma_alignment(
+                close, sma_20, sma_50, sma_200, state.get("ma_cross"), strengths, concerns
+            )
         )
 
         # 4. ADX Trend Strength (weight: 0.10)
@@ -218,11 +254,16 @@ class TechnicalScorer:
     def _score_macd(
         self,
         macd_diff: Optional[float],
-        signal_str: str,
+        cross: Optional[str],
         close: Optional[float],
         strengths: List[str],
         concerns: List[str],
     ) -> SubScore:
+        """
+        Continuous in the histogram (MACD minus signal, as % of price), so the
+        score doesn't jump where the histogram crosses zero. A cross adds
+        `MACD_CROSS_BONUS` on the bar it happens only (`state.macd_cross`).
+        """
         if macd_diff is None:
             return SubScore(name="MACD", score=50.0, weight=0.20, available=False)
 
@@ -233,20 +274,20 @@ class TechnicalScorer:
         else:
             macd_diff_pct = macd_diff  # fallback if close unavailable
 
-        is_bullish = "Bullish" in signal_str
-        is_bearish = "Bearish" in signal_str
-
-        if is_bullish:
-            score = 65.0 + min(abs(macd_diff_pct) * 20, 35.0)
+        score = 50.0 + _clamp(macd_diff_pct * 20, -35.0, 35.0)
+        if cross == "bullish":
+            score += MACD_CROSS_BONUS
             label = "Bullish crossover"
-            strengths.append("MACD bullish crossover  -  positive momentum")
-        elif is_bearish:
-            score = 35.0 - min(abs(macd_diff_pct) * 20, 35.0)
+            strengths.append("MACD crossed above its signal line  -  momentum turning up")
+        elif cross == "bearish":
+            score -= MACD_CROSS_BONUS
             label = "Bearish crossover"
-            concerns.append("MACD bearish crossover  -  negative momentum")
+            concerns.append("MACD crossed below its signal line  -  momentum turning down")
+        elif macd_diff_pct > 0:
+            label = "Above signal line"
+        elif macd_diff_pct < 0:
+            label = "Below signal line"
         else:
-            # Neutral: slight positive bias if histogram > 0
-            score = 50.0 + _clamp(macd_diff_pct * 10, -15.0, 15.0)
             label = "Neutral"
 
         return SubScore(
@@ -259,10 +300,15 @@ class TechnicalScorer:
         sma_20: Optional[float],
         sma_50: Optional[float],
         sma_200: Optional[float],
-        signal_str: str,
+        cross: Optional[str],
         strengths: List[str],
         concerns: List[str],
     ) -> SubScore:
+        """
+        The share of bullish orderings: price above SMA 20, 50 and 200, and
+        SMA 50 above SMA 200 (the regime, counted once). A golden or death
+        cross adds `MA_CROSS_BONUS` on the bar it happens only (`state.ma_cross`).
+        """
         if close is None or sma_200 is None:
             return SubScore(name="MA Alignment", score=50.0, weight=0.25, available=False)
 
@@ -299,15 +345,14 @@ class TechnicalScorer:
         if total > 0:
             score = (bullish_count / total) * 100.0
 
-        # Boost for golden/death cross
-        if "Golden Cross" in signal_str:
-            score = min(score + 10.0, 100.0)
-            label = "Bullish (Golden Cross)"
-            strengths.append("Golden Cross  -  SMA 50 above SMA 200")
-        elif "Death Cross" in signal_str:
-            score = max(score - 10.0, 0.0)
-            label = "Bearish (Death Cross)"
-            concerns.append("Death Cross  -  SMA 50 below SMA 200")
+        if cross == "golden":
+            score = min(score + MA_CROSS_BONUS, 100.0)
+            label = "Golden Cross"
+            strengths.append("Golden Cross  -  SMA 50 crossed above SMA 200")
+        elif cross == "death":
+            score = max(score - MA_CROSS_BONUS, 0.0)
+            label = "Death Cross"
+            concerns.append("Death Cross  -  SMA 50 crossed below SMA 200")
         elif score >= 70:
             label = "Bullish alignment"
             strengths.append("Price above key moving averages")
@@ -502,9 +547,8 @@ class FundamentalScorer:
 
         # 1. Piotroski F-Score (weight: 0.25)
         quality = analysis.get("quality_scores", {})
-        if is_financial(ticker_info):
-            # Altman, Beneish and accruals don't apply (see is_financial)
-            quality = {k: v for k, v in quality.items() if k == "piotroski_f"}
+        excluded = set(QUALITY_MODELS) - set(applicable_quality_models(ticker_info))
+        quality = {k: v for k, v in quality.items() if k not in excluded}
         f_score = _safe_float(quality.get("piotroski_f"))
         sub_scores.append(self._score_piotroski(f_score, strengths, concerns))
 
@@ -637,6 +681,16 @@ class FundamentalScorer:
         m_score = beneish_data.get("m_score")
         if m_score is None:
             return SubScore(name="Beneish M-Score", score=50.0, weight=0.05, available=False)
+        if beneish_is_partial(beneish_data):
+            # Mostly defaults: the red flags show it as a weak signal; no score
+            return SubScore(
+                name="Beneish M-Score",
+                score=50.0,
+                weight=0.05,
+                raw_value=m_score,
+                label="Too few inputs",
+                available=False,
+            )
 
         # M-Score interpretation: lower (more negative) is better
         # > -1.78: likely manipulator (bad)
@@ -850,9 +904,13 @@ class FundamentalScorer:
     ) -> SubScore:
         if roe_pct is None:
             return SubScore(name="ROE", score=50.0, weight=0.10, available=False)
-        if roe_pct < 0 and net_margin is not None and net_margin > 0:
-            # Profitable with a negative ROE means negative equity (often from
-            # buybacks, e.g. MCD): the ratio says nothing about returns
+        # ROE and net margin of opposite signs mean negative equity: profitable
+        # with a negative ROE (often from buybacks, e.g. MCD), or a loss over
+        # negative equity, which reads as a positive, "excellent" ROE. Either
+        # way the ratio says nothing about returns.
+        if net_margin is not None and (
+            (roe_pct < 0 and net_margin > 0) or (roe_pct > 0 and net_margin < 0)
+        ):
             return SubScore(
                 name="ROE",
                 score=50.0,

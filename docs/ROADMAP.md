@@ -20,15 +20,15 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 | 7 | Construct: portfolio exposure and rebalance proposals | Done (7a-7c live-checked 2026-10-24; review score history 2026-10-25); optional: rebalance --fill |
 | 8 | Evidence: point-in-time fundamentals backtest, evidence-based weights | Planned (outline only) |
 | S1 | Habit: daily `changes` run with a notification, decision journal | Built offline (2026-11-04); live check pending |
-| R | Best-practice review fixes (docs/REVIEW-2026-11.md, batches A-I) | A done (2026-11-05, live-checked); B done (2026-11-10, offline; live check pending); **next: C**; D-E after, F-I later |
+| R | Best-practice review fixes (docs/REVIEW-2026-11.md, batches A-I) | A done (2026-11-05, live-checked); B done (2026-11-10, live-checked); C: H rows done (2026-11-10, offline), **next: C's M and L rows**; D-E after, F-I later |
 | - | Side items: quick wins, faster backtest | Planned (outline only) |
 
 ## Current state and next session (updated 2026-11-10)
 
 **Next session, in order:**
 
-1. **Batch B live check:** Batch B (rebalance and review bookkeeping) is done offline (see REVIEW-2026-11.md). The user runs `quant review --save` and `quant rebalance --cash N --candidates watchlist --save` on the real portfolio, and checks each sale's shares per account against Nordnet.
-2. **Review Batch C**: scoring and vetting consistency, H rows first (see the batch's note). Includes weighting a dimension by its data coverage: live on 2026-11-05, EQNR.OL with no statements scored Fund 84 from 25% coverage and turned Buy.
+1. **Batch B:** done and live-checked on the real portfolio (2026-11-10).
+2. **Review Batch C:** the H rows are done (2026-11-10, offline; see REVIEW-2026-11.md for the score effect). Next its M and L rows; a live `quant review` after the H rows is pending.
 3. Then Batches D (price cache timezone) and E (report.md); F-I as time allows; then plan Phase 8.
 
 **2026-11-05:** S1 live-checked: the daily `changes` covers the 37 holdings, the journal works on a real entry. The first holdings run had been throttled and cached empty statements for every holding; fixed with the Batch A follow-ups (see REVIEW-2026-11.md, Batch A), and the bad history rows removed. Every holding now has a correct baseline from 2026-11-05. Still to do: register the scheduled task (README, "Daily check").

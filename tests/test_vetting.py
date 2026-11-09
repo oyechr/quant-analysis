@@ -106,6 +106,50 @@ class TestBeneish:
         assert flag.severity == "medium"
         assert "3/8" in flag.detail
 
+    def test_skipped_for_banks(self):
+        report = make_report(
+            quality={"beneish_m": {"m_score": -1.0, "components_available": 8}},
+            info={"sector": "Financial Services"},
+        )
+        assert check_beneish(report, TODAY) == []
+
+
+@pytest.mark.parametrize(
+    "sector, models",
+    [
+        ("Financial Services", set()),
+        ("Utilities", {"beneish"}),
+        ("Energy", {"altman", "beneish"}),
+    ],
+)
+def test_red_flags_and_scorer_agree_on_which_models_apply(sector, models):
+    from src.scoring import FundamentalScorer
+
+    quality = {
+        "altman_z": 0.5,
+        "altman_model": "Z''",
+        "beneish_m": {"m_score": -1.0, "components_available": 8},
+    }
+    report = make_report(quality=quality, info={"sector": sector})
+    flagged = {f.rule for f in [*check_altman(report, TODAY), *check_beneish(report, TODAY)]}
+    result = FundamentalScorer().score({"quality_scores": quality}, {"sector": sector})
+    scored = {
+        name
+        for name, sub in (("altman", "Altman Z-Score"), ("beneish", "Beneish M-Score"))
+        if next(s for s in result.sub_scores if s.name == sub).available
+    }
+    assert flagged == scored == models
+
+
+def test_a_partial_beneish_isnt_scored():
+    from src.scoring import FundamentalScorer
+
+    beneish = {"m_score": -1.0, "components_available": 3}
+    result = FundamentalScorer().score({"quality_scores": {"beneish_m": beneish}}, {})
+    sub = next(s for s in result.sub_scores if s.name == "Beneish M-Score")
+    assert not sub.available and sub.label == "Too few inputs"
+    assert not any("Beneish" in c for c in result.concerns)
+
 
 class TestAltman:
     def test_flags_distress_zone(self):

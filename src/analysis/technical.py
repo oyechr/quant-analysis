@@ -4,12 +4,14 @@ Calculates technical indicators from price data using finta library
 """
 
 import logging
+import math
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from finta import TA
 
 from ..config import AnalysisConfig, get_config
+from ..utils.financial import trading_dates
 from ..utils.report import get_currency_symbol
 from ..utils.serialization import format_date
 
@@ -366,6 +368,39 @@ class TechnicalAnalyzer:
 
         return result
 
+    def crossovers(self) -> Dict[str, Optional[str]]:
+        """
+        The trend state for scoring, as values rather than text:
+
+        - `macd_cross`: "bullish" / "bearish" when MACD crossed its signal
+          line on the last bar, else None (being above it is not a cross);
+        - `ma_regime`: "bullish" when SMA 50 is above SMA 200, else "bearish";
+        - `ma_cross`: "golden" / "death" when SMA 50 crossed SMA 200 on the
+          last bar, else None.
+        """
+        state: Dict[str, Optional[str]] = {"macd_cross": None, "ma_regime": None, "ma_cross": None}
+        if len(self.df) < 2:
+            return state
+        last, prev = self.df.iloc[-1], self.df.iloc[-2]
+
+        def cross(fast: str, slow: str, up: str, down: str) -> Optional[str]:
+            values = [_finite(row.get(name)) for row in (last, prev) for name in (fast, slow)]
+            if not all(math.isfinite(v) for v in values):
+                return None
+            now, before = values[0] - values[1], values[2] - values[3]
+            if before <= 0 < now:
+                return up
+            if before >= 0 > now:
+                return down
+            return None
+
+        state["macd_cross"] = cross("MACD", "MACD_signal", "bullish", "bearish")
+        state["ma_cross"] = cross("SMA_50", "SMA_200", "golden", "death")
+        sma50, sma200 = last.get("SMA_50"), last.get("SMA_200")
+        if sma50 is not None and sma200 is not None and not pd.isna(sma50) and not pd.isna(sma200):
+            state["ma_regime"] = "bullish" if sma50 > sma200 else "bearish"
+        return state
+
     def generate_signals(self) -> Dict[str, str]:
         """
         Generate trading signals based on indicator values
@@ -416,10 +451,15 @@ class TechnicalAnalyzer:
             close = latest["Close"]
 
             if not pd.isna(sma50) and not pd.isna(sma200):
-                if sma50 > sma200:
-                    signals["MA_Trend"] = "Bullish (Golden Cross)"
+                cross = self.crossovers()["ma_cross"]
+                if cross == "golden":
+                    signals["MA_Trend"] = "Golden Cross today (SMA 50 crossed above SMA 200)"
+                elif cross == "death":
+                    signals["MA_Trend"] = "Death Cross today (SMA 50 crossed below SMA 200)"
+                elif sma50 > sma200:
+                    signals["MA_Trend"] = "Bullish (SMA 50 above SMA 200)"
                 else:
-                    signals["MA_Trend"] = "Bearish (Death Cross)"
+                    signals["MA_Trend"] = "Bearish (SMA 50 below SMA 200)"
 
                 # Price vs MA
                 if close > sma50 > sma200:
@@ -484,6 +524,7 @@ class TechnicalAnalyzer:
             "statistics": self.calculate_statistics(),
             "latest_values": self.get_latest_values(),
             "signals": self.generate_signals(),
+            "state": self.crossovers(),
             "support_resistance": self.calculate_support_resistance(),
             "data_points": len(self.df),
             "date_range": {
@@ -789,10 +830,14 @@ def calculate_relative_strength(
     if price_data is None or price_data.empty or "Close" not in price_data.columns:
         return None
 
-    prices = price_data["Close"]
+    prices = _closes_by_date(price_data["Close"])
     if len(prices) < 63:  # Need at least 3 months
         return None
 
+    benchmark = None
+    if benchmark_data is not None and not benchmark_data.empty and "Close" in benchmark_data:
+        benchmark = _closes_by_date(benchmark_data["Close"])
+    end = prices.index[-1]
     current_price = float(prices.iloc[-1])
 
     # Calculate returns over each timeframe
@@ -804,26 +849,29 @@ def calculate_relative_strength(
     benchmark_weighted_return = 0.0
     total_weight = 0.0
 
+    # Each horizon starts on the stock's own trading date `days` bars back. The
+    # benchmark is read on the same dates (its last close on or before them),
+    # and a horizon counts only when both series cover it, so a short or
+    # missing benchmark history isn't read as a 0% return.
     for label, days in periods.items():
-        if len(prices) >= days:
-            past_price = float(prices.iloc[-days])
-            if past_price > 0:
-                stock_return = (current_price - past_price) / past_price
-                components[f"return_{label}"] = stock_return * 100
-
-                weight = weights[label]
-                stock_weighted_return += stock_return * weight
-                total_weight += weight
-
-                # Benchmark comparison if available
-                if benchmark_data is not None and not benchmark_data.empty:
-                    bm_prices = benchmark_data["Close"]
-                    if len(bm_prices) >= days:
-                        bm_current = float(bm_prices.iloc[-1])
-                        bm_past = float(bm_prices.iloc[-days])
-                        if bm_past > 0:
-                            bm_return = (bm_current - bm_past) / bm_past
-                            benchmark_weighted_return += bm_return * weight
+        if len(prices) < days:
+            continue
+        start = prices.index[-days]
+        past_price = float(prices.iloc[-days])
+        if past_price <= 0:
+            continue
+        bm_return = 0.0
+        if benchmark is not None:
+            bm_past, bm_now = _close_on(benchmark, start), _close_on(benchmark, end)
+            if bm_past is None or bm_now is None or bm_past <= 0:
+                continue
+            bm_return = (bm_now - bm_past) / bm_past
+        stock_return = (current_price - past_price) / past_price
+        components[f"return_{label}"] = stock_return * 100
+        weight = weights[label]
+        stock_weighted_return += stock_return * weight
+        benchmark_weighted_return += bm_return * weight
+        total_weight += weight
 
     if total_weight == 0:
         return None
@@ -838,7 +886,6 @@ def calculate_relative_strength(
     # Convert to a 1-99 scale (roughly)
     # A relative return of 0% = 50, +100% = ~99, -100% = ~1
     # Using sigmoid-like mapping
-    import math
 
     rs_raw = 50 + 50 * math.tanh(relative_return * 2)
     rs_rating = max(1, min(99, int(rs_raw)))
@@ -861,3 +908,26 @@ def calculate_relative_strength(
             else "Very weak momentum (bottom 20%)"
         ),
     }
+
+
+def _closes_by_date(close: pd.Series) -> pd.Series:
+    """Positive closes indexed by tz-naive trading date, one per day, in order."""
+    out = pd.to_numeric(close, errors="coerce").dropna()
+    out = out[out > 0]
+    out.index = trading_dates(pd.DatetimeIndex(out.index))
+    return out[~out.index.duplicated(keep="last")].sort_index()
+
+
+def _close_on(closes: pd.Series, date: pd.Timestamp) -> Optional[float]:
+    """The last close on or before `date`, or None if the series starts after it."""
+    if closes.empty or closes.index[0] > date:
+        return None
+    return float(closes[:date].iloc[-1])
+
+
+def _finite(value: Any) -> float:
+    """A float, or NaN for a missing or non-numeric value."""
+    try:
+        return float(value)
+    except TypeError, ValueError:
+        return math.nan

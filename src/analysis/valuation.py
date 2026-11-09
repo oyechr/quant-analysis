@@ -28,6 +28,10 @@ BLUME_WEIGHT = 0.67  # adjusted beta = 0.67 x raw + 0.33 x 1
 # The Gordon DDM's growth is perpetual, so it can't exceed long-run nominal
 # growth; same ceiling as the Monte Carlo terminal growth
 DDM_MAX_GROWTH = 4.0
+# A dividend is current while the last payment is at most this many payment
+# intervals old; older, and it was cut or suspended (no yield, DDM or credit)
+STALE_DIVIDEND_INTERVALS = 1.5
+_PAYMENT_INTERVAL_DAYS = {"annual": 365, "semi-annual": 182, "quarterly": 91, "monthly": 30}
 
 
 def dcf_enterprise_value(
@@ -220,6 +224,11 @@ class ValuationAnalyzer:
 
         Handles annual, semi-annual, quarterly, monthly, and irregular payment schedules
 
+        The payments of the last 12 months; failing that, the last payment if
+        it's at most `STALE_DIVIDEND_INTERVALS` intervals old (an annual payer
+        paying a little late). Older than that, the dividend was cut or
+        suspended, and the TTM dividend is 0.
+
         Args:
             dividends_series: Dividend Series with DatetimeIndex
 
@@ -244,22 +253,13 @@ class ValuationAnalyzer:
         if not ttm_dividends.empty and ttm_dividends.sum() > 0:
             return float(ttm_dividends.sum())
 
-        # Fallback: use appropriate number of payments based on frequency
-        if frequency == "annual":
-            # For annual payers, most recent single payment represents the annual dividend
-            return float(dividends_series.tail(1).sum())
-        elif frequency == "semi-annual":
-            # Last 2 payments = 1 year
-            return float(dividends_series.tail(2).sum())
-        elif frequency == "quarterly":
-            # Last 4 payments = 1 year
-            return float(dividends_series.tail(4).sum())
-        elif frequency == "monthly":
-            # Last 12 payments = 1 year
-            return float(dividends_series.tail(12).sum())
-        else:
-            # For irregular/unknown, use last 4 payments as conservative estimate
-            return float(dividends_series.tail(min(4, len(dividends_series))).sum())
+        # Nothing in 12 months. Only a yearly (or irregular) payer can still be
+        # current then: 1.5 intervals of a more frequent payer is under a year.
+        last_paid = dividends_series.index.max()
+        interval = _PAYMENT_INTERVAL_DAYS.get(frequency, _PAYMENT_INTERVAL_DAYS["annual"])
+        if (now - last_paid).days > STALE_DIVIDEND_INTERVALS * interval:
+            return 0.0
+        return float(dividends_series.tail(1).sum())
 
     # ==================== DCF Valuation ====================
 
@@ -838,6 +838,13 @@ class ValuationAnalyzer:
                     else:
                         break
                 result["consecutive_years"] = consecutive
+
+                # Paid before but not lately (see _calculate_ttm_dividend): a
+                # suspension is a 100% cut, and the record of years has ended
+                if ttm_dividend <= 0 and dividends_series.sum() > 0:
+                    result["suspended"] = True
+                    result["dividend_growth_1y"] = -100.0
+                    result["consecutive_years"] = 0
 
                 # Latest ex-dividend date
                 result["latest_ex_dividend_date"] = str(dividends_series.index[-1])

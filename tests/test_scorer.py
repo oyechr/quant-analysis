@@ -263,12 +263,8 @@ class TestTechnicalScorer:
                 "close_price": overrides.get("close_price", 100.0),
                 "indicators": indicators,
             },
-            "signals": overrides.get(
-                "signals",
-                {
-                    "MACD": "Bullish",
-                    "MA_Trend": "Bullish (Golden Cross)",
-                },
+            "state": overrides.get(
+                "state", {"macd_cross": None, "ma_regime": "bullish", "ma_cross": None}
             ),
         }
 
@@ -333,28 +329,36 @@ class TestTechnicalScorer:
         assert self._sub("ADX", ADX_14=15.0).label == "Weak/no trend"
         assert self._sub("ADX", ADX_14=30.0).label == "Strong trend"
 
-    def test_macd_bullish_high_score(self):
-        scorer = TechnicalScorer()
-        data = self._make_tech_data(signals={"MACD": "Bullish"})
-        result = scorer.score(data)
-        macd_score = next(s for s in result.sub_scores if s.name == "MACD")
-        assert macd_score.score >= 65.0
+    def _named(self, name, **overrides):
+        result = TechnicalScorer().score(self._make_tech_data(**overrides))
+        return next(s for s in result.sub_scores if s.name == name)
 
-    def test_macd_bearish_low_score(self):
-        scorer = TechnicalScorer()
-        data = self._make_tech_data(signals={"MACD": "Bearish"})
-        result = scorer.score(data)
-        macd_score = next(s for s in result.sub_scores if s.name == "MACD")
-        assert macd_score.score <= 35.0
+    def test_macd_follows_the_histogram(self):
+        up = self._named("MACD", indicators={"MACD_diff": 1.0})  # 1% of a 100 price
+        down = self._named("MACD", indicators={"MACD_diff": -1.0})
+        assert up.score == pytest.approx(70.0) and up.label == "Above signal line"
+        assert down.score == pytest.approx(30.0) and down.label == "Below signal line"
 
-    def test_golden_cross_boosts_ma_score(self):
-        scorer = TechnicalScorer()
-        data = self._make_tech_data(
-            signals={"MACD": "Neutral", "MA_Trend": "Bullish (Golden Cross)"}
-        )
-        result = scorer.score(data)
-        ma_score = next(s for s in result.sub_scores if s.name == "MA Alignment")
-        assert "Golden Cross" in ma_score.label
+    def test_macd_has_no_jump_at_a_zero_histogram(self):
+        above = self._named("MACD", indicators={"MACD_diff": 0.001}).score
+        below = self._named("MACD", indicators={"MACD_diff": -0.001}).score
+        assert above - below < 0.1  # was 35 -> 65
+
+    def test_a_macd_cross_scores_on_its_bar_only(self):
+        state = {"macd_cross": "bullish", "ma_regime": "bullish", "ma_cross": None}
+        crossed = self._named("MACD", indicators={"MACD_diff": 0.1}, state=state)
+        plain = self._named("MACD", indicators={"MACD_diff": 0.1})
+        assert crossed.score == pytest.approx(plain.score + 10.0)
+        assert crossed.label == "Bullish crossover"
+
+    def test_the_ma_regime_counts_once(self):
+        # Price above SMA 20? no (equal), above 50 and 200, SMA 50 above 200: 3 of 4
+        regime = self._named("MA Alignment")
+        assert regime.score == pytest.approx(75.0)
+        assert "Cross" not in regime.label
+        state = {"macd_cross": None, "ma_regime": "bullish", "ma_cross": "golden"}
+        golden = self._named("MA Alignment", state=state)
+        assert golden.score == pytest.approx(85.0) and golden.label == "Golden Cross"
 
     def test_empty_data_returns_neutral(self):
         scorer = TechnicalScorer()
@@ -427,6 +431,14 @@ class TestFundamentalScorer:
         assert not roe.available and roe.label == "Negative equity"
         assert not any("Negative ROE" in c for c in result.concerns)
         assert result.dimension == "Fundamental"
+
+    def test_a_loss_over_negative_equity_isnt_an_excellent_roe(self):
+        data = self._make_fund_data()
+        data["analysis"]["margins"]["current"]["net_margin"] = -15.0
+        result = FundamentalScorer().score(data, {"roe": 0.86})  # loss / negative equity
+        roe = next(s for s in result.sub_scores if s.name == "ROE")
+        assert not roe.available and roe.label == "Negative equity"
+        assert not any("excellent return on equity" in s for s in result.strengths)
 
     def test_score_is_bounded(self):
         scorer = FundamentalScorer()
@@ -992,7 +1004,7 @@ def test_dimension_without_data_is_left_out_of_the_composite():
             "close_price": 100.0,
             "indicators": {"RSI_14": 50.0, "SMA_50": 95.0, "SMA_200": 90.0},
         },
-        "signals": {"MACD": "Bullish", "MA_Trend": "Bullish (Golden Cross)"},
+        "state": {"macd_cross": None, "ma_regime": "bullish", "ma_cross": None},
     }
     alone = StockScorer().score_from_analyses(technical_data=technical)
     with_empty = StockScorer().score_from_analyses(
@@ -1002,3 +1014,22 @@ def test_dimension_without_data_is_left_out_of_the_composite():
     assert with_empty.fundamental is not None and with_empty.fundamental.data_coverage == 0
     assert with_empty.composite_score == pytest.approx(alone.composite_score)
     assert with_empty.dimensions_available == 1
+
+
+def test_a_thin_dimension_counts_less_in_the_composite():
+    from src.scoring.scorer import coverage_weight
+
+    def dim(name, score, coverage):
+        return (name, DimensionResult(dimension=name, score=score, data_coverage=coverage))
+
+    scorer = StockScorer()
+    t, f = scorer.config.weights.technical, scorer.config.weights.fundamental
+    full = scorer._calculate_composite([dim("technical", 50.0, 1.0), dim("fundamental", 90.0, 1.0)])
+    thin = scorer._calculate_composite(
+        [dim("technical", 50.0, 1.0), dim("fundamental", 90.0, 0.25)]
+    )
+    assert full == pytest.approx((50.0 * t + 90.0 * f) / (t + f))
+    # 25% coverage keeps half its weight
+    assert thin == pytest.approx((50.0 * t + 90.0 * f / 2) / (t + f / 2))
+    assert coverage_weight(0.5) == coverage_weight(0.8) == 1.0  # a bank's partial fundamentals
+    assert coverage_weight(0.0) == 0.0

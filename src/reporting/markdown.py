@@ -275,13 +275,9 @@ def render_report_markdown(
             # MA cross status
             if sma50 and sma200:
                 if sma50 > sma200:
-                    md.append(
-                        "**Trend:** 50-day MA is ABOVE 200-day MA (Golden Cross — typically bullish)"
-                    )
+                    md.append("**Trend:** 50-day MA is ABOVE 200-day MA (an uptrend)")
                 else:
-                    md.append(
-                        "**Trend:** 50-day MA is BELOW 200-day MA (Death Cross — typically bearish)"
-                    )
+                    md.append("**Trend:** 50-day MA is BELOW 200-day MA (a downtrend)")
                 md.append("")
 
         # Momentum summary

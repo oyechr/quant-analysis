@@ -16,12 +16,15 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..analysis.fundamental import altman_zones
-from ..scoring.dimensions import FINANCIAL_SECTORS
+from ..scoring.dimensions import (
+    FINANCIAL_SECTORS,
+    applicable_quality_models,
+    beneish_is_partial,
+)
 
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 BENEISH_THRESHOLD = -1.78  # above = likely manipulator (Beneish 1999)
-BENEISH_MIN_COMPONENTS = 5  # fewer inputs and the score is mostly defaults
 DILUTION_PCT_PER_YEAR = 3.0
 HEAVY_DILUTION_PCT_PER_YEAR = 10.0
 # One year's jump above this, with the other years flat, reads as a deal
@@ -31,12 +34,10 @@ INTEREST_COVERAGE_MIN = 2.0
 STATEMENT_MAX_AGE_MONTHS = 15
 DATA_COVERAGE_MIN = 0.60
 
-# Altman Z and interest cover are built for industrial companies; for banks
-# and insurers leverage and interest are the business model.
+# Interest cover is built for industrial companies; for banks and insurers
+# leverage and interest are the business model. Which quality models
+# (Altman, Beneish) apply is `applicable_quality_models`, shared with the scorer.
 _FINANCIAL_SECTORS = FINANCIAL_SECTORS
-# Altman's samples left out financials and utilities: regulated utilities run
-# on heavy debt and negative working capital without being distressed
-_ALTMAN_EXCLUDED_SECTORS = (*_FINANCIAL_SECTORS, "utilities")
 
 
 @dataclass
@@ -63,12 +64,14 @@ def find_red_flags(report: Dict[str, Any], today: Optional[datetime] = None) -> 
 
 
 def check_beneish(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+    if "beneish_m" not in applicable_quality_models(report.get("info")):
+        return []
     beneish = _quality(report).get("beneish_m") or {}
     m_score = _num(beneish.get("m_score"))
     if m_score is None or m_score <= BENEISH_THRESHOLD:
         return []
     components = beneish.get("components_available")
-    partial = components is not None and components < BENEISH_MIN_COMPONENTS
+    partial = beneish_is_partial(beneish)
     detail = f"M-Score {m_score:.2f} is above {BENEISH_THRESHOLD} (possible earnings manipulation)"
     if partial:
         detail += f"; only {components}/8 inputs available, so treat as a weak signal"
@@ -87,7 +90,11 @@ def check_altman(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
     z = _num(quality.get("altman_z"))
     model = quality.get("altman_model") or "Z"
     distress, _ = altman_zones(model)
-    if z is None or z >= distress or _sector(report) in _ALTMAN_EXCLUDED_SECTORS:
+    if (
+        z is None
+        or z >= distress
+        or "altman_z" not in applicable_quality_models(report.get("info"))
+    ):
         return []
     return [
         RedFlag(

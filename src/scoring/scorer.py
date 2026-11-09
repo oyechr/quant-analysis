@@ -21,6 +21,17 @@ from .trade_levels import TradeLevelsResult
 
 logger = logging.getLogger(__name__)
 
+# A dimension counts at full weight in the composite from this data coverage
+# (the share of its inputs available); below it, the weight falls linearly to
+# zero. Half, because some dimensions are partial by design: a bank's
+# fundamentals leave out Altman, Beneish and accruals (4 of 8 inputs).
+FULL_WEIGHT_COVERAGE = 0.5
+
+
+def coverage_weight(coverage: float) -> float:
+    """The share of its weight a dimension keeps at this data coverage (0-1)."""
+    return max(0.0, min(1.0, coverage / FULL_WEIGHT_COVERAGE))
+
 
 @dataclass
 class ScoringResult:
@@ -431,6 +442,10 @@ class StockScorer:
         """
         Calculate weighted composite score from available dimensions.
         Re-normalizes weights when some dimensions are missing.
+
+        A dimension with thin data counts less: its weight is scaled by
+        `coverage_weight`, so a score built from a quarter of its inputs (a
+        few info ratios, say) can't carry the composite at full weight.
         """
         if not dimensions:
             return 50.0
@@ -440,6 +455,7 @@ class StockScorer:
 
         for weight_attr, dim_result in dimensions:
             weight = getattr(self.config.weights, weight_attr, 0.25)
+            weight *= coverage_weight(dim_result.data_coverage)
             weighted_sum += dim_result.score * weight
             total_weight += weight
 

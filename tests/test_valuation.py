@@ -114,7 +114,7 @@ class TestDcfValuation:
     def test_ddm_uses_cost_of_equity(self):
         analyzer = _analyzer()
         analyzer.dividends_data = pd.Series(
-            [1.0] * 8, index=pd.date_range("2024-01-01", periods=8, freq="QS")
+            [1.0] * 8, index=pd.date_range(end=pd.Timestamp.now(), periods=8, freq="91D")
         )
         ddm = analyzer.calculate_ddm_valuation(growth_rate=3.0)
         assert ddm["required_return_used"] == pytest.approx(9.0)
@@ -159,6 +159,38 @@ class TestDividends:
             0.5, index=pd.date_range(end=pd.Timestamp.now(), periods=4, freq="90D")
         )
         assert analyzer.analyze_dividends()["dividend_yield"] == pytest.approx(4.0)
+
+    def test_a_suspended_dividend_has_no_yield_ddm_or_credit(self):
+        # Paid quarterly for 12 years, then stopped about 5 years ago
+        this_year = pd.Timestamp.now().year
+        analyzer = _analyzer(price=50.0)
+        analyzer.info["payoutRatio"] = 0.0
+        analyzer.dividends_data = _quarterly_dividends(
+            {year: (4, 0.5) for year in range(this_year - 17, this_year - 5)}
+        )
+        dividends = analyzer.analyze_dividends()
+        assert dividends.get("dividend_yield") is None
+        assert dividends["annual_dividend"] == 0.0
+        assert dividends["suspended"] is True and dividends["consecutive_years"] == 0
+        assert dividends["sustainability_score"] == 0
+        assert analyzer.calculate_ddm_valuation()["intrinsic_value_per_share"] is None
+
+    def test_an_annual_payer_a_little_late_still_counts(self):
+        last = pd.Timestamp.now() - pd.DateOffset(months=13)
+        index = pd.DatetimeIndex([last - pd.DateOffset(years=k) for k in (2, 1, 0)])
+        analyzer = _analyzer(price=50.0)
+        analyzer.dividends_data = pd.Series([2.0, 2.0, 2.5], index=index)
+        dividends = analyzer.analyze_dividends()
+        assert dividends["annual_dividend"] == pytest.approx(2.5)
+        assert dividends["dividend_yield"] == pytest.approx(5.0)
+        assert not dividends.get("suspended")
+
+    def test_a_quarterly_payer_silent_for_a_year_is_suspended(self):
+        last = pd.Timestamp.now() - pd.DateOffset(months=14)
+        index = pd.date_range(end=last, periods=12, freq="91D")
+        analyzer = _analyzer(price=50.0)
+        analyzer.dividends_data = pd.Series(0.5, index=index)
+        assert analyzer.analyze_dividends()["annual_dividend"] == 0.0
 
     def test_recent_cut_outweighs_long_run_growth(self):
         this_year = pd.Timestamp.now().year

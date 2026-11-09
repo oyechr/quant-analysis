@@ -22,7 +22,7 @@ from statistics import median
 from typing import Any, Callable, Dict, List, Optional
 
 from ..utils.concurrency import run_concurrently
-from ..utils.fx import usd_per_unit
+from ..utils.fx import major_currency, usd_per_unit
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +147,9 @@ def _mixed_currency(info: Dict[str, Any], key: str) -> bool:
     if not listing:
         return False
     if not statements:
-        return bool(listing != "USD")
-    if statements == listing:
+        return bool(major_currency(str(listing))[0] != "USD")
+    # GBP statements on a GBp listing: Yahoo's ratios use the GBP market cap
+    if major_currency(str(statements))[0] == major_currency(str(listing))[0]:
         return False
     return key not in (info.get("converted_ratios") or [])
 
@@ -275,7 +276,9 @@ def _usd_market_cap(info: Dict[str, Any], fx_lookup: Optional[FxLookup]) -> Opti
     cap = _num(info.get("market_cap"))
     if cap is None or cap <= 0:
         return None
-    currency = info.get("currency") or "USD"
+    # Yahoo's market cap is in the major currency even for a minor-unit
+    # listing (BARC.L: GBP, priced in pence), so convert from the major one
+    currency = major_currency(str(info.get("currency") or "USD"))[0]
     if currency == "USD":
         return cap
     rate = usd_per_unit(currency, fx_lookup) if fx_lookup else None

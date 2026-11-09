@@ -526,6 +526,29 @@ class TestSizeAwarePeers:
         assert result.basis == "yahoo_industry"
         assert "NFG" not in result.peers
 
+    def test_london_caps_are_in_pounds_not_pence(self):
+        # Yahoo gives a .L market cap in GBP although the price is in pence;
+        # against US peers, a pence-rate conversion makes it 100x too small
+        target = {**self.TARGET, "currency": "GBp", "market_cap": 4e10}  # ~50B USD
+        industry = {"USB": 7e10, "PNC": 8e10, "TFC": 6e10, "COF": 1e11}
+        infos = _sized(industry)
+        result = peer_valuation(
+            "BARC.L",
+            target,
+            fetch_info=lambda t: infos.get(t, {}),
+            industry_peers=lambda key: list(industry),
+            fx_lookup={"USDGBP=X": 0.8}.get,
+        )
+        assert set(result.peers) == set(industry)  # all within 0.1x-10x
+
+    def test_gbp_statements_on_a_pence_listing_dont_mix_currencies(self):
+        from src.vetting.peers import _mixed_currency
+
+        info = {"currency": "GBp", "financial_currency": "GBP"}
+        assert not _mixed_currency(info, "price_to_book")
+        assert not _mixed_currency(info, "fcf_yield")
+        assert _mixed_currency({"currency": "GBp", "financial_currency": "USD"}, "fcf_yield")
+
     def test_short_industry_is_topped_up_from_sector(self):
         industry = {"XOM": 1.2e13, "CVX": 1.3e13}  # in the band, but furthest in size
         sector = {f"S{i}": 4e12 + i * 1e10 for i in range(12)}
