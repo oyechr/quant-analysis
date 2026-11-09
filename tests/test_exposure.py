@@ -89,6 +89,53 @@ def test_weekly_returns_drop_short_histories():
     assert len(returns) >= 70  # not cut to the short history
 
 
+def test_weekly_returns_drop_a_series_that_stopped_trading():
+    days = pd.bdate_range("2025-01-06", periods=500)
+    live = pd.Series(_walk(500, 1), index=days)
+    suspended = pd.Series(_walk(485, 2), index=days[:485])  # no bar for the last 3 weeks
+    stale: list = []
+    returns = weekly_returns({"LIVE": live, "HALT": suspended}, min_weeks=52, stale=stale)
+    assert list(returns.columns) == ["LIVE"]
+    assert stale == ["HALT"]
+    assert returns.index[-1] == live.resample("W-FRI").last().index[-1]  # not cut short
+
+
+def test_weekly_returns_keep_a_series_a_holiday_behind():
+    days = pd.bdate_range("2025-01-06", periods=500)
+    us = pd.Series(_walk(500, 1), index=days)
+    oslo = pd.Series(_walk(498, 2), index=days[:498])  # the last two days are holidays
+    stale: list = []
+    returns = weekly_returns({"US": us, "OSLO": oslo}, min_weeks=52, stale=stale)
+    assert list(returns.columns) == ["US", "OSLO"] and stale == []
+
+
+def test_weekly_returns_drop_a_price_that_never_moves():
+    days = pd.bdate_range("2025-01-06", periods=500)
+    stale: list = []
+    returns = weekly_returns(
+        {"A": pd.Series(_walk(500, 1), index=days), "FLAT": pd.Series(50.0, index=days)},
+        min_weeks=52,
+        stale=stale,
+    )
+    assert list(returns.columns) == ["A"] and stale == ["FLAT"]
+
+
+def test_a_flat_holding_leaves_the_risk_numbers_usable():
+    days = pd.bdate_range("2024-10-01", periods=520)
+    closes = {
+        "A.OL": pd.Series(_walk(520, 1), index=days),
+        "B.OL": pd.Series(_walk(520, 2), index=days),
+        "FLAT.OL": pd.Series(80.0, index=days),
+    }
+    reviews = [_holding("A.OL", 0.5), _holding("B.OL", 0.3), _holding("FLAT.OL", 0.2)]
+    measured = measure_exposure(reviews, closes, {})
+    exposure = measured.summary
+    assert math.isfinite(exposure["volatility"])
+    assert exposure["excluded"] == exposure["stale"] == ["FLAT.OL"]
+    assert list(measured.covariance.columns) == ["A.OL", "B.OL"]
+    assert not measured.covariance.isna().any().any()
+
+
 def _ledoit_wolf_loops(x: np.ndarray) -> float:
     """Shrinkage intensity straight from Ledoit and Wolf (2004), section 2 and appendix B."""
     t, n = x.shape

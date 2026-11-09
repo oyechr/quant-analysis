@@ -109,6 +109,38 @@ class TestSteps:
         )
         assert p.trades == []
 
+    def test_a_check_holding_with_a_vet_but_no_score_never_trades(self):
+        # Vetted and priced but unscored: above the position limit, and in a
+        # sector above its limit where it would otherwise be sold first
+        holdings = [
+            _r("NOSCORE", CHECK, value=3600.0, sector="Energy", score=None),
+            _r("E2", value=2400.0, sector="Energy", score=40.0),
+            _r("T", value=4000.0, sector="Tech"),
+        ]
+        p = _propose(holdings, max_position=0.35, max_sector=0.4)
+        assert "NOSCORE" not in _trades(p)
+        assert _trades(p)["E2"].amount == 2000.0  # the sector is fixed with the others
+
+    def test_sector_rounding_leaves_no_false_note(self):
+        # 2000 over: E1 sells 6 shares (1800) and leaves 200, under one E2 share
+        holdings = [
+            _r("E1", value=3000.0, price=300.0, sector="Energy", score=50.0),
+            _r("E2", value=3000.0, price=500.0, sector="Energy", score=60.0),
+            _r("T", value=4000.0, sector="Tech"),
+        ]
+        p = _propose(holdings, max_sector=0.4)
+        assert list(_trades(p)) == ["E1"] and _trades(p)["E1"].amount == 1800.0
+        assert p.notes == []
+
+    def test_sector_overshoot_under_the_minimum_trade_isnt_noted(self):
+        holdings = [
+            _r("E1", value=3000.0, price=10.0, sector="Energy", score=50.0),
+            _r("E2", value=3000.0, price=10.0, sector="Energy", score=60.0),
+            _r("T", value=4000.0, sector="Tech"),
+        ]
+        p = _propose(holdings, max_sector=0.58, min_trade=500)  # 200 over
+        assert p.trades == [] and p.notes == []
+
     def test_trim_sells_down_to_target_in_whole_shares(self):
         p = _propose([_r("BIG", TRIM, value=6000.0, target=0.25), _r("A", value=4000.0)])
         trade = _trades(p)["BIG"]
@@ -229,6 +261,39 @@ class TestAccounts:
         r.cost_price = 10.0
         p = _propose([r, _r("A", value=9000.0)])
         assert p.tax == pytest.approx(10 * 20 * AF_TAX_RATE)
+
+    def test_a_holding_trimmed_then_sold_for_its_sector_never_oversells(self):
+        # 100 shares: 60 in ASK, 40 in AF. The trim sells 40 (all from ASK),
+        # then the sector limit sells 30 more: the last 20 in ASK, then 10 in AF.
+        positions = [AccountPosition("ASK", 60, 50.0), AccountPosition("AF", 40, 50.0)]
+        holdings = [
+            _r("BIG", TRIM, value=10_000.0, target=0.3, sector="Energy", score=40.0,
+               positions=positions, cost=50.0),
+            _r("E2", value=4000.0, sector="Energy", score=70.0),
+            _r("T", value=6000.0, sector="Tech"),
+        ]  # fmt: skip
+        p = _propose(holdings, max_sector=0.35)
+        sold: dict = {}
+        for t in p.trades:
+            if t.ticker == "BIG":
+                sold[t.account] = sold.get(t.account, 0) + t.shares
+        assert sold == {"ASK": 60, "AF": 10}
+        assert p.shares_after["BIG"] == 30
+        assert p.tax == pytest.approx(10 * (100 - 50) * AF_TAX_RATE)  # the AF part only
+        assert [p.shares for p in positions] == [60, 40]  # the review's holding is untouched
+
+    def test_an_account_without_a_type_is_warned_about(self):
+        r = _r(
+            "ODD", EXIT, value=1000.0, target=0.0, positions=[AccountPosition("12345678", 10, 50.0)]
+        )
+        p = _propose([r, _r("A", value=9000.0, positions=[AccountPosition("ASK", 90, 50.0)])])
+        assert p.tax == 0.0  # no AF tax estimate for an unknown account type
+        assert len(p.warnings) == 1
+        assert "12345678 has no type" in p.warnings[0]
+        assert "--label 12345678=ASK" in p.warnings[0]
+        text = render_proposal_text(p.to_dict())
+        assert "!  account 12345678 has no type" in text
+        assert "Not traded: account" not in text
 
     def test_buy_accounts(self):
         assert buy_account(_r("X", country="Norway")) == "ASK or AF"
@@ -358,6 +423,18 @@ def test_cli_rebalance(rebalance_market, tmp_path):
     saved = json.loads((tmp_path / "rebalance.json").read_text(encoding="utf-8"))
     assert saved["cash"] == 5000.0
     assert (tmp_path / "rebalance.md").exists()
+
+
+def test_after_trade_weights_include_the_cash_left():
+    from src.portfolio.rebalance import CASH, _after_trades, _with_cash
+
+    reviews = [_r("A", value=5000.0, sector="Energy"), _r("B", value=5000.0, sector="Tech")]
+    after = _after_trades(reviews, {"A": 50, "B": 25}, cash=2500.0)
+    # 5000 + 2500 + 2500 cash: the same basis as the limits in propose_trades
+    assert [r.weight for r in after] == pytest.approx([0.5, 0.25])
+    summary = _with_cash({"by_sector": [{"name": "Energy", "weight": 0.5, "risk": 0.6}]}, 0.25)
+    assert summary["by_sector"][-1] == {"name": CASH, "weight": 0.25, "risk": 0.0}
+    assert _with_cash({"by_sector": []}, 0.0001) == {"by_sector": []}
 
 
 def test_mix_lines_skip_moves_that_round_away():

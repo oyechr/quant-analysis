@@ -82,13 +82,14 @@ def load_targets(path: Path = DEFAULT_TARGETS) -> TargetSettings:
 
     limits = Limits()
     allowed = {f.name for f in fields(Limits)}
-    for key, value in (raw.get("limits") or {}).items():
+    for key, value in _table(raw.get("limits"), f"{path.name}: [limits]").items():
         if key not in allowed:
             raise ValueError(f"{path.name}: unknown limit {key!r} (known: {sorted(allowed)})")
-        setattr(limits, key, type(getattr(limits, key))(value))
+        setattr(limits, key, _limit(value, type(getattr(limits, key)), f"{path.name}: {key}"))
 
     tickers: Dict[str, TickerTarget] = {}
-    for ticker, values in (raw.get("ticker") or {}).items():
+    for ticker, values in _table(raw.get("ticker"), f"{path.name}: [ticker]").items():
+        values = _table(values, f"{path.name}: [ticker.{ticker!r}]")
         bad = set(values) - {"target", "max"}
         if bad:
             raise ValueError(f"{path.name}: {ticker}: unknown key(s) {sorted(bad)}")
@@ -101,9 +102,31 @@ def load_targets(path: Path = DEFAULT_TARGETS) -> TargetSettings:
     return TargetSettings(limits=limits, tickers=tickers, source=str(path))
 
 
+def _table(value: Any, what: str) -> Dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{what} must be a table, got {value!r}")
+    return value
+
+
+def _limit(value: Any, kind: type, what: str) -> float | int:
+    """A limit of the default's type (whole numbers stay whole), zero or more."""
+    whole = isinstance(value, int) and not isinstance(value, bool)
+    if kind is int and not whole:
+        raise ValueError(f"{what} must be a whole number, got {value!r}")
+    if not (whole or isinstance(value, float)) or not math.isfinite(value):
+        raise ValueError(f"{what} must be a number, got {value!r}")
+    if value < 0:
+        raise ValueError(f"{what} can't be negative, got {value!r}")
+    return int(value) if kind is int else float(value)
+
+
 def _fraction(value: Any, what: str) -> Optional[float]:
     if value is None:
         return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{what} must be a number, got {value!r}")
     number = float(value)
     if not 0 <= number <= 1:
         raise ValueError(f"{what} must be a fraction between 0 and 1, got {value}")

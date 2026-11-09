@@ -156,13 +156,14 @@ class TestLoadTargets:
     def test_reads_limits_and_tickers(self, tmp_path):
         path = tmp_path / "targets.toml"
         path.write_text(
-            "[limits]\nmax_position = 0.08\nmax_new = 2\n\n"
+            "[limits]\nmax_position = 0.08\nmax_new = 2\nmin_trade = 1500\n\n"
             '[ticker."xyz.de"]\ntarget = 0.12\n\n[ticker.ABC]\nmax = 0.05\n',
             encoding="utf-8",
         )
         settings = load_targets(path)
         assert settings.limits.max_position == 0.08
         assert settings.limits.max_new == 2 and isinstance(settings.limits.max_new, int)
+        assert settings.limits.min_trade == 1500.0 and isinstance(settings.limits.min_trade, float)
         assert settings.limits.max_sector == 0.35  # default kept
         assert settings.tickers["XYZ.DE"].target == 0.12
         assert settings.tickers["ABC"].max == 0.05
@@ -175,6 +176,14 @@ class TestLoadTargets:
             ("[limit]\nmax_position = 0.1\n", "unknown section"),
             ("[ticker.ABC]\nweight = 0.1\n", "unknown key"),
             ("[ticker.ABC]\ntarget = 10\n", "between 0 and 1"),
+            ("[ticker.ABC]\ntarget = '0.1'\n", "must be a number"),
+            ("[limits]\nmax_new = 2.9\n", "whole number"),
+            ("[limits]\nmax_new = true\n", "whole number"),
+            ("[limits]\nmin_trade = -500\n", "can't be negative"),
+            ("[limits]\ncash_reserve = 'none'\n", "must be a number"),
+            ("[limits]\nmin_trade = nan\n", "must be a number"),
+            ("limits = 3\n", "must be a table"),
+            ("[ticker]\nABC = 0.1\n", "must be a table"),
         ],
     )
     def test_mistakes_are_reported(self, tmp_path, text, message):

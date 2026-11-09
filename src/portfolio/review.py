@@ -33,7 +33,7 @@ import logging
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 
@@ -55,7 +55,7 @@ from .exposure import (
     to_base_currency,
 )
 from .nordnet import PORTFOLIO_COLUMNS
-from .targets import TargetSettings, target_weights
+from .targets import EXEMPT_SECTORS, Limits, TargetSettings, target_weights
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +77,11 @@ OVERWEIGHT_RATIO = 1.5
 OVERWEIGHT_MIN_GAP = 0.02
 # Daily-return correlation at which two holdings count as one bet
 REDUNDANT_CORRELATION = 0.80
-# Flag a sector holding more than this share of the portfolio
-SECTOR_LIMIT = 0.35
 
 _FUND_TYPES = ("ETF", "MUTUALFUND")
 TAXABLE_ACCOUNTS = ("AF",)
 TAX_FREE_ACCOUNTS = ("ASK", "IPS")
+ACCOUNT_TYPES = (*TAXABLE_ACCOUNTS, *TAX_FREE_ACCOUNTS)
 
 
 @dataclass
@@ -371,7 +370,11 @@ def review_portfolio(
         preset=config.name,
         summary={
             **summarize_portfolio(
-                list(reviews.values()), exposure.correlations, base_currency, exposure.summary
+                list(reviews.values()),
+                exposure.correlations,
+                base_currency,
+                exposure.summary,
+                sector_limit=targets.limits.max_sector,
             ),
             "targets": target_notes,
         },
@@ -587,8 +590,12 @@ def summarize_portfolio(
     correlations: pd.DataFrame,
     base_currency: str,
     exposure: Optional[Dict[str, Any]] = None,
+    sector_limit: float = Limits.max_sector,
 ) -> Dict[str, Any]:
-    """Portfolio totals, concentration and overlap; `exposure` from `measure_exposure`."""
+    """
+    Portfolio totals, concentration and overlap; `exposure` from
+    `measure_exposure`, `sector_limit` from the targets file.
+    """
     exposure = exposure or {}
     valued = [r for r in reviews if r.value is not None and r.weight is not None]
     total = sum(r.value or 0.0 for r in valued)
@@ -602,10 +609,11 @@ def summarize_portfolio(
 
     by_sector = exposure.get("by_sector") or _shares(valued, lambda r: r.sector or "Unknown")
     flags = [
-        f"{row['name']} is {row['weight']:.0%} of the portfolio (limit {SECTOR_LIMIT:.0%})"
+        f"{row['name']} is {row['weight']:.0%} of the portfolio (limit {sector_limit:.0%})"
         for row in by_sector
-        if row["weight"] > SECTOR_LIMIT and row["name"] not in ("Unknown", "Fund")
+        if row["weight"] > sector_limit and row["name"] not in EXEMPT_SECTORS
     ]
+    flags += [unlabeled_account_note(a) for a in unlabeled_accounts(r.holding for r in reviews)]
     largest = max(valued, key=lambda r: r.value or 0.0, default=None)
 
     diversification = identify_correlation_flags(correlations, REDUNDANT_CORRELATION)
@@ -636,6 +644,23 @@ def summarize_portfolio(
         "average_correlation": diversification.get("average_correlation"),
         "exposure": exposure,
     }
+
+
+def unlabeled_accounts(holdings: Iterable[Holding]) -> List[str]:
+    """Named accounts that aren't labelled ASK, IPS or AF (a bare Nordnet number), in order."""
+    seen = dict.fromkeys(
+        p.account
+        for h in holdings
+        for p in (h.positions or [AccountPosition(a, 0.0, None) for a in h.accounts])
+    )
+    return [a for a in seen if a and a.upper() not in ACCOUNT_TYPES]
+
+
+def unlabeled_account_note(account: str) -> str:
+    return (
+        f"account {account} has no type, so its sales aren't ordered ASK first and carry "
+        f"no AF tax estimate; rerun import-portfolio with --label {account}=ASK (or =AF)"
+    )
 
 
 def _shares(

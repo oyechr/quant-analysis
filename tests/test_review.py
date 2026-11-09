@@ -31,6 +31,7 @@ from src.portfolio.review import (
     TRIM,
     is_fund,
     is_overweight,
+    summarize_portfolio,
 )
 
 
@@ -177,6 +178,24 @@ class TestDecideAction:
         assert reasons[-1].startswith("sell from the ASK first")
         _, reasons = decide_action(_review(call="Pass", gain_pct=-10.0, accounts=["AF"]))
         assert not any("gain" in r for r in reasons)
+
+
+def test_sector_flag_uses_the_limit_from_the_targets_file():
+    reviews = [_review(ticker="A", value=3000.0), _review(ticker="B", value=7000.0)]
+    exposure = {"by_sector": [{"name": "Energy", "weight": 0.3}, {"name": "Fund", "weight": 0.7}]}
+    default = summarize_portfolio(reviews, pd.DataFrame(), "NOK", exposure)
+    assert default["concentration_flags"] == []  # 30% is under the default 35%
+    strict = summarize_portfolio(reviews, pd.DataFrame(), "NOK", exposure, sector_limit=0.25)
+    assert strict["concentration_flags"] == ["Energy is 30% of the portfolio (limit 25%)"]
+
+
+def test_accounts_without_a_type_are_flagged():
+    labelled = _review(ticker="A", value=5000.0, accounts=["ASK"])
+    bare = _review(ticker="B", value=5000.0, accounts=["12345678", "AF", ""])
+    flags = summarize_portfolio([labelled, bare], pd.DataFrame(), "NOK")["concentration_flags"]
+    assert len(flags) == 1
+    assert flags[0].startswith("account 12345678 has no type")
+    assert "--label 12345678=ASK" in flags[0]
 
 
 def test_is_overweight_needs_both_ratio_and_gap():

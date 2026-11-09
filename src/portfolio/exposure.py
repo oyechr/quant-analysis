@@ -44,6 +44,10 @@ WEEKS_PER_YEAR = 52
 # The window is the weeks every included holding covers, so a lower bar lets
 # one recent listing cut everyone's history short.
 MIN_WEEKS = 78
+# Rows of the joint trading calendar (about a week) a series may lack at the
+# end: a market holiday or a bar not in yet. A longer gap is a suspension or
+# a delisting, and the series is left out rather than carried forward flat.
+STALE_ROWS = 5
 
 # (symbol, listing currency, label)
 WORLD_BENCHMARK = ("ACWI", "USD", "World")
@@ -92,20 +96,33 @@ def to_base_currency(
     return (local * rate).dropna()
 
 
-def weekly_returns(closes: Dict[str, pd.Series], min_weeks: int = MIN_WEEKS) -> pd.DataFrame:
+def weekly_returns(
+    closes: Dict[str, pd.Series],
+    min_weeks: int = MIN_WEEKS,
+    stale: Optional[List[str]] = None,
+) -> pd.DataFrame:
     """
     Friday-to-Friday returns over the weeks every series covers.
 
-    Each series is carried forward over its own market's holidays. Series
-    with fewer than `min_weeks` returns are left out, so a recent listing
-    doesn't cut everyone's history short.
+    Each series is carried forward over its own market's holidays, and past
+    its last bar by at most `STALE_ROWS`. Left out: series with fewer than
+    `min_weeks` returns, so a recent listing doesn't cut everyone's history
+    short, and series that stopped trading or never move (a suspension, a
+    stale price), whose zero variance would make the covariance unusable.
+    The latter are appended to `stale` when a list is given.
     """
     if not closes:
         return pd.DataFrame()
-    frame = pd.DataFrame(closes).sort_index().ffill()
+    frame = pd.DataFrame(closes).sort_index()
+    frame = frame.ffill(limit_area="inside").ffill(limit=STALE_ROWS)
     returns = frame.resample("W-FRI").last().pct_change(fill_method=None).iloc[1:]
     enough = [c for c in returns.columns if returns[c].notna().sum() >= min_weeks]
-    return returns[enough].dropna()
+    ended = [c for c in enough if pd.isna(returns[c].iloc[-1])]
+    returns = returns[[c for c in enough if c not in ended]].dropna()
+    flat = [c for c in returns.columns if not returns[c].std() > 0]
+    if stale is not None:
+        stale += [*ended, *flat]
+    return returns.drop(columns=flat)
 
 
 def shrunk_covariance(returns: pd.DataFrame) -> Tuple[pd.DataFrame, float]:
@@ -203,16 +220,19 @@ def measure_exposure(
 
     `closes` and `benchmarks` (label -> closes) are daily, in the base
     currency. `local_closes` (listing currency) feed the momentum tilt.
-    Holdings without enough history are listed under "excluded" and left
-    out of the risk numbers (weights renormalized over the rest). Sets each
-    review's `beta` (against the world benchmark) and `risk_share`.
+    Holdings without enough history, or whose price stopped (see
+    `weekly_returns`), are listed under "excluded" and left out of the risk
+    numbers (weights renormalized over the rest); the stopped ones are also
+    under "stale". Sets each review's `beta` (against the world benchmark)
+    and `risk_share`.
 
     The covariance (shrunk) and correlations (sample) cover the included
     holdings, from the same weekly returns.
     """
     valued = [r for r in reviews if r.weight]
     weights = pd.Series({r.holding.ticker: r.weight or 0.0 for r in valued}, dtype=float)
-    returns = weekly_returns({t: closes[t] for t in weights.index if t in closes})
+    stale: List[str] = []
+    returns = weekly_returns({t: closes[t] for t in weights.index if t in closes}, stale=stale)
     included = [t for t in weights.index if t in returns.columns]
     excluded = [t for t in weights.index if t not in returns.columns]
 
@@ -222,6 +242,7 @@ def measure_exposure(
         "end": returns.index[-1].date().isoformat() if len(returns) else None,
         "coverage": float(weights[included].sum()) if included else 0.0,
         "excluded": excluded,
+        "stale": [t for t in excluded if t in stale],
         "volatility": None,
         "shrinkage": None,
         "betas": [],

@@ -199,8 +199,15 @@ def _portfolio_section(data: Dict[str, Any]) -> Section:
         if exposure.get("shrinkage") is not None:
             note += f"; covariance shrinkage {exposure['shrinkage']:.2f}"
         blocks += ["", note]
-    if exposure.get("excluded"):
-        blocks.append("Too little history for the risk numbers: " + ", ".join(exposure["excluded"]))
+    stale = exposure.get("stale") or []
+    short = [t for t in exposure.get("excluded") or [] if t not in stale]
+    if short:
+        blocks.append("Too little history for the risk numbers: " + ", ".join(short))
+    if stale:
+        blocks.append(
+            "Left out of the risk numbers, no recent price or a price that never moves "
+            "(suspended, delisted or stale; check the ticker): " + ", ".join(stale)
+        )
     return Section("PORTFOLIO", blocks or ["No holdings could be valued"])
 
 
@@ -438,7 +445,8 @@ def _before_after_section(data: Dict[str, Any]) -> Section:
 
 
 def _proposal_notes(data: Dict[str, Any]) -> Section:
-    blocks: List[Block] = [f"Not traded: {note}" for note in data.get("notes") or []]
+    blocks: List[Block] = [f"!  {warning}" for warning in data.get("warnings") or []]
+    blocks += [f"Not traded: {note}" for note in data.get("notes") or []]
     if data.get("reserve"):
         blocks.append(
             f"Cash reserve kept: {_money(data['reserve'], data.get('base_currency') or '')}"

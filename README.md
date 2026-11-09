@@ -214,7 +214,7 @@ quant import-portfolio "~/Downloads/Beholdningstabell eksport*.csv" --verify   #
 
 - **Exports:** both formats are read, `Beholdningstabell eksport, kontono. N, date.csv` and the older `aksjelister_konto-N_date.csv`. Quote the pattern, since the names have spaces.
 - **Tickers:** the exports have names but no tickers, so `portfolio/tickers.csv` (`name,ticker`) maps them to Yahoo tickers. Unmapped names are listed so you can add them and rerun.
-- **Accounts:** label them ASK or AF with `--label`, so `review` and `rebalance` can handle tax.
+- **Accounts:** label them ASK or AF with `--label`, so `review` and `rebalance` can handle tax. `review` and `rebalance` warn about an account left unlabeled.
 - **Updating:** rerun the import whenever your holdings change.
 
 #### `quant review`
@@ -264,7 +264,7 @@ quant rebalance --candidates AAPL,MSFT --save         # writes portfolio/rebalan
 - **The output:**
   - a summary line: sales, buys, cash left, and the net estimated AF tax;
   - the trades table, with an account for each trade;
-  - before and after: volatility, betas, effective positions, and the sector, country and currency mix;
+  - before and after: volatility, betas, effective positions, and the sector, country and currency mix (after the trades, as shares of the holdings plus the cash left, which gets its own line);
   - the trades that weren't made, and why.
 - **Accounts:**
   - Sales come from ASK first, where gains are tax-free.

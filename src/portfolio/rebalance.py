@@ -41,17 +41,23 @@ from ..vetting.vet import LOOK_DEEPER, vet_ticker
 from .exposure import MIN_WEEKS, measure_exposure
 from .review import (
     ADD,
+    CHECK,
     EXIT,
     REDUNDANT_CORRELATION,
+    REVIEW,
     TAX_FREE_ACCOUNTS,
     TAXABLE_ACCOUNTS,
     TRIM,
+    AccountPosition,
     Holding,
     HoldingReview,
     MarketData,
     PortfolioReview,
     apply_vet,
+    has_data,
     is_under_review,
+    unlabeled_account_note,
+    unlabeled_accounts,
     value_holding,
 )
 from .targets import EXEMPT_SECTORS, TargetSettings
@@ -60,6 +66,7 @@ logger = logging.getLogger(__name__)
 
 AF_TAX_RATE = 0.3784  # 22% on gains, grossed up by 1.72 (2025-2026)
 SELL, BUY = "Sell", "Buy"
+CASH = "Cash"  # the line for uninvested cash in the after-trade mix
 
 EEA_COUNTRIES = frozenset(
     {
@@ -134,6 +141,7 @@ class Proposal:
     proceeds: float = 0.0
     spent: float = 0.0
     notes: List[str] = field(default_factory=list)  # trades not made, and why
+    warnings: List[str] = field(default_factory=list)  # about the inputs (account types)
     before: Dict[str, Any] = field(default_factory=dict)  # exposure summaries
     after: Dict[str, Any] = field(default_factory=dict)
 
@@ -158,6 +166,7 @@ class Proposal:
             "cash_left": round(self.cash_left, 2),
             "tax": round(self.tax, 2),
             "notes": self.notes,
+            "warnings": self.warnings,
             "before": self.before,
             "after": self.after,
         }
@@ -187,6 +196,14 @@ def propose_trades(
     total = sum(r.value or 0.0 for r in valued) + cash
     amounts: Dict[str, float] = {r.holding.ticker: r.value or 0.0 for r in valued}
     shares: Dict[str, float] = {r.holding.ticker: r.holding.shares for r in holdings}
+    # Shares left per account, reduced by every sale (a holding can be trimmed
+    # and then sold again for its sector)
+    accounts: Dict[str, List[AccountPosition]] = {
+        r.holding.ticker: [replace(p) for p in r.holding.positions] for r in holdings
+    }
+    proposal.warnings = [
+        unlabeled_account_note(a) for a in unlabeled_accounts(r.holding for r in valued)
+    ]
     sectors: Dict[str, str] = {r.holding.ticker: r.sector or "Unknown" for r in valued}
     if total <= 0:
         proposal.shares_after = shares
@@ -210,7 +227,7 @@ def propose_trades(
         shares[ticker] -= n
         amounts[ticker] -= value
         proposal.proceeds += value
-        proposal.trades += _sell_by_account(r, n, reason)
+        proposal.trades += _sell_by_account(r, n, reason, accounts[ticker])
         return value
 
     def buy(r: HoldingReview, amount: float, reason: str) -> float:
@@ -257,7 +274,11 @@ def propose_trades(
             sell(r, amounts[r.holding.ticker], f"Exit: {_first(r.reasons)}", everything=True)
 
     # 2. Review and Check: no trade. 3. Trim and the position limit
-    frozen = {r.holding.ticker for r in valued if is_under_review(r) or not r.vet}
+    frozen = {
+        r.holding.ticker
+        for r in valued
+        if r.action in (REVIEW, CHECK) or is_under_review(r) or not has_data(r)
+    }
     for r in valued:
         ticker = r.holding.ticker
         if r.action == EXIT or ticker in frozen:
@@ -285,8 +306,11 @@ def propose_trades(
             and shares[r.holding.ticker] > 0
         ]
         for r in sorted(sellable, key=lambda r: r.score or 0.0):
-            if over <= 0:
+            # What whole-share rounding leaves over isn't a sale to note
+            if over < max(limits.min_trade, 1e-9):
                 break
+            if over < (r.price_base or 0.0):
+                continue
             over -= sell(r, min(over, amounts[r.holding.ticker]), reason)
 
     # 5. Add holdings, largest shortfall first
@@ -333,23 +357,26 @@ def _not_a_buy(c: HoldingReview, held: bool) -> Optional[str]:
     return None
 
 
-def _sell_by_account(r: HoldingReview, n: float, reason: str) -> List[Trade]:
-    """Split a sale over the accounts, tax-free ones first, with the tax on AF sales."""
+def _sell_by_account(
+    r: HoldingReview, n: float, reason: str, left: List[AccountPosition]
+) -> List[Trade]:
+    """
+    Split a sale over the accounts, tax-free ones first, with the tax on AF
+    sales. `left` is the shares still held per account; it's reduced.
+    """
     h = r.holding
     price = r.price_base or 0.0
-    positions = sorted(
-        h.positions,
-        key=lambda p: 0 if p.account.upper() in TAX_FREE_ACCOUNTS else 1,
-    )
+    positions = sorted(left, key=lambda p: 0 if p.account.upper() in TAX_FREE_ACCOUNTS else 1)
     if not positions:
         return [Trade(h.ticker, h.name, SELL, n, n * price, ", ".join(h.accounts), reason)]
     trades = []
-    left = n
+    remaining = n
     for position in positions:
-        part = min(left, position.shares)
+        part = min(remaining, position.shares)
         if part <= 0:
             continue
-        left -= part
+        remaining -= part
+        position.shares -= part
         tax = None
         cost = position.cost_basis or h.cost_basis
         if position.account.upper() in TAXABLE_ACCOUNTS and cost and r.cost_price:
@@ -419,9 +446,12 @@ def rebalance_portfolio(
 
     proposal = propose_trades(review.holdings, vetted, settings, cash, review.base_currency)
     proposal.before = review.summary.get("exposure") or {}
-    after = _after_trades([*review.holdings, *vetted], proposal.shares_after)
+    after = _after_trades([*review.holdings, *vetted], proposal.shares_after, proposal.cash_left)
     benchmarks = exposure.benchmarks if exposure else market.benchmarks()
-    proposal.after = measure_exposure(after, closes, benchmarks, local).summary
+    proposal.after = _with_cash(
+        measure_exposure(after, closes, benchmarks, local).summary,
+        1.0 - sum(r.weight or 0.0 for r in after),
+    )
     return proposal
 
 
@@ -471,14 +501,29 @@ def _moves_with(closes: pd.Series, returns: pd.DataFrame) -> Optional[Tuple[str,
     return best
 
 
-def _after_trades(reviews: List[HoldingReview], shares: Dict[str, float]) -> List[HoldingReview]:
-    """Copies of the reviews valued at the post-trade share counts."""
+def _after_trades(
+    reviews: List[HoldingReview], shares: Dict[str, float], cash: float = 0.0
+) -> List[HoldingReview]:
+    """
+    Copies of the reviews valued at the post-trade share counts. Weights are
+    of the holdings plus the cash left, the basis the limits are set on.
+    """
     after = []
     for r in reviews:
         n = shares.get(r.holding.ticker, 0.0)
         value = n * (r.price_base or 0.0)
         after.append(replace(r, value=value or None, beta=None, risk_share=None))
-    total = sum(r.value or 0.0 for r in after)
+    total = sum(r.value or 0.0 for r in after) + max(0.0, cash)
     for r in after:
         r.weight = (r.value or 0.0) / total if total and r.value else None
     return after
+
+
+def _with_cash(summary: Dict[str, Any], cash_share: float) -> Dict[str, Any]:
+    """The cash left as its own line in the sector, country and currency mix."""
+    if cash_share < 0.0005:  # it would show as 0.0%
+        return summary
+    for key in ("by_sector", "by_country", "by_currency"):
+        if key in summary:
+            summary[key] = [*summary[key], {"name": CASH, "weight": cash_share, "risk": 0.0}]
+    return summary
