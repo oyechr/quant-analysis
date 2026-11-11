@@ -83,9 +83,11 @@ NOTABLE_FILERS = [
         "description": "David Tepper's hedge fund",
     },
     {
-        "name": "Icahn Enterprises",
-        "cik": "0000813762",
-        "description": "Carl Icahn's investment vehicle",
+        # The 13F-HR is filed by Carl C. Icahn, not by Icahn Enterprises L.P.
+        # (CIK 0000813762), which files no 13F
+        "name": "Carl Icahn",
+        "cik": "0000921669",
+        "description": "Carl Icahn's funds (Icahn Capital)",
     },
 ]
 
