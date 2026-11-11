@@ -10,7 +10,7 @@ from typing import Any, Dict
 import pandas as pd
 
 from ..analysis.fundamental import FundamentalAnalyzer
-from ..analysis.valuation import ValuationAnalyzer
+from ..utils.serialization import dataframe_to_records
 
 logger = logging.getLogger(__name__)
 
@@ -209,22 +209,13 @@ class AnalystRatingsSection(ReportSection):
     def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
         logger.info(f"Fetching analyst ratings for {ticker}")
         analyst = fetcher.fetch_analyst_ratings(ticker, use_cache=use_cache)
+        # dataframe_to_records keeps the GradeDate index (the date of each
+        # change) as a column, as the cached copy already has it
         return {
             "recommendation_count": len(analyst["recommendations"]),
             "upgrade_downgrade_count": len(analyst["upgrades_downgrades"]),
-            "recent_recommendations": (
-                analyst["recommendations"].head(10).replace({float("nan"): None}).to_dict("records")
-                if not analyst["recommendations"].empty
-                else []
-            ),
-            "recent_changes": (
-                analyst["upgrades_downgrades"]
-                .head(10)
-                .replace({float("nan"): None})
-                .to_dict("records")
-                if not analyst["upgrades_downgrades"].empty
-                else []
-            ),
+            "recent_recommendations": dataframe_to_records(analyst["recommendations"].head(10)),
+            "recent_changes": dataframe_to_records(analyst["upgrades_downgrades"].head(10)),
         }
 
     def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -353,34 +344,3 @@ class RiskAnalysisSection(ReportSection):
             _, metrics, _ = raw_data
             return metrics
         return None
-
-
-class ValuationAnalysisSection(ReportSection):
-    """Valuation analysis section (DCF, DDM, dividends, earnings)"""
-
-    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
-        logger.info(f"Performing valuation analysis for {ticker}")
-
-        # Fetch required data
-        info = fetcher.get_ticker_info(ticker, use_cache=use_cache)
-        price_data = kwargs.get("price_data")
-        fundamentals = fetcher.fetch_fundamentals(ticker, use_cache=use_cache)
-        earnings_data = fetcher.fetch_earnings(ticker, use_cache=use_cache)
-        dividends_data = kwargs.get("dividends_data")
-
-        # Create analyzer
-        analyzer = ValuationAnalyzer(
-            ticker=ticker,
-            ticker_info=info,
-            price_data=price_data,
-            fundamentals=fundamentals,
-            earnings_data=earnings_data,
-            dividends_data=dividends_data,
-        )
-
-        # Run analysis
-        return analyzer.analyze()
-
-    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Format valuation data for JSON"""
-        return raw_data  # Already in good format

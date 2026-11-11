@@ -19,6 +19,7 @@ from ..utils.financial import (
     to_float,
 )
 from ..utils.fx import market_cap_in_listing_units
+from ..utils.report import get_currency_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -1176,8 +1177,7 @@ class ValuationAnalyzer:
         md.append("")
 
         results = self.analyze()
-        currency_symbols = {"USD": "$", "CAD": "CA$", "NOK": "kr", "EUR": "€", "GBP": "£"}
-        symbol = currency_symbols.get(self.currency, self.currency)
+        symbol = get_currency_symbol(self.currency)
 
         # DCF Valuation
         md.append("### DCF (Discounted Cash Flow) Valuation")
@@ -1363,8 +1363,9 @@ class ValuationAnalyzer:
             quality = earnings.get("earnings_quality", {})
             if quality.get("assessment"):
                 md.append(f"**Earnings Quality:** {quality['assessment']}")
-                if quality.get("score"):
-                    md.append(f"*(OCF/NI Ratio: {quality['score']:.2f})*")
+                ratio = (quality.get("metrics") or {}).get("cash_flow_to_earnings_ratio")
+                if ratio is not None:
+                    md.append(f"*(OCF/NI Ratio: {ratio:.2f})*")
                 md.append("")
 
             # Recent surprises

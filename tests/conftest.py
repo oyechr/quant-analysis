@@ -157,6 +157,7 @@ def make_context(symbol: str) -> Dict[str, Any]:
             "ToGrade": ["Buy", "Overweight", "Hold"],
             "FromGrade": ["Hold", "Equal-Weight", "Buy"],
             "Action": ["up", "up", "down"],
+            "currentPriceTarget": [250.0, 240.0, np.nan],
         },
         index=pd.DatetimeIndex(
             pd.date_range(end="2026-10-01", periods=3, freq="MS"), name="GradeDate"
@@ -321,7 +322,15 @@ def sample_data_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     data_dir = tmp_path_factory.mktemp("sample_data")
     market = FakeMarket()
     news = [
-        {"id": "1", "content": {"title": "Results beat estimates", "provider": {"name": "Wire"}}}
+        {
+            "id": "1",
+            "content": {
+                "title": "Results beat estimates",
+                "pubDate": "2026-10-02T12:00:00Z",
+                "provider": {"displayName": "Wire"},
+                "canonicalUrl": {"url": "https://example.com/results"},
+            },
+        }
     ]
     for symbol in SAMPLE_TICKERS:
         market.attribute_overrides[symbol] = {

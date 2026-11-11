@@ -340,7 +340,7 @@ def build_brief_context(
     # --- Analyst consensus ---
     ar = report_data.get("analyst_ratings") or {}
     recs = ar.get("recent_recommendations") or []
-    changes = ar.get("recent_upgrade_downgrade") or []
+    changes = ar.get("recent_changes") or []
     if recs:
         lines.append("=== ANALYST CONSENSUS ===")
         latest = recs[0] if recs else {}
@@ -354,7 +354,7 @@ def build_brief_context(
         lines.append("Recent changes (latest 5):")
         for c in changes[:5]:
             lines.append(
-                f"  {c.get('GradeDate', '')[:10]}  {c.get('Firm', '')}  "
+                f"  {str(c.get('GradeDate') or '')[:10]}  {c.get('Firm', '')}  "
                 f"{c.get('Action', '')}  {c.get('FromGrade', '')} -> {c.get('ToGrade', '')}"
             )
     lines.append("")
