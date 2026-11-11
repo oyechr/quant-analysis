@@ -107,6 +107,7 @@ quant screen --list                            # the built-in universes
 - **Universes:** `sp500`, `sp100`, `nasdaq100`, `obx` (from Nasdaq's and Wikipedia's lists, cached for 30 days); `discover` (the last `quant discover` picks); `watchlist`; a ticker file (one or more per line, `#` comments, or a CSV with a `ticker` column); or literal tickers. Mix them freely.
 - **Stage 1, rank:** company info and a year of prices per ticker. Each is ranked against the others on value (earnings yield, book/price), quality (ROE, leverage), momentum (12-1 month return) and low volatility, as percentiles (100 = best).
 - **Stage 2, score:** the full technical, fundamental, risk and valuation analysis for the top N.
+- **The table:** one row per scored ticker, in factor-rank order. Score, Signal and Conf are the composite, its band and its confidence (as in `report`). FRank is the stage 1 rank in the universe (1 = best), from the factor percentiles weighted value 25%, quality 25%, momentum 30% and low volatility 20%. Val, Qua, Mom and LVo are those percentiles. A `!` line under a ticker is a data warning, such as stale prices. A high FRank with a low Score means cheap or strong on the simple factors but weak in the full analysis; that's worth a `vet` before trusting either.
 - **Filters:**
   - `--sector` / `--exclude-sector` match a sector or industry substring, and can be repeated.
   - `--min-mcap` / `--max-mcap` (e.g. `500M`, `10B`) are in the universe's own currency: NOK for `obx`, and USD when it mixes currencies. `--currency` picks another.
@@ -124,6 +125,11 @@ quant discover --sector Technology
 quant screen discover                 # then rank and score the consensus picks
 ```
 
+- **The output**, up to `--top` rows per section, strongest first (strength is 0-100):
+  - **Ticker overlap:** names held by several funds. Overlap is funds holding it out of funds tracked, and strength is 80% the overlap share and 20% the average portfolio weight (5% or more counts in full). Under each: the funds, and what they did last quarter.
+  - **Sector/industry clusters:** industries several funds are in. Strength is 60% how many funds are in it and 40% how many names each holds there (3 or more counts in full).
+  - **Activity convergence:** several funds buying (or selling) the same name within 90 days. Four or more funds is strength 100.
+  - **Contrarian signals:** names some funds bought and others sold. Net is the side with more funds; strength is higher the more evenly split and the more funds involved.
 - **Options:** `--min-overlap` (default 2), `--top` (default 20), `--sector`, `--enrich` (sector data for every holding, not just the top ones; slow), and `--list-sources`.
 - **Refreshing:** 13F filings arrive about 45 days after each quarter (mid-February, mid-May, mid-August, mid-November), so the data is 1-4 months old. Refresh with `--no-cache` after those dates.
 - **User-Agent:** SEC asks for one with contact details (`edgar_user_agent` in `config.json`).
@@ -175,6 +181,26 @@ quant --format toon report MSFT --exclude-technical
 
 `--exclude-technical`, `--exclude-fundamental`, `--exclude-risk` and `--exclude-valuation` leave sections out.
 
+**The scorecard** (also what `quant score` summarizes):
+
+- **Composite score, signal and confidence** (see [Composite score](#composite-score)).
+- **Dimension breakdown:** each dimension's score, with `[N% data]`, the share of its measures that had data.
+- **Strengths and concerns:** notes each dimension adds when a measure crosses a rule-of-thumb line (ROE of 20% or more, beta above 1.8, RSI of 70 or more, and so on), in the order technical, fundamental, risk, valuation. The scorecard shows the first five of each; the JSON has them all.
+- **Trade levels:** see below.
+
+The JSON file holds everything behind the scorecard: every indicator, ratio and valuation model with its inputs, plus analyst ratings, holders and news. `report.md` is the readable version.
+
+**Trade levels** (in `report` and `vet`) are two scenarios built from the chart, not predictions:
+
+| Line | Bullish scenario | Bearish scenario |
+|------|------------------|------------------|
+| Entry | The nearest of support, the lower Bollinger band, or the 50- or 200-day average below the price. Two within 5% of each other make a zone | The nearest of resistance, upper Bollinger band, the 50-day average above the price, or the price itself |
+| Target | The lowest of fair value, resistance or upper band that's at least 2% above the price | The highest of support, fair value or lower band that's at least 2% below |
+| Stop | 1x ATR below support (2x ATR below the entry if there's no support) | 1x ATR above resistance (or 2x ATR above the entry) |
+| R:R | (target − entry) / (entry − stop), from the middle of the entry zone | The same, mirrored |
+
+ATR (14) is the average daily range over 14 days, so a stop one ATR away sits about a day's normal move beyond the level. An R:R under 1 means the stop is further away than the target. Support and resistance are clusters of recent swing highs and lows.
+
 #### `quant score` and `quant compare`
 
 ```bash
@@ -184,7 +210,10 @@ quant compare AAPL MSFT --weights "0.6,0.4"    # plus a portfolio view
 quant compare EQNR BP --save-chart data/corr.png
 ```
 
-`compare` flags pairs that move together (correlation above 0.8) and hedges (below -0.3), and suggests inverse-volatility weights.
+- **`score`** prints one row per ticker: composite, signal, confidence, and the four dimension scores (Tech, Fund, Risk, Val; N/A without data).
+- **`compare`** prints four tables: the scores, relative valuation (P/E, forward P/E, P/B, PEG, EV/EBITDA, FCF yield, DCF upside), key metrics (market cap, revenue growth, ROE, dividend yield, beta), and the correlation of daily returns.
+- **Diversification:** a score from the average correlation, pairs that move together (correlation above 0.8), hedges (below -0.3), and suggested weights by inverse volatility next to equal weights and each ticker's annual volatility.
+- **`--weights`** adds a portfolio view: the weighted score and beta, and a diversification ratio from the correlations alone (1 means no diversification; higher is better).
 
 #### `quant chat`
 
@@ -380,12 +409,17 @@ quant backtest watchlist --no-save
 | Hit rate | Share of months the top fifth beat the bottom fifth |
 | Signal bands | Return against the index for each Buy/Hold/Sell band. Useful bands rise from Strong Sell to Strong Buy |
 
-**Statistics:** intervals are 95%, with Newey-West errors because the windows overlap. A beta-adjusted section separates market exposure from stock picking.
+Each cell shows the estimate and its 95% interval; `*` marks an interval that excludes zero, which is the only kind of result worth reading as more than noise. In the band table, each cell is the mean monthly return against the index, then (in parentheses) the share of stock-months that beat it.
+
+**Beta-adjusted section:** the same tables, with each return net of what the stock's beta would explain: (return − risk-free) − beta × (index − risk-free). A signal that favours high-beta stocks looks good in a rising market just because those stocks move more. If a result shrinks here, it came from picking stocks that move more (or less) than the market, not stocks that did better for their risk.
+
+**Statistics:** Newey-West errors, because the 3- and 6-month windows overlap.
 
 **Findings (October 2021 to September 2026, sp100 and OBX):**
 - **No edge in the composite.** The price-only composite has rank ICs between -0.04 and +0.02, and every interval includes zero. The bands don't rise from Sell to Buy; on sp100, Buy did worst. That is why the bands are documented as rules of thumb.
 - **Low volatility lost** by about 5% over 3 months, beta-adjusted. That goes against the long-run evidence, so the risk score is unchanged for now.
 - **Momentum** leaned positive, but within noise.
+- **Rerun on OBX (November 2021 to October 2026):** the same picture. The technical score's top fifth trailed its bottom fifth by 3.5% over 3 months, at the edge of significance, and not significantly after the beta adjustment. Low volatility trailed by 6.4% over 3 months raw and 4.9% beta-adjusted, so part of its loss was low-beta stocks lagging a rising Oslo market.
 
 **Limits:**
 - Fundamentals and valuation can't be tested: Yahoo serves restated statements with no publication dates.
@@ -401,9 +435,14 @@ Each ticker gets a score from 0 to 100, built from four dimensions, weighted by 
 - **Technical:** trend (SMA, EMA, MACD), momentum (RSI, Stochastic, Williams %R), volatility (Bollinger, ATR, ADX), and volume (OBV, VWAP, MFI).
 - **Fundamental:** Piotroski F-Score, Altman Z, Beneish M, accruals, growth (revenue, earnings and FCF CAGR), margins, and ROE.
   - Altman's original Z is used for manufacturers (industrials, materials, energy), and Z'' for everyone else.
-  - Banks and insurers skip the cash-flow measures and Altman.
+  - Banks and insurers get Piotroski only (no Altman or Beneish), and skip the cash-flow measures. Utilities skip Altman, since regulated utilities run on heavy debt without being distressed.
+  - A Beneish M-Score from fewer than 5 of its 8 inputs isn't scored, and is only a medium red flag.
 - **Risk:** volatility, downside deviation, Sharpe, Sortino and Calmar ratios, drawdowns, VaR at 95% and 99%, and beta and alpha against the home index (OSEBX for `.OL`, FTSE 100 for `.L`, DAX for `.DE`, the S&P 500 for US listings).
-- **Valuation:** DCF against the price, P/E, PEG, FCF yield, dividend sustainability, and earnings quality. Banks and insurers skip DCF and FCF yield.
+- **Valuation:** DCF against the price, P/E, PEG, FCF yield, dividend sustainability, and earnings quality. Banks and insurers skip DCF and FCF yield. A dividend not paid within 1.5 of its usual intervals counts as suspended: no yield, no DDM.
+
+**Combining:** the composite is the preset-weighted average of the dimensions that have data. A dimension with under 50% of its measures available counts for less, in proportion (at 25% it keeps half its weight), so a thin dimension can't swing the score. The signal comes from the score as shown, rounded to whole points.
+
+**Confidence:** High (75%+), Medium (50%+) or Low. It's 40% from how many of the four dimensions have data, and 60% from their average data coverage (the `[N% data]` next to each dimension). `vet` says Look deeper only with at least Medium confidence.
 
 **Bands:** Strong Buy is 80+, Buy 65-80, Hold 50-65, Sell 35-50, and Strong Sell below 35. Read a band as a summary of the score, not as a forecast.
 
@@ -445,7 +484,7 @@ Many companies report in one currency and trade in another; most Oslo energy nam
 - **Source:** everything comes from Yahoo Finance through yfinance: prices, statements, earnings, dividends, holders, analyst ratings and news.
 - **Cache expiry:** prices 12 hours, company info 24 hours, statements 7 days, and so on. Override this in `config.json`.
 - **When Yahoo fails:** the expired cache is used, and the output says so.
-- **Stale data**, such as a last price bar 9 days old, is flagged in reports and red flags.
+- **Stale data**, such as a last price bar more than 5 days old, is flagged in reports and red flags.
 
 ## Your files
 

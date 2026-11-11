@@ -104,6 +104,9 @@ def sections_to_markdown(sections: List[Section]) -> str:
         out += [f"# {section.title}" if i == 0 else f"## {section.title.title()}", ""]
         for block in section.blocks:
             if isinstance(block, Table):
+                # A table straight after a list item reads as part of it
+                if out[-1] != "":
+                    out.append("")
                 out += [*_markdown_table(block), ""]
             elif block:
                 out.append(block if block.startswith(("-", "|")) else f"- {block.strip()}")

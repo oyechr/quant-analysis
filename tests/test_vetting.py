@@ -46,6 +46,7 @@ from src.vetting.red_flags import (
     check_statement_age,
     share_growth_per_year,
 )
+from src.vetting.render import Section, Table, sections_to_markdown
 from src.vetting.verdict import SIGNAL_BANDS, reprice_report
 
 TODAY = datetime(2026, 9, 28)
@@ -841,6 +842,16 @@ class TestVetEndToEnd:
         markdown = render_markdown(result.to_dict())
         assert markdown.startswith("# VET: AAPL")
         assert "| Metric |" in markdown
+
+    def test_markdown_table_after_a_line_starts_a_new_block(self):
+        # Without the blank line, the table renders as text inside the list item
+        section = Section("PROPOSAL", ["2 sells, 1 buy", "", Table(["A", "B"], [["x", "1"]])])
+
+        markdown = sections_to_markdown([section])
+
+        assert "- 2 sells, 1 buy\n\n| A | B |" in markdown
+        lines = markdown.splitlines()
+        assert all(lines[i - 1] == "" for i, line in enumerate(lines) if line.startswith("| A"))
 
     def test_explicit_peers_are_fetched(self, vet_market):
         market, tmp_path = vet_market

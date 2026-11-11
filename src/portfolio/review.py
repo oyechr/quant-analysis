@@ -75,7 +75,7 @@ _SELL_SIGNALS = ("Sell", "Strong Sell")
 # 2 percentage points above it (so tiny positions aren't flagged over noise)
 OVERWEIGHT_RATIO = 1.5
 OVERWEIGHT_MIN_GAP = 0.02
-# Daily-return correlation at which two holdings count as one bet
+# Weekly-return correlation (see exposure.py) at which two holdings count as one bet
 REDUNDANT_CORRELATION = 0.80
 
 _FUND_TYPES = ("ETF", "MUTUALFUND")

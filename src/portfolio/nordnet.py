@@ -120,8 +120,8 @@ def write_portfolio(holdings: pd.DataFrame, path: Path) -> None:
 
 
 def _nordnet_number(value: object) -> float:
-    """'1 234,56' / '1 234,56' -> 1234.56; blanks -> NaN."""
-    text = str(value or "").replace(" ", "").replace(" ", "").replace(",", ".")
+    """'1 234,56' -> 1234.56, with a space or Nordnet's non-breaking space between thousands; blanks -> NaN."""
+    text = str(value or "").replace("\u00a0", "").replace(" ", "").replace(",", ".")
     try:
         return float(text)
     except ValueError:
