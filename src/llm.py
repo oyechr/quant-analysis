@@ -1,8 +1,8 @@
 """
-LLM integration for generating plain-English investment briefs from TOON reports.
+LLM integration for `quant chat`: a conversation about one ticker's report.
 
-Supports Anthropic (Claude) and OpenAI (GPT). Provider is inferred from the
-model name: claude-* -> Anthropic, gpt-*/o*-* -> OpenAI.
+The provider follows the model name: claude-* goes to Anthropic, and every
+other name (gpt-4.1, o4-mini, ...) goes to OpenAI.
 
 Configure in config.json:
     {
@@ -11,40 +11,17 @@ Configure in config.json:
         "llm_openai_api_key": "sk-..."
     }
 
-Without llm_model the default is gpt-4.1 through GitHub Models (free tier).
-claude-haiku-5-5 is the cheap Anthropic option (well under a cent per brief);
-claude-opus-5-5 gives richer analysis at about 40x the price.
+The default model is claude-haiku-5-5, the cheap option (well under a cent per
+brief); claude-opus-5-5 gives richer analysis at about 40x the price. GitHub
+Models, the old free default, was retired by GitHub on 2026-07-30.
+
+Every provider error reaches the caller as a ValueError with a readable
+message, so a failed turn never ends the chat session.
 """
 
-import json
 import logging
 import sys
-from datetime import date
-from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
-
-from .utils.files import atomic_write_text
-
-_USAGE_FILE = Path(__file__).parent.parent / "data" / ".llm_usage.json"
-
-# RPD limits for known GitHub Models (free tier)
-_GITHUB_MODEL_LIMITS: Dict[str, int] = {
-    "gpt-4.1": 50,
-    "gpt-4o": 50,
-    "o3-mini": 50,
-    "o4-mini": 50,
-    "gpt-4.1-mini": 150,
-    "Meta-Llama-3.3-70B": 150,
-    "Mistral-Small-3.1": 128,
-    "DeepSeek-R1": 150,
-}
-
-# Quality-ordered fallback chain used when the preferred model is exhausted
-_GITHUB_FALLBACK_CHAIN = [
-    "gpt-4.1",  # best quality,   50 RPD
-    "gpt-4.1-mini",  # very good,     150 RPD
-    "Meta-Llama-3.3-70B",  # solid OSS, 150 RPD
-]
 
 logger = logging.getLogger(__name__)
 
@@ -57,35 +34,14 @@ Report data:
 
 Answer questions about this stock using the data above. Be specific and cite numbers from the report. When asked about hypothetical scenarios (e.g. "what if growth drops to 2%?"), reason through the implications clearly using the provided metrics. If asked for a full investment brief or summary, structure it as: company snapshot, score interpretation, key strengths, key risks, valuation, and buy/hold/avoid conclusion. Be direct and concise. No disclaimers."""
 
-SYSTEM_PROMPT = """You are a buy-side equity analyst reviewing a structured quantitative report.
 
-The report contains:
-- A composite score (0-100) and dimension scores: Technical, Fundamental, Risk, Valuation
-- Key strengths and concerns flagged by the scoring engine
-- Technical indicators (RSI, MACD, moving averages, Bollinger Bands, ADX, etc.)
-- Fundamental metrics (revenue/earnings growth, margins, Piotroski F-Score, Altman Z-Score)
-- Risk metrics (Sharpe ratio, Sortino, max drawdown, VaR, beta)
-- Valuation models (DCF intrinsic value, DDM, FCF yield, earnings quality)
-
-Write a concise investment brief with these sections:
-1. **Company snapshot** (1-2 sentences: what the company does and its current market position)
-2. **Score interpretation** (what the composite and dimension scores imply about the setup)
-3. **Key strengths** (top 2-3, with specific numbers from the report)
-4. **Key risks** (top 2-3 that could invalidate the thesis)
-5. **Valuation** (cheap / fair / expensive - reference DCF/DDM/FCF yield where available)
-6. **Conclusion** (Buy / Hold / Avoid with a one-sentence rationale)
-
-Be direct and specific. Use numbers from the report. No disclaimers. Max 450 words."""
+class LLMConfigError(ValueError):
+    """No credentials for the chosen provider: retrying won't help."""
 
 
 def _infer_provider(model: str) -> str:
-    """Infer LLM provider from model name."""
-    m = model.lower()
-    if m.startswith("claude"):
-        return "anthropic"
-    if m.startswith(("gpt-", "o1-", "o3-", "o4-")):
-        return "openai"
-    return "anthropic"
+    """Anthropic for claude-* models; every other name is OpenAI-compatible."""
+    return "anthropic" if model.lower().startswith("claude") else "openai"
 
 
 def _fmt(value: Any, pct: bool = False, decimals: int = 1) -> str:
@@ -378,224 +334,39 @@ def build_brief_context(
     return "\n".join(lines)
 
 
-def explain(
-    toon_text: str,
-    model: Optional[str] = None,
-    anthropic_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
-) -> str:
-    """
-    Generate a plain-English investment brief from a TOON report.
-
-    Streams tokens to stdout as they arrive, then returns the full text.
-
-    Args:
-        toon_text: TOON-formatted report content.
-        model: Model name override (e.g. 'gpt-4o'). Reads llm_model from
-               config.json if not provided.
-        anthropic_api_key: Override for Anthropic key (else reads config).
-        openai_api_key: Override for OpenAI key (else reads config).
-
-    Returns:
-        Full narrative as a string.
-
-    Raises:
-        ValueError: API key not configured.
-        ImportError: Required provider package not installed.
-    """
-    from .config import get_config
-
-    config = get_config()
-    resolved_model = model or config.llm_model
-    provider = _infer_provider(resolved_model)
-
-    if provider == "anthropic":
-        key = anthropic_api_key or config.llm_anthropic_api_key
-        if not key:
-            raise ValueError(
-                "Anthropic API key not configured.\nAdd 'llm_anthropic_api_key' to config.json."
-            )
-        return _stream_anthropic(toon_text, resolved_model, key)
-
-    # For OpenAI-compatible models: prefer GitHub Models (free) when token is
-    # configured; fall back to direct OpenAI API.
-    github_token = config.llm_github_token
-    if github_token:
-        return _stream_github(toon_text, resolved_model, github_token)
-
-    key = openai_api_key or config.llm_openai_api_key
-    if not key:
-        raise ValueError(
-            "No LLM credentials configured.\n"
-            "Add 'llm_github_token' (free, recommended) or 'llm_openai_api_key' to config.json.\n"
-            "GitHub token: https://github.com/settings/tokens (no special scopes needed)"
-        )
-    return _stream_openai(toon_text, resolved_model, key)
-
+# ---------------------------------------------------------------------------
+# Provider settings
+# ---------------------------------------------------------------------------
 
 # Current Claude models think before answering, and thinking counts toward
 # max_tokens, so leave room for both (the calls stream, so a large cap is safe).
 ANTHROPIC_MAX_TOKENS = 16000
+# OpenAI: room for a reasoning model's hidden reasoning plus the reply.
+OPENAI_MAX_TOKENS = 16000
 
 
-def _note_anthropic_stop(stop_reason: Optional[str]) -> None:
-    """Say so when a reply was cut off or declined instead of ending normally."""
-    if stop_reason == "max_tokens":
-        sys.stdout.write("\n  [Note: the reply hit the length limit and was cut off]")
-    elif stop_reason == "refusal":
-        sys.stdout.write("\n  [Note: the model declined to answer this request]")
+# ---------------------------------------------------------------------------
+# Output helpers
+# ---------------------------------------------------------------------------
 
 
-def _stream_anthropic(toon_text: str, model: str, api_key: str) -> str:
-    try:
-        import anthropic
-    except ImportError:
-        raise ImportError("anthropic package not installed. Run: pip install anthropic")
-
-    client = anthropic.Anthropic(api_key=api_key)
-    tokens = []
-
-    with client.messages.stream(
-        model=model,
-        max_tokens=ANTHROPIC_MAX_TOKENS,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": toon_text}],
-    ) as stream:
-        for text in stream.text_stream:
-            sys.stdout.write(text)
-            sys.stdout.flush()
-            tokens.append(text)
-        _note_anthropic_stop(stream.get_final_message().stop_reason)
-
-    sys.stdout.write("\n")
+def _emit(text: str) -> None:
+    sys.stdout.write(text)
     sys.stdout.flush()
-    return "".join(tokens)
 
 
-def _read_github_usage() -> Dict[str, Any]:
-    """Read today's per-model usage counters from disk."""
-    today = str(date.today())
-    if _USAGE_FILE.exists():
-        try:
-            stored = json.loads(_USAGE_FILE.read_text(encoding="utf-8"))
-            if isinstance(stored, dict) and stored.get("date") == today:
-                # Migrate old flat format {date, count} -> {date, models: {}}
-                if "count" in stored and "models" not in stored:
-                    return {"date": today, "models": {}}
-                return stored
-        except json.JSONDecodeError, OSError:
-            pass
-    return {"date": today, "models": {}}
+def _note_stop_reason(reason: Optional[str]) -> None:
+    """Say so when a reply was cut off or declined instead of ending normally.
 
-
-def _write_github_usage(data: Dict[str, Any]) -> None:
-    _USAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(_USAGE_FILE, json.dumps(data, indent=2))
-
-
-def _select_and_increment_github_model(preferred: str) -> tuple:
-    """Select the best available GitHub Model and increment its counter.
-
-    Tries preferred model first, then walks _GITHUB_FALLBACK_CHAIN.
-    Returns (model_name, used_after_increment, daily_limit).
+    Anthropic says max_tokens/refusal; OpenAI-compatible APIs say
+    length/content_filter.
     """
-    usage = _read_github_usage()
-    counters = usage.setdefault("models", {})
-
-    # Build candidate list: preferred first, then fallbacks not already tried
-    candidates = [preferred] + [m for m in _GITHUB_FALLBACK_CHAIN if m != preferred]
-
-    for model in candidates:
-        limit = _GITHUB_MODEL_LIMITS.get(model, 50)
-        used = counters.get(model, 0)
-        if used < limit:
-            counters[model] = used + 1
-            _write_github_usage(usage)
-            return model, counters[model], limit
-
-    # All candidates exhausted — build a helpful summary
-    lines = ["All GitHub Models daily limits reached:"]
-    for m in candidates:
-        lim = _GITHUB_MODEL_LIMITS.get(m, 50)
-        lines.append(f"  {m}: {counters.get(m, 0)}/{lim} RPD")
-    lines.append("Limits reset at midnight UTC.")
-    raise ValueError("\n".join(lines))
-
-
-def _stream_github(toon_text: str, model: str, github_token: str) -> str:
-    """Stream via GitHub Models free tier, with automatic model fallback."""
-    try:
-        import openai  # noqa: F401 (verify installed before tracking quota)
-    except ImportError:
-        raise ImportError("openai package not installed. Run: pip install openai")
-
-    actual_model, used, limit = _select_and_increment_github_model(model)
-    if actual_model != model:
-        sys.stdout.write(f"  [Note: {model} exhausted, falling back to {actual_model}]\n")
-        sys.stdout.flush()
-
-    result = _stream_openai(
-        toon_text,
-        actual_model,
-        api_key=github_token,
-        base_url="https://models.inference.ai.azure.com",
-    )
-    remaining = limit - used
-    sys.stdout.write(
-        f"  [GitHub Models: {actual_model} {used}/{limit} today, {remaining} remaining]\n"
-    )
-    sys.stdout.flush()
-    return result
-
-
-def _stream_openai(toon_text: str, model: str, api_key: str, base_url: Optional[str] = None) -> str:
-    try:
-        import openai
-    except ImportError:
-        raise ImportError("openai package not installed. Run: pip install openai")
-
-    client = openai.OpenAI(api_key=api_key, base_url=base_url)
-    tokens = []
-
-    try:
-        stream = client.chat.completions.create(
-            model=model,
-            max_tokens=1024,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": toon_text},
-            ],
-            stream=True,
-        )
-    except openai.AuthenticationError as e:
-        if base_url:
-            raise ValueError(
-                "GitHub Models authentication failed - check your GitHub PAT in config.json."
-            ) from e
-        raise ValueError(f"OpenAI authentication failed - check your API key. ({e})") from e
-    except openai.RateLimitError as e:
-        if base_url:
-            raise ValueError("GitHub Models rate limit hit. Resets at midnight UTC.") from e
-        raise ValueError(
-            "OpenAI quota exceeded. Add billing credits at https://platform.openai.com/billing"
-        ) from e
-    except openai.APIError as e:
-        raise ValueError(f"API error: {e}") from e
-    try:
-        for chunk in stream:
-            if not chunk.choices:
-                continue
-            text = chunk.choices[0].delta.content or ""
-            if text:
-                sys.stdout.write(text)
-                sys.stdout.flush()
-                tokens.append(text)
-    except Exception as e:
-        raise ValueError(f"OpenAI streaming error: {e}") from e
-
-    sys.stdout.write("\n")
-    sys.stdout.flush()
-    return "".join(tokens)
+    if reason in ("max_tokens", "length"):
+        _emit("\n  [Note: the reply hit the length limit and was cut off]")
+    elif reason == "refusal":
+        _emit("\n  [Note: the model declined to answer this request]")
+    elif reason == "content_filter":
+        _emit("\n  [Note: the provider's content filter stopped the reply]")
 
 
 # ---------------------------------------------------------------------------
@@ -625,7 +396,12 @@ def chat_turn(
         openai_api_key: Override for OpenAI key (else reads config).
 
     Returns:
-        The assistant's response as a plain string.
+        The assistant's reply text; empty when the model declined or wrote nothing.
+
+    Raises:
+        LLMConfigError: no credentials for the provider (a ValueError).
+        ValueError: any API or network error.
+        ImportError: the provider's package isn't installed.
     """
     from .config import get_config
 
@@ -637,134 +413,145 @@ def chat_turn(
     if provider == "anthropic":
         key = anthropic_api_key or config.llm_anthropic_api_key
         if not key:
-            raise ValueError(
+            raise LLMConfigError(
                 "Anthropic API key not configured.\nAdd 'llm_anthropic_api_key' to config.json."
             )
         return _chat_anthropic(system, messages, resolved_model, key)
 
-    github_token = config.llm_github_token
-    if github_token:
-        return _chat_github(system, messages, resolved_model, github_token)
-
     key = openai_api_key or config.llm_openai_api_key
     if not key:
-        raise ValueError(
-            "No LLM credentials configured.\n"
-            "Add 'llm_github_token' (free, recommended) or 'llm_openai_api_key' to config.json.\n"
-            "GitHub token: https://github.com/settings/tokens (no special scopes needed)"
+        raise LLMConfigError(
+            f"OpenAI API key not configured for {resolved_model}.\n"
+            "Add 'llm_openai_api_key' to config.json, or set llm_model to a claude-* model "
+            "with 'llm_anthropic_api_key'."
         )
-    return _chat_openai_messages(system, messages, resolved_model, key)
+    return _chat_openai(system, messages, resolved_model, key)
+
+
+def _anthropic_error_message(e: Exception, model: str) -> str:
+    """A readable message for an Anthropic SDK error.
+
+    An error event inside a stream arrives as an APIStatusError with the
+    stream's 200 status, so the error type in the body decides as well.
+    """
+    import anthropic
+
+    body = getattr(e, "body", None)
+    error = body.get("error") if isinstance(body, dict) else None
+    kind = error.get("type") if isinstance(error, dict) else None
+    status = getattr(e, "status_code", None)
+
+    if isinstance(e, anthropic.AuthenticationError):
+        return "Anthropic authentication failed - check llm_anthropic_api_key in config.json."
+    if isinstance(e, anthropic.PermissionDeniedError):
+        return f"Anthropic denied access to {model} - check the API key's permissions."
+    if isinstance(e, anthropic.NotFoundError):
+        return f"Anthropic has no model '{model}' - check llm_model in config.json or --model."
+    if isinstance(e, anthropic.RateLimitError) or kind == "rate_limit_error":
+        return "Anthropic rate limit hit - wait a minute and ask again."
+    if kind == "overloaded_error" or status == 529:
+        return "Anthropic is overloaded right now - ask again in a minute."
+    if isinstance(e, anthropic.APITimeoutError):
+        return "Anthropic didn't answer in time - ask again."
+    if isinstance(e, anthropic.APIConnectionError):
+        return "Couldn't reach Anthropic - check the network connection."
+    if kind == "api_error" or (isinstance(status, int) and status >= 500):
+        return "Anthropic had a server error - ask again in a minute."
+    if isinstance(e, anthropic.APIStatusError):
+        return f"Anthropic API error ({e.status_code}): {e.message}"
+    return f"Anthropic API error: {e}"
 
 
 def _chat_anthropic(system: str, messages: List[Dict[str, str]], model: str, api_key: str) -> str:
     try:
         import anthropic
-    except ImportError:
-        raise ImportError("anthropic package not installed. Run: pip install anthropic")
+    except ImportError as e:
+        raise ImportError("anthropic package not installed. Run: pip install anthropic") from e
 
     from anthropic.types import MessageParam
 
     client = anthropic.Anthropic(api_key=api_key)
     tokens = []
 
-    with client.messages.stream(
-        model=model,
-        max_tokens=ANTHROPIC_MAX_TOKENS,
-        system=system,
-        messages=cast(List[MessageParam], messages),
-    ) as stream:
-        for text in stream.text_stream:
-            sys.stdout.write(text)
-            sys.stdout.flush()
-            tokens.append(text)
-        _note_anthropic_stop(stream.get_final_message().stop_reason)
+    # The SDK retries 429, 5xx and connection errors itself before this sees them
+    try:
+        with client.messages.stream(
+            model=model,
+            max_tokens=ANTHROPIC_MAX_TOKENS,
+            system=system,
+            messages=cast(List[MessageParam], messages),
+        ) as stream:
+            for text in stream.text_stream:
+                _emit(text)
+                tokens.append(text)
+            stop_reason = stream.get_final_message().stop_reason
+    except anthropic.APIError as e:
+        raise ValueError(_anthropic_error_message(e, model)) from e
 
-    sys.stdout.write("\n")
-    sys.stdout.flush()
+    _note_stop_reason(stop_reason)
+    _emit("\n")
     return "".join(tokens)
 
 
-def _chat_github(system: str, messages: List[Dict[str, str]], model: str, github_token: str) -> str:
-    try:
-        import openai  # noqa: F401
-    except ImportError:
-        raise ImportError("openai package not installed. Run: pip install openai")
-
-    actual_model, used, limit = _select_and_increment_github_model(model)
-    if actual_model != model:
-        sys.stdout.write(f"  [Note: {model} exhausted, falling back to {actual_model}]\n")
-        sys.stdout.flush()
-
-    result = _chat_openai_messages(
-        system,
-        messages,
-        actual_model,
-        api_key=github_token,
-        base_url="https://models.inference.ai.azure.com",
-    )
-    remaining = limit - used
-    sys.stdout.write(
-        f"  [GitHub Models: {actual_model} {used}/{limit} today, {remaining} remaining]\n"
-    )
-    sys.stdout.flush()
-    return result
-
-
-def _chat_openai_messages(
-    system: str,
-    messages: List[Dict[str, str]],
-    model: str,
-    api_key: str,
-    base_url: Optional[str] = None,
-) -> str:
+def _chat_openai(system: str, messages: List[Dict[str, str]], model: str, api_key: str) -> str:
     try:
         import openai
-    except ImportError:
-        raise ImportError("openai package not installed. Run: pip install openai")
+    except ImportError as e:
+        raise ImportError("openai package not installed. Run: pip install openai") from e
 
     from openai.types.chat import ChatCompletionMessageParam
 
-    client = openai.OpenAI(api_key=api_key, base_url=base_url)
+    client = openai.OpenAI(api_key=api_key)
     full_messages = cast(
         List[ChatCompletionMessageParam],
         [{"role": "system", "content": system}, *messages],
     )
     tokens = []
+    finish_reason: Optional[str] = None
+    chunks = 0
+    refusal = ""
 
     try:
         stream = client.chat.completions.create(
             model=model,
-            max_tokens=1024,
             messages=full_messages,
             stream=True,
+            # max_tokens is rejected by reasoning models (o-series, gpt-5)
+            max_completion_tokens=OPENAI_MAX_TOKENS,
         )
+        for chunk in stream:
+            chunks += 1
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            text = choice.delta.content or ""
+            if text:
+                _emit(text)
+                tokens.append(text)
+            refusal += getattr(choice.delta, "refusal", None) or ""
+            if choice.finish_reason:
+                finish_reason = choice.finish_reason
     except openai.AuthenticationError as e:
-        if base_url:
-            raise ValueError(
-                "GitHub Models authentication failed - check your GitHub PAT in config.json."
-            ) from e
-        raise ValueError(f"OpenAI authentication failed - check your API key. ({e})") from e
+        raise ValueError(
+            "OpenAI authentication failed - check llm_openai_api_key in config.json."
+        ) from e
     except openai.RateLimitError as e:
-        if base_url:
-            raise ValueError("GitHub Models rate limit hit. Resets at midnight UTC.") from e
         raise ValueError(
             "OpenAI quota exceeded. Add billing credits at https://platform.openai.com/billing"
         ) from e
+    except openai.NotFoundError as e:
+        raise ValueError(f"Unknown model '{model}' - check llm_model or --model. ({e})") from e
     except openai.APIError as e:
         raise ValueError(f"API error: {e}") from e
 
-    try:
-        for chunk in stream:
-            if not chunk.choices:
-                continue
-            text = chunk.choices[0].delta.content or ""
-            if text:
-                sys.stdout.write(text)
-                sys.stdout.flush()
-                tokens.append(text)
-    except Exception as e:
-        raise ValueError(f"Streaming error: {e}") from e
-
-    sys.stdout.write("\n")
-    sys.stdout.flush()
+    if refusal:
+        _emit(f"\n  [Note: the model declined: {refusal}]")
+    elif not tokens and finish_reason in (None, "stop"):
+        # Nothing to show and no reason given: say what did come back
+        _emit(
+            f"\n  [Note: {model} sent no text ({chunks} stream chunks, "
+            f"finish reason {finish_reason or 'none'})]"
+        )
+    _note_stop_reason(finish_reason)
+    _emit("\n")
     return "".join(tokens)

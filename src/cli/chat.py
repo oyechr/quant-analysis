@@ -52,7 +52,7 @@ def chat(ctx, ticker, model, no_intro, debug_context):
     """
     import json as _json
 
-    from ..llm import build_brief_context
+    from ..llm import LLMConfigError, build_brief_context
     from ..llm import chat_turn as llm_chat_turn
 
     ticker = ticker.upper()
@@ -123,10 +123,15 @@ def chat(ctx, ticker, model, no_intro, debug_context):
         click.echo("  Assistant:\n")
         try:
             response = llm_chat_turn(context, [{"role": "user", "content": intro}], model=model)
+        except (LLMConfigError, ImportError) as e:
+            raise click.ClickException(str(e))
+        except ValueError as e:
+            # An API or network error may pass, so the session goes on
+            click.echo(f"\n  Error: {e}\n  (No brief; ask a question to try again.)")
+            response = ""
+        if response.strip():
             messages.append({"role": "user", "content": intro})
             messages.append({"role": "assistant", "content": response})
-        except (ValueError, ImportError) as e:
-            raise click.ClickException(str(e))
         click.echo()
 
     while True:
@@ -170,11 +175,17 @@ def chat(ctx, ticker, model, no_intro, debug_context):
         messages.append({"role": "user", "content": user_input})
         click.echo("\n  Assistant:\n")
 
+        # A failed or empty turn leaves the history as it was: an empty assistant
+        # turn would be rejected on the next request
         try:
             response = llm_chat_turn(context, messages, model=model)
-            messages.append({"role": "assistant", "content": response})
         except (ValueError, ImportError) as e:
             click.echo(f"\n  Error: {e}")
+            response = ""
+        if response.strip():
+            messages.append({"role": "assistant", "content": response})
+        else:
             messages.pop()
+            click.echo("  (No reply; that question isn't kept in the conversation.)")
 
         click.echo()

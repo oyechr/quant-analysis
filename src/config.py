@@ -81,10 +81,9 @@ class AnalysisConfig:
     cache_ttl_hours: Dict[str, float] = field(default_factory=lambda: dict(DEFAULT_CACHE_TTL_HOURS))
 
     # ==================== LLM Integration ====================
-    llm_model: str = "gpt-4.1"
+    llm_model: str = "claude-haiku-5-5"
     llm_anthropic_api_key: Optional[str] = None
     llm_openai_api_key: Optional[str] = None
-    llm_github_token: Optional[str] = None  # GitHub PAT for GitHub Models (free gpt-4.1)
 
     # ==================== Discovery / EDGAR ====================
     edgar_user_agent: str = DEFAULT_EDGAR_USER_AGENT

@@ -232,7 +232,7 @@ quant --no-cache chat TSLA            # fresh data first
 
 - **Context:** the model also sees the last 12 rows of the ticker's score history. It sees peer valuation if `quant vet TICKER --save` has been run.
 - **In-session commands:** `/refresh` re-fetches the data and rebuilds the report, `/clear` resets the conversation, `/help`, and `/quit`.
-- **Setup:** it needs an Anthropic or OpenAI key, or a free GitHub Models token, in `config.json` (see [Your files](#your-files)). `--debug-context` prints what the model is sent.
+- **Setup:** it needs an Anthropic or OpenAI key in `config.json` (see [Your files](#your-files)). `--debug-context` prints what the model is sent.
 
 ### Your portfolio
 
@@ -513,8 +513,7 @@ Many companies report in one currency and trade in another; most Oslo energy nam
     "edgar_user_agent": "PersonalResearch you@email.com",
     "openfigi_api_key": "...",
     "llm_model": "claude-haiku-5-5",
-    "llm_anthropic_api_key": "sk-ant-...",
-    "llm_github_token": "ghp_..."
+    "llm_anthropic_api_key": "sk-ant-..."
 }
 ```
 
@@ -524,9 +523,10 @@ Many companies report in one currency and trade in another; most Oslo energy nam
   - `benchmark_by_suffix` overrides the built-in exchange-to-index map.
 - **Cache:** `cache_ttl_hours` sets the maximum age per resource (`prices`, `info`, `earnings`, `analyst_ratings`, `dividends`, `fundamentals`, `holders`, `universe`, `industry`). `0` means never expire.
 - **Chat:**
-  - `llm_model` picks the model: `claude-*` uses Anthropic, and `gpt-*` uses OpenAI or GitHub Models. Without it, chat uses `gpt-4.1` through GitHub Models. For Anthropic, `claude-haiku-5-5` is the cheap option and `claude-opus-5-5` the most thorough.
+  - `llm_model` picks the model: `claude-*` uses Anthropic, and any other name (`gpt-4.1`, `o4-mini`, ...) uses OpenAI. The default is `claude-haiku-5-5`, the cheap option; `claude-opus-5-5` is the most thorough.
   - The key comes from `llm_anthropic_api_key` or `llm_openai_api_key`.
-  - Alternatively, `llm_github_token` gives free access through [GitHub Models](https://github.com/marketplace/models).
+  - GitHub Models, the old free default (`llm_github_token`), was [retired by GitHub](https://github.blog/changelog/2026-07-30-github-models-is-now-retired/) on 30 July 2026. A config.json that still has the key gets an "unknown config key" warning; delete the line.
+  - A failed turn (rate limit, overload, network) prints the error and the chat goes on with its history; a reply that was cut off or declined says so.
 
 **`portfolio/targets.toml`:**
 
