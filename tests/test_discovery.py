@@ -24,6 +24,7 @@ from src.discovery.models import (
     SectorCluster,
     TrackedPortfolio,
 )
+from src.discovery.sources.edgar_13f import diff_holdings
 
 # ============================================================
 # Test Fixtures
@@ -541,7 +542,8 @@ class TestFullAnalysis:
         )
         text = render_text(result, top=1)
 
-        assert "Analyzed 3 portfolios, 9 total holdings" in text
+        # 9 rows, 2 of them exit placeholders
+        assert "Analyzed 3 portfolios, 7 total holdings" in text
         assert "TICKER OVERLAP (consensus picks)" in text
         assert "ACTIVITY CONVERGENCE" in text
         assert "CONTRARIAN SIGNALS (disagreement)" in text
@@ -658,9 +660,6 @@ class TestFilingDiff:
 
     def test_diff_detects_new_positions(self):
         """Tickers in current but not previous should be 'new'."""
-        from src.discovery.sources.edgar_13f import Edgar13FSource
-
-        source = Edgar13FSource(cache_dir="data")
         current = [
             _make_holding("AAPL", "Apple", shares=1000, value=100000),
             _make_holding("NVDA", "NVIDIA", shares=500, value=50000),
@@ -669,7 +668,7 @@ class TestFilingDiff:
             _make_holding("AAPL", "Apple", shares=1000, value=90000),
         ]
 
-        result = source._diff_holdings(current, previous, filing_date=datetime(2024, 5, 15))
+        result = diff_holdings(current, previous, filing_date=datetime(2024, 5, 15))
 
         nvda = next((h for h in result if h.ticker == "NVDA"), None)
         assert nvda is not None
@@ -677,9 +676,6 @@ class TestFilingDiff:
 
     def test_diff_detects_exit_positions(self):
         """Tickers in previous but not current should get 'exit' entries."""
-        from src.discovery.sources.edgar_13f import Edgar13FSource
-
-        source = Edgar13FSource(cache_dir="data")
         current = [
             _make_holding("AAPL", "Apple", shares=1000, value=100000),
         ]
@@ -688,7 +684,7 @@ class TestFilingDiff:
             _make_holding("META", "Meta", shares=2000, value=60000),
         ]
 
-        result = source._diff_holdings(current, previous, filing_date=datetime(2024, 5, 15))
+        result = diff_holdings(current, previous, filing_date=datetime(2024, 5, 15))
 
         meta = next((h for h in result if h.ticker == "META"), None)
         assert meta is not None
@@ -697,9 +693,6 @@ class TestFilingDiff:
 
     def test_diff_detects_add(self):
         """Shares increased >5% should be 'add'."""
-        from src.discovery.sources.edgar_13f import Edgar13FSource
-
-        source = Edgar13FSource(cache_dir="data")
         current = [
             _make_holding("AAPL", "Apple", shares=1200, value=120000),
         ]
@@ -707,7 +700,7 @@ class TestFilingDiff:
             _make_holding("AAPL", "Apple", shares=1000, value=100000),
         ]
 
-        result = source._diff_holdings(current, previous)
+        result = diff_holdings(current, previous)
 
         aapl = next((h for h in result if h.ticker == "AAPL"), None)
         assert aapl is not None
@@ -715,9 +708,6 @@ class TestFilingDiff:
 
     def test_diff_detects_trim(self):
         """Shares decreased >5% should be 'trim'."""
-        from src.discovery.sources.edgar_13f import Edgar13FSource
-
-        source = Edgar13FSource(cache_dir="data")
         current = [
             _make_holding("AAPL", "Apple", shares=800, value=80000),
         ]
@@ -725,7 +715,7 @@ class TestFilingDiff:
             _make_holding("AAPL", "Apple", shares=1000, value=100000),
         ]
 
-        result = source._diff_holdings(current, previous)
+        result = diff_holdings(current, previous)
 
         aapl = next((h for h in result if h.ticker == "AAPL"), None)
         assert aapl is not None
@@ -733,9 +723,6 @@ class TestFilingDiff:
 
     def test_diff_detects_hold(self):
         """Shares within 5% should be 'hold'."""
-        from src.discovery.sources.edgar_13f import Edgar13FSource
-
-        source = Edgar13FSource(cache_dir="data")
         current = [
             _make_holding("AAPL", "Apple", shares=1020, value=102000),
         ]
@@ -743,7 +730,7 @@ class TestFilingDiff:
             _make_holding("AAPL", "Apple", shares=1000, value=100000),
         ]
 
-        result = source._diff_holdings(current, previous)
+        result = diff_holdings(current, previous)
 
         aapl = next((h for h in result if h.ticker == "AAPL"), None)
         assert aapl is not None
@@ -751,9 +738,6 @@ class TestFilingDiff:
 
     def test_diff_sets_filing_date(self):
         """All holdings should get the filing date set."""
-        from src.discovery.sources.edgar_13f import Edgar13FSource
-
-        source = Edgar13FSource(cache_dir="data")
         filing_date = datetime(2024, 5, 15)
         current = [
             _make_holding("AAPL", "Apple", shares=1000, value=100000),
@@ -762,15 +746,12 @@ class TestFilingDiff:
             _make_holding("AAPL", "Apple", shares=1000, value=90000),
         ]
 
-        result = source._diff_holdings(current, previous, filing_date=filing_date)
+        result = diff_holdings(current, previous, filing_date=filing_date)
 
         assert result[0].date == filing_date
 
     def test_diff_handles_duplicate_cusips(self):
         """Same ticker appearing multiple times should be summed for comparison."""
-        from src.discovery.sources.edgar_13f import Edgar13FSource
-
-        source = Edgar13FSource(cache_dir="data")
         current = [
             _make_holding("AAPL", "Apple CL A", shares=500, value=50000),
             _make_holding("AAPL", "Apple CL B", shares=500, value=50000),
@@ -780,12 +761,13 @@ class TestFilingDiff:
             _make_holding("AAPL", "Apple CL B", shares=480, value=48000),
         ]
 
-        result = source._diff_holdings(current, previous)
+        result = diff_holdings(current, previous)
 
-        # Total: 1000 vs 960 = ~4% increase, should be 'hold' (under 5%)
+        # Summed: 1000 vs 960 shares, a 4% increase, so a hold (under 5%)
         aapl_holdings = [h for h in result if h.ticker == "AAPL"]
-        # Both entries should have an action
-        assert all(h.action is not None for h in aapl_holdings)
+        assert len(aapl_holdings) == 1
+        assert aapl_holdings[0].action == "hold"
+        assert aapl_holdings[0].value == 100000
 
     def test_convergence_with_new_add_actions(self):
         """Convergence should detect 'new' and 'add' as buy signals."""
@@ -825,3 +807,109 @@ class TestFilingDiff:
         assert "A" in meta.buyers or "B" in meta.buyers
         assert "C" in meta.sellers
         assert meta.net_direction == "bullish"  # 2 buyers vs 1 seller
+
+
+# ============================================================
+# Sold positions and distinct funds (review Batch G)
+# ============================================================
+
+
+class TestHeldPositions:
+    def test_exits_are_not_consensus_picks(self):
+        # Two funds sold META last quarter: the old overlap listed it as held by both
+        portfolios = [
+            _make_portfolio("A", [_make_holding("AAPL"), _make_holding("META", action="exit")]),
+            _make_portfolio("B", [_make_holding("AAPL"), _make_holding("META", action="exit")]),
+        ]
+        signals = PortfolioAnalyzer(min_overlap=2).detect_overlap(portfolios)
+        assert [s.ticker for s in signals] == ["AAPL"]
+
+    def test_exits_dont_form_sector_clusters(self):
+        tech = {"sector": "Technology", "industry": "Software"}
+        portfolios = [
+            _make_portfolio(
+                "A", [_make_holding(t, **tech, action="exit") for t in ("X", "Y", "Z")]
+            ),
+        ]
+        assert PortfolioAnalyzer(min_sector_holdings=3)._detect_sector_clusters(portfolios) == []
+
+    def test_total_holdings_counts_held_positions(self):
+        portfolios = [
+            _make_portfolio("A", [_make_holding("AAPL"), _make_holding("META", action="exit")])
+        ]
+        assert PortfolioAnalyzer().analyze(portfolios).total_holdings == 1
+
+    def test_convergence_counts_funds_not_rows(self):
+        # One fund buying two share classes (both resolved to the same ticker) isn't two buyers
+        now = datetime.now()
+        portfolios = [
+            _make_portfolio(
+                "A",
+                [
+                    _make_holding("GOOGL", action="new", date=now),
+                    _make_holding("GOOGL", action="add", date=now),
+                ],
+            )
+        ]
+        assert PortfolioAnalyzer(min_overlap=2)._detect_convergence(portfolios) == []
+
+    def test_convergence_lists_each_fund_once(self):
+        now = datetime.now()
+        portfolios = [
+            _make_portfolio(
+                "A",
+                [
+                    _make_holding("X", action="new", date=now),
+                    _make_holding("X", action="add", date=now),
+                ],
+            ),
+            _make_portfolio("B", [_make_holding("X", action="add", date=now)]),
+        ]
+        events = PortfolioAnalyzer(min_overlap=2)._detect_convergence(portfolios)
+        assert sorted(events[0].portfolios) == ["A", "B"]
+
+    def test_a_fund_on_both_sides_is_no_contrarian_signal(self):
+        now = datetime.now()
+        portfolios = [
+            _make_portfolio(
+                "A",
+                [
+                    _make_holding("X", action="add", date=now),
+                    _make_holding("X", action="trim", date=now),
+                ],
+            )
+        ]
+        assert PortfolioAnalyzer()._detect_contrarian(portfolios) == []
+
+    def test_contrarian_lists_each_fund_once(self):
+        now = datetime.now()
+        portfolios = [
+            _make_portfolio(
+                "A",
+                [
+                    _make_holding("X", action="new", date=now),
+                    _make_holding("X", action="add", date=now),
+                ],
+            ),
+            _make_portfolio("B", [_make_holding("X", action="exit", date=now)]),
+        ]
+        signal = PortfolioAnalyzer()._detect_contrarian(portfolios)[0]
+        assert (signal.buyers, signal.sellers) == (["A"], ["B"])
+
+
+def test_overlap_lists_a_funds_action_once():
+    # Seen live: two share classes resolved to one ticker printed
+    # "Berkshire Hathaway: ADD 2026-08" twice
+    when = datetime(2026, 8, 14)
+    portfolios = [
+        _make_portfolio(
+            "A",
+            [
+                _make_holding("GOOG", action="add", date=when),
+                _make_holding("GOOG", action="add", date=when),
+            ],
+        ),
+        _make_portfolio("B", [_make_holding("GOOG", action="new", date=when)]),
+    ]
+    signal = PortfolioAnalyzer(min_overlap=2).detect_overlap(portfolios)[0]
+    assert signal.recent_actions == ["A: ADD 2026-08", "B: NEW 2026-08"]

@@ -220,13 +220,22 @@ def format_portfolio_view(portfolio_stats: Dict[str, Any]) -> str:
     ws = portfolio_stats.get("weighted_composite_score")
     wb = portfolio_stats.get("weighted_beta")
     dr = portfolio_stats.get("diversification_ratio")
+
+    def covers(key: str) -> str:
+        share = portfolio_stats.get(key)
+        return f"  (covers {share:.0%} of the weight)" if share is not None and share < 1 else ""
+
     lines = [
         "",
         "=" * 70,
         "  PORTFOLIO VIEW",
         "=" * 70,
-        f"  Weighted Score: {ws}" if ws else "  Weighted Score: N/A",
-        f"  Weighted Beta:  {wb}" if wb else "  Weighted Beta:  N/A",
+        f"  Weighted Score: {ws}{covers('score_coverage')}"
+        if ws is not None
+        else "  Weighted Score: N/A",
+        f"  Weighted Beta:  {wb}{covers('beta_coverage')}"
+        if wb is not None
+        else "  Weighted Beta:  N/A",
         f"  Diversification Ratio: {dr}" if dr else "  Diversification Ratio: N/A",
         "",
     ]
@@ -258,7 +267,7 @@ def format_correlation_heatmap(
     lines = []
     lines.append("")
     lines.append("=" * 70)
-    lines.append("  CORRELATION MATRIX (Daily Returns)")
+    lines.append("  CORRELATION MATRIX (Weekly Returns)")
     lines.append("=" * 70)
 
     # Column headers
@@ -312,7 +321,7 @@ def _save_heatmap_chart(corr_df: pd.DataFrame, save_path: str) -> bool:
             square=True,
             ax=ax,
         )
-        ax.set_title("Daily Returns Correlation Matrix")
+        ax.set_title("Weekly Returns Correlation Matrix")
         plt.tight_layout()
 
         path = Path(save_path)

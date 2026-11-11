@@ -320,14 +320,16 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
         for portfolio in portfolios:
             enricher.enrich_portfolio(portfolio)
     else:
-        # Auto-enrich: run overlap detection first, then enrich only top tickers
-        analyzer_pre = PortfolioAnalyzer(min_overlap=min_overlap)
-        pre_signals = analyzer_pre.detect_overlap(portfolios)
-        top_tickers = {s.ticker for s in pre_signals[: top * 2]}  # Enrich a bit more than displayed
+        # Resolve only what will be shown: the top of each section (overlap with
+        # room to spare, since resolving can merge entries)
+        pre = PortfolioAnalyzer(min_overlap=min_overlap).analyze(portfolios)
+        top_tickers = {
+            *(s.ticker for s in pre.overlap_signals[: top * 2]),
+            *(e.ticker for e in pre.convergence_events[:top]),
+            *(s.ticker for s in pre.contrarian_signals[:top]),
+        }
         if top_tickers:
-            echo_status(
-                f"  Auto-enriching top {len(top_tickers)} overlap tickers with sector data..."
-            )
+            echo_status(f"  Resolving tickers and sectors for the top {len(top_tickers)} names...")
             enricher.enrich_tickers_in_portfolios(portfolios, top_tickers)
 
     # Run analysis

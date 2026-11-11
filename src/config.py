@@ -23,6 +23,9 @@ DEFAULT_CACHE_TTL_HOURS: Dict[str, float] = {
     "industry": 720,  # Yahoo industry peer lists
 }
 
+# A placeholder: SEC asks for a real name and contact (see Edgar13FSource)
+DEFAULT_EDGAR_USER_AGENT = "PersonalResearch research@example.com"
+
 
 @dataclass
 class AnalysisConfig:
@@ -84,7 +87,10 @@ class AnalysisConfig:
     llm_github_token: Optional[str] = None  # GitHub PAT for GitHub Models (free gpt-4.1)
 
     # ==================== Discovery / EDGAR ====================
-    edgar_user_agent: str = "PersonalResearch research@example.com"
+    edgar_user_agent: str = DEFAULT_EDGAR_USER_AGENT
+    # Optional (https://www.openfigi.com/api): CUSIP -> ticker lookups run
+    # 100 per request instead of 10, at 10x the rate
+    openfigi_api_key: Optional[str] = field(default=None, repr=False)
 
     # Validation sets
     valid_periods: Optional[set] = None

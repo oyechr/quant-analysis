@@ -269,6 +269,8 @@ def parse_constituents(html: str, source: IndexSource) -> List[str]:
     seen: List[str] = []
     ticker_columns: List[pd.Series] = []
     for table in tables:
+        if _is_changes_table(table):
+            continue
         columns = {_clean_header(c): c for c in table.columns}
         column = next((columns[w] for w in wanted if w in columns), None)
         if len(table) >= source.min_expected:
@@ -297,6 +299,19 @@ def parse_constituents(html: str, source: IndexSource) -> List[str]:
 def _normalize_symbols(values: pd.Series, source: IndexSource) -> List[str]:
     symbols = [_to_yahoo(str(s), source) for s in values.dropna()]
     return list(dict.fromkeys(s for s in symbols if s))
+
+
+def _is_changes_table(table: pd.DataFrame) -> bool:
+    """
+    An index's change log ("Added" / "Removed", each with its own Ticker
+    column under a two-row header), not its constituents.
+    """
+    groups = {
+        re.sub(r"\[[^\]]*\]", "", str(column[0])).strip().lower()
+        for column in table.columns
+        if isinstance(column, tuple)
+    }
+    return bool(groups & {"added", "removed"})
 
 
 def _clean_header(column: object) -> str:

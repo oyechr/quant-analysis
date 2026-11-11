@@ -6,7 +6,7 @@ in their latest 13F filing: new position, add, trim, hold, or exit.
 
 Reads only the local cache written by `quant discover`:
 `data/_discovery/edgar_13f/<CIK>.json` (holdings keyed by CUSIP) and
-`data/_discovery/enrichment/cusip_map.json` (CUSIP -> ticker). Holdings whose
+`data/_discovery/enrichment/cusip_tickers.json` (CUSIP -> ticker). Holdings whose
 CUSIP isn't mapped are matched on issuer name instead, which also catches
 US-listed ADRs of foreign tickers (EQNR.OL -> EQUINOR ASA).
 """
@@ -17,6 +17,8 @@ import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from ..paths import CUSIP_TICKERS
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +77,7 @@ def fund_activity(ticker: str, company_name: Optional[str], data_dir: str = "dat
         return result
     result.cache_found = True
 
-    cusip_map = _load_json(Path(data_dir) / "_discovery" / "enrichment" / "cusip_map.json") or {}
+    cusip_map = _load_json(Path(data_dir) / CUSIP_TICKERS) or {}
     symbols = _ticker_aliases(ticker)
     target_name = normalize_issuer(company_name) if company_name else ""
 

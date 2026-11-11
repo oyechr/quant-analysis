@@ -16,7 +16,18 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from ..utils.financial import finite_float
+
 logger = logging.getLogger(__name__)
+
+# 12-minus-1-month momentum: the return from a year back to a month back
+MOMENTUM_BARS = 252
+MOMENTUM_SKIP_BARS = 21
+# Shortest history that still counts as a full window: a one-year download
+# (screen's stage 1) has ~250 bars, fewer on exchanges with more holidays.
+# A shorter history gets no momentum rather than a shorter window, so every
+# ticker in a cross-section is ranked on the same horizon.
+MOMENTUM_MIN_BARS = 230
 
 
 @dataclass
@@ -190,9 +201,9 @@ class FactorRanker:
         info = data.get("info", {})
         components: Dict[str, float] = {}
 
-        pe = info.get("pe_ratio") or info.get("trailingPE")
-        if pe and pe > 0:
-            components["earnings_yield"] = 1.0 / pe
+        earnings_yield = _earnings_yield(info)
+        if earnings_yield is not None:
+            components["earnings_yield"] = earnings_yield
 
         report = data.get("report") or {}
         fcf_metrics = (
@@ -335,16 +346,32 @@ class FactorRanker:
 def momentum_12_1(close: pd.Series) -> Optional[float]:
     """
     Momentum factor: the 12-minus-1-month return. Skipping the most recent
-    month removes short-term reversal noise. Higher = better.
+    month removes short-term reversal noise. Higher = better. None for a
+    history under MOMENTUM_MIN_BARS.
     """
-    if len(close) < 60:
+    if len(close) < MOMENTUM_MIN_BARS:
         return None
-    price_end = float(close.iloc[-22])  # ~1 month ago
-    # Go back as far as possible (up to 252 days for 12-month)
-    price_start = float(close.iloc[-min(len(close) - 1, 252)])
+    price_end = float(close.iloc[-1 - MOMENTUM_SKIP_BARS])
+    price_start = float(close.iloc[-min(len(close), MOMENTUM_BARS)])
     if not price_start > 0:
         return None
     return (price_end - price_start) / price_start
+
+
+def _earnings_yield(info: Dict[str, Any]) -> Optional[float]:
+    """
+    E/P. Yahoo gives no P/E for a loss-maker, so it's net margin over P/S
+    there (net income / market cap), negative, and ranks below every
+    profitable company instead of being left out of value.
+    """
+    pe = finite_float(info.get("pe_ratio") or info.get("trailingPE"))
+    if pe is not None and pe > 0:
+        return 1.0 / pe
+    margin = finite_float(info.get("profit_margin"))
+    price_to_sales = finite_float(info.get("price_to_sales"))
+    if margin is not None and price_to_sales is not None and price_to_sales > 0:
+        return margin / price_to_sales
+    return None
 
 
 def inverse_volatility(close: pd.Series) -> Optional[float]:

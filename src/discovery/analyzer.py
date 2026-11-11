@@ -25,6 +25,23 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+BUY_ACTIONS = ("buy", "new", "add")
+SELL_ACTIONS = ("sell", "exit", "trim")
+
+
+def _one_per_portfolio(
+    actions: list[tuple[str, Holding]], kinds: tuple[str, ...]
+) -> list[tuple[str, Holding]]:
+    """
+    The actions of the given kinds, one per portfolio (its earliest), so a
+    fund with two share classes of a company counts once.
+    """
+    first: dict[str, tuple[str, Holding]] = {}
+    for name, h in sorted(actions, key=lambda a: a[1].date or datetime.min):
+        if h.action in kinds:
+            first.setdefault(name, (name, h))
+    return list(first.values())
+
 
 class PortfolioAnalyzer:
     """
@@ -61,7 +78,7 @@ class PortfolioAnalyzer:
         if not portfolios:
             return DiscoveryResult()
 
-        total_holdings = sum(len(p.holdings) for p in portfolios)
+        total_holdings = sum(len(p.held) for p in portfolios)
         logger.info(f"Analyzing {len(portfolios)} portfolios with {total_holdings} total holdings")
 
         result = DiscoveryResult(
@@ -86,18 +103,17 @@ class PortfolioAnalyzer:
 
     def detect_overlap(self, portfolios: list[TrackedPortfolio]) -> list[DiscoverySignal]:
         """
-        Detect tickers that appear in multiple portfolios.
+        Detect tickers held in multiple portfolios ("exit" placeholders,
+        positions sold during the quarter, don't count).
 
-        Strength is based on:
-        - Number of portfolios holding the ticker (overlap count)
-        - Average weight in those portfolios
-        - Total value across all portfolios
+        Strength (0-100): the share of portfolios holding the ticker (80%)
+        and its average weight in them (20%, full at 5%).
         """
         # Map ticker → list of (portfolio_name, holding)
         ticker_appearances: dict[str, list[tuple[str, Holding]]] = defaultdict(list)
 
         for portfolio in portfolios:
-            for holding in portfolio.holdings:
+            for holding in portfolio.held:
                 ticker_appearances[holding.ticker].append((portfolio.name, holding))
 
         signals = []
@@ -120,21 +136,21 @@ class PortfolioAnalyzer:
             industry = next((h.industry for h in holdings if h.industry), None)
             name = next((h.name for h in holdings if h.name), ticker)
 
-            # Calculate strength (0-100)
-            # Factors: overlap ratio (60%), average weight (20%), value signal (20%)
             overlap_ratio = overlap_count / total_portfolios
             avg_weight = self._safe_avg([h.weight for h in holdings if h.weight])
-            weight_score = min(avg_weight / 5.0, 1.0) if avg_weight else 0.5  # 5% = max score
+            weight_score = min(avg_weight / 5.0, 1.0) if avg_weight else 0.5  # unknown: neutral
 
-            strength = (overlap_ratio * 60) + (weight_score * 20) + (overlap_ratio * 20)
-            strength = min(strength, 100.0)
+            strength = min(overlap_ratio * 80 + weight_score * 20, 100.0)
 
             # Build recent actions descriptions
-            recent_actions = []
-            for pname, h in appearances:
-                if h.action:
-                    date_str = h.date.strftime("%Y-%m") if h.date else ""
-                    recent_actions.append(f"{pname}: {h.action.upper()} {date_str}".strip())
+            # Once per fund and action (two share classes can share a ticker)
+            recent_actions = list(
+                dict.fromkeys(
+                    f"{pname}: {h.action.upper()} {h.date.strftime('%Y-%m') if h.date else ''}".strip()
+                    for pname, h in appearances
+                    if h.action
+                )
+            )
 
             signals.append(
                 DiscoverySignal(
@@ -165,7 +181,7 @@ class PortfolioAnalyzer:
         industry_map: dict[tuple[str, Optional[str]], list[tuple[str, Holding]]] = defaultdict(list)
 
         for portfolio in portfolios:
-            for holding in portfolio.holdings:
+            for holding in portfolio.held:
                 if holding.sector:
                     key = (holding.sector, holding.industry)
                     industry_map[key].append((portfolio.name, holding))
@@ -174,8 +190,8 @@ class PortfolioAnalyzer:
 
         for (sector, industry), appearances in industry_map.items():
             # Count unique tickers and portfolios
-            tickers = list({h.ticker for _, h in appearances})
-            portfolio_names = list({name for name, _ in appearances})
+            tickers = sorted({h.ticker for _, h in appearances})
+            portfolio_names = sorted({name for name, _ in appearances})
             holding_count = len(appearances)
 
             if holding_count < self.min_sector_holdings:
@@ -234,12 +250,11 @@ class PortfolioAnalyzer:
         window = timedelta(days=self.convergence_window_days)
 
         for ticker, actions in ticker_actions.items():
-            if len(actions) < self.min_overlap:
+            if len({name for name, _ in actions}) < self.min_overlap:
                 continue
 
-            # Group by action type (buy vs sell)
-            buys = [(name, h) for name, h in actions if h.action in ("buy", "new", "add")]
-            sells = [(name, h) for name, h in actions if h.action in ("sell", "exit", "trim")]
+            buys = _one_per_portfolio(actions, BUY_ACTIONS)
+            sells = _one_per_portfolio(actions, SELL_ACTIONS)
 
             # Check for buy convergence
             buy_event = self._find_convergence_window(ticker, "buy", buys, window)
@@ -328,8 +343,11 @@ class PortfolioAnalyzer:
         signals = []
 
         for ticker, actions in ticker_actions.items():
-            buyers = [name for name, h in actions if h.action in ("buy", "new", "add")]
-            sellers = [name for name, h in actions if h.action in ("sell", "exit", "trim")]
+            buying = {name for name, _ in _one_per_portfolio(actions, BUY_ACTIONS)}
+            selling = {name for name, _ in _one_per_portfolio(actions, SELL_ACTIONS)}
+            # A fund adding one share class and trimming another isn't taking a side
+            buyers = sorted(buying - selling)
+            sellers = sorted(selling - buying)
 
             # Need at least one buyer AND one seller for a contrarian signal
             if not buyers or not sellers:

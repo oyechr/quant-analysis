@@ -7,7 +7,7 @@ and portfolio-level statistics for multiple tickers.
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import numpy as np
 import pandas as pd
@@ -16,9 +16,13 @@ from ..data_fetcher import DataFetcher
 from ..reporting import ReportGenerator
 from ..scoring import ScoringConfig, StockScorer
 from ..scoring.scorer import ScoringResult
-from ..utils.financial import to_float, trading_dates
+from ..utils.financial import finite_float, to_float, trading_dates
 
 logger = logging.getLogger(__name__)
+
+# Weekly returns a ticker needs to be in the correlation matrix (half the
+# default one-year window)
+COMPARE_MIN_WEEKS = 26
 
 
 class TickerComparator:
@@ -172,9 +176,10 @@ class TickerComparator:
                 "Forward P/E": _safe_metric(info, "forward_pe"),
                 "P/B": _safe_metric(info, "price_to_book"),
                 "PEG": _safe_metric(info, "peg_ratio"),
-                "EV/EBITDA": _safe_metric(info, "enterprise_to_ebitda"),
+                "EV/EBITDA": _safe_metric(info, "ev_to_ebitda"),
                 "FCF Yield %": _safe_metric(fcf_metrics, "fcf_yield"),
-                "DCF Upside %": _safe_metric(dcf, "discount_premium_pct"),
+                # Value over price, as `vet` shows it (the DCF stores price over value)
+                "DCF vs price %": _dcf_vs_price(dcf.get("discount_premium_pct")),
             }
 
         if not rows:
@@ -204,7 +209,7 @@ class TickerComparator:
 
     def correlation_matrix(self, use_cache: bool = True) -> pd.DataFrame:
         """
-        Compute daily-return correlation matrix for all tickers.
+        Weekly-return correlation matrix for all tickers (see return_correlations).
 
         Args:
             use_cache: Whether to use cached price data.
@@ -293,24 +298,16 @@ class PortfolioView:
         scores = comparator._scores
         reports = comparator._reports
 
-        # Weighted composite score
-        weighted_score = 0.0
-        score_available = 0
-        for ticker, weight in zip(self.tickers, self.weights, strict=True):
-            if ticker in scores:
-                weighted_score += scores[ticker].composite_score * weight
-                score_available += 1
-
-        # Weighted beta
-        weighted_beta = 0.0
-        beta_available = 0
-        for ticker, weight in zip(self.tickers, self.weights, strict=True):
-            if ticker in reports and "error" not in reports[ticker]:
-                info = reports[ticker].get("info", {})
-                beta = info.get("beta")
-                if beta is not None:
-                    weighted_beta += float(beta) * weight
-                    beta_available += 1
+        # Weighted averages over the weight that has a value: a ticker without
+        # a score or beta is left out rather than counted as 0
+        score_values = {t: s.composite_score for t, s in scores.items()}
+        beta_values = {
+            t: finite_float((r.get("info") or {}).get("beta"))
+            for t, r in reports.items()
+            if "error" not in r
+        }
+        weighted_score, score_coverage = self._weighted_average(score_values)
+        weighted_beta, beta_coverage = self._weighted_average(beta_values)
 
         # Diversification ratio from correlation matrix
         try:
@@ -322,8 +319,13 @@ class PortfolioView:
         result: Dict[str, Any] = {
             "tickers": self.tickers,
             "weights": self.weights,
-            "weighted_composite_score": round(weighted_score, 1) if score_available else None,
-            "weighted_beta": round(weighted_beta, 2) if beta_available else None,
+            "weighted_composite_score": (
+                round(weighted_score, 1) if weighted_score is not None else None
+            ),
+            "weighted_beta": round(weighted_beta, 2) if weighted_beta is not None else None,
+            # Share of the weight each average covers (1.0 = every ticker)
+            "score_coverage": round(score_coverage, 3),
+            "beta_coverage": round(beta_coverage, 3),
             "diversification_ratio": round(diversification, 3) if diversification else None,
             "holdings": [],
         }
@@ -339,6 +341,20 @@ class PortfolioView:
             result["holdings"].append(holding)
 
         return result
+
+    def _weighted_average(
+        self, values: Mapping[str, Optional[float]]
+    ) -> tuple[Optional[float], float]:
+        """Weighted average of the tickers with a value, and the weight they cover."""
+        pairs = [
+            (v, w)
+            for t, w in zip(self.tickers, self.weights, strict=True)
+            if (v := finite_float(values.get(t))) is not None
+        ]
+        covered = sum(w for _, w in pairs)
+        if covered <= 0:
+            return None, 0.0
+        return sum(v * w for v, w in pairs) / covered, covered
 
     def _diversification_ratio(self, corr_matrix: pd.DataFrame) -> Optional[float]:
         """
@@ -373,18 +389,22 @@ class PortfolioView:
 
 
 def return_correlations(
-    price_data_map: Dict[str, pd.DataFrame], pairwise: bool = False, min_days: int = 60
+    price_data_map: Dict[str, pd.DataFrame], min_weeks: int = COMPARE_MIN_WEEKS
 ) -> pd.DataFrame:
     """
-    Daily-return correlation matrix (ticker x ticker) from 'Close' prices.
+    Weekly-return correlation matrix (ticker x ticker) from 'Close' prices.
 
-    Bars are aligned on trading date: bars from different exchanges carry
-    midnight stamps in their own timezone and would otherwise never overlap.
-    By default only days where every ticker traded are used. With `pairwise`,
-    each pair uses the days both traded (at least `min_days`, else NaN), so
-    one short history or foreign holiday calendar doesn't shrink every pair.
+    Friday to Friday, like `review`'s exposure: Oslo closes hours before New
+    York, so same-day returns of different exchanges miss part of each
+    other's moves and daily correlations come out too low. Bars are aligned
+    on trading date, and each series is carried over its own market's
+    holidays (`exposure.weekly_returns`). A ticker with fewer than
+    `min_weeks` weekly returns, or one that stopped trading, is left out.
     Empty with fewer than 2 tickers.
     """
+    # Imported here: portfolio.review imports this package
+    from ..portfolio.exposure import weekly_returns
+
     price_frames: Dict[str, pd.Series] = {}
     for ticker, prices in price_data_map.items():
         if prices is None or prices.empty or "Close" not in prices.columns:
@@ -397,11 +417,11 @@ def return_correlations(
         logger.warning("Need at least 2 tickers with price data for correlation")
         return pd.DataFrame()
 
-    combined = pd.DataFrame(price_frames)
-    returns = combined.pct_change(fill_method=None)
-    if pairwise:
-        return returns.corr(min_periods=min_days)
-    return returns.dropna().corr()
+    returns = weekly_returns(price_frames, min_weeks=min_weeks)
+    if returns.shape[1] < 2:
+        logger.warning("Need at least 2 tickers with enough weekly returns for correlation")
+        return pd.DataFrame()
+    return returns.corr()
 
 
 def calculate_risk_parity_weights(
@@ -567,6 +587,14 @@ def _safe_metric(
         val = val / float(divisor)
 
     return round(val * multiply, 2) if multiply != 1.0 else round(val, 2)
+
+
+def _dcf_vs_price(premium_pct: Any) -> Optional[float]:
+    """(value - price) / price in percent, from the premium (price - value) / value."""
+    premium = finite_float(premium_pct)
+    if premium is None or premium <= -100:
+        return None
+    return round((1 / (1 + premium / 100) - 1) * 100, 2)
 
 
 def _format_large_number(value: Any) -> Optional[str]:

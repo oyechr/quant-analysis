@@ -19,6 +19,7 @@ from src.comparison.comparator import (
     TickerComparator,
     _format_large_number,
     _safe_metric,
+    return_correlations,
 )
 from src.comparison.formatters import (
     format_comparison_json,
@@ -45,7 +46,7 @@ def _make_report(ticker: str, pe: float = 25.0, market_cap: float = 1e12) -> dic
             "forward_pe": pe * 0.9,
             "price_to_book": 10.0,
             "peg_ratio": 1.5,
-            "enterprise_to_ebitda": 18.0,
+            "ev_to_ebitda": 18.0,
             "freeCashflow": 5e10,
             "market_cap": market_cap,
             "revenueGrowth": 0.08,
@@ -185,6 +186,11 @@ class TestRelativeValuation:
         assert "AAPL" in df.columns
         assert "P/E" in df.index
         assert df.at["P/E", "AAPL"] == 28.0
+        # The info key is ev_to_ebitda (it read a key that doesn't exist: always nan)
+        assert df.at["EV/EBITDA", "AAPL"] == 18.0
+        # Priced 12.5% under the DCF value: the value is 14.3% above the price.
+        # The row used to be "DCF Upside %" showing the premium, sign reversed
+        assert df.at["DCF vs price %", "AAPL"] == pytest.approx(14.29)
 
 
 class TestCorrelationMatrix:
@@ -192,13 +198,13 @@ class TestCorrelationMatrix:
         comp = TickerComparator(["AAPL", "MSFT"])
 
         # Mock fetch_ticker to return synthetic price data
-        dates = pd.date_range("2024-01-01", periods=50, freq="B")
+        dates = pd.date_range("2024-01-01", periods=250, freq="B")
         np.random.seed(42)
 
         mock_fetcher = MagicMock()
         mock_fetcher.fetch_ticker.side_effect = [
-            pd.DataFrame({"Close": np.random.randn(50).cumsum() + 100}, index=dates),
-            pd.DataFrame({"Close": np.random.randn(50).cumsum() + 200}, index=dates),
+            pd.DataFrame({"Close": np.random.randn(250).cumsum() + 100}, index=dates),
+            pd.DataFrame({"Close": np.random.randn(250).cumsum() + 200}, index=dates),
         ]
         comp.fetcher = mock_fetcher
 
@@ -213,8 +219,8 @@ class TestCorrelationMatrix:
         comp = TickerComparator(["EQNR.OL", "AAPL"])
         mock_fetcher = MagicMock()
         mock_fetcher.fetch_ticker.side_effect = [
-            price_factory("EQNR.OL", days=60, seed=1),
-            price_factory("AAPL", days=60, seed=2),
+            price_factory("EQNR.OL", days=250, seed=1),
+            price_factory("AAPL", days=250, seed=2),
         ]
         comp.fetcher = mock_fetcher
 
@@ -424,3 +430,65 @@ class TestFormatters:
     def test_format_correlation_heatmap_empty(self):
         output = format_correlation_heatmap(pd.DataFrame())
         assert "no correlation" in output
+
+
+# ============================================================
+# Review Batch G: weekly correlations, covered weights
+# ============================================================
+
+
+class TestWeeklyCorrelation:
+    def test_asynchronous_closes_dont_hide_the_correlation(self):
+        # Both stocks follow one market factor, but B (think Oslo vs New York)
+        # only prices each day's news at its next close. Same-day returns
+        # barely correlate; Friday-to-Friday returns share most of the news.
+        rng = np.random.default_rng(7)
+        days = pd.bdate_range("2025-01-01", periods=260)
+        market = rng.normal(0, 0.01, len(days) + 1)
+        a = 100 * np.cumprod(1 + market[1:] + rng.normal(0, 0.002, len(days)))
+        b = 100 * np.cumprod(1 + market[:-1] + rng.normal(0, 0.002, len(days)))
+        prices = {
+            "A": pd.DataFrame({"Close": a}, index=days),
+            "B": pd.DataFrame({"Close": b}, index=days),
+        }
+
+        daily = pd.DataFrame({t: p["Close"] for t, p in prices.items()}).pct_change().corr()
+        weekly = return_correlations(prices)
+
+        assert daily.at["A", "B"] < 0.2
+        assert weekly.at["A", "B"] > 0.6
+
+    def test_a_short_history_is_left_out_not_shortening_everyone(self):
+        rng = np.random.default_rng(1)
+        days = pd.bdate_range("2025-01-01", periods=260)
+
+        def frame(n: int) -> pd.DataFrame:
+            close = 100 * np.cumprod(1 + rng.normal(0, 0.01, n))
+            return pd.DataFrame({"Close": close}, index=days[-n:])
+
+        corr = return_correlations({"A": frame(260), "B": frame(260), "NEW": frame(60)})
+        assert list(corr.columns) == ["A", "B"]
+
+
+class TestCoveredWeights:
+    def _comparator(self) -> MagicMock:
+        comparator = MagicMock()
+        comparator._scores = {"A": MagicMock(composite_score=80.0, signal="Buy")}
+        comparator._reports = {"A": {"info": {"beta": 1.2}}, "B": {"info": {}}}
+        comparator.correlation_matrix.return_value = pd.DataFrame()
+        return comparator
+
+    def test_missing_score_and_beta_are_not_zero(self):
+        # The old code gave 40 (80 x 0.5 + 0 x 0.5) and a beta of 0.6
+        stats = PortfolioView(tickers=["A", "B"], weights=[0.5, 0.5]).portfolio_stats(
+            self._comparator()
+        )
+        assert stats["weighted_composite_score"] == 80.0
+        assert stats["weighted_beta"] == 1.2
+        assert stats["score_coverage"] == 0.5
+
+    def test_view_says_what_the_average_covers(self):
+        stats = PortfolioView(tickers=["A", "B"], weights=[0.5, 0.5]).portfolio_stats(
+            self._comparator()
+        )
+        assert "Weighted Score: 80.0  (covers 50% of the weight)" in format_portfolio_view(stats)

@@ -731,3 +731,44 @@ def test_regime_volatility_percentile_skips_the_warm_up():
     prices = pd.DataFrame({"Close": 100 * np.cumprod(np.concatenate([[1.0], 1 + returns]))})
     regime = RiskMetrics().calculate_regime(prices)
     assert regime["volatility_percentile"] == pytest.approx(79 / 80 * 100)
+
+
+class TestFactorWindows:
+    def test_momentum_needs_close_to_a_full_year(self):
+        from src.discovery.factor_ranking import MOMENTUM_MIN_BARS, momentum_12_1
+
+        rising = pd.Series([100.0 * 1.001**i for i in range(300)])
+        # The old code gave a 60-bar history a "12-1" return over its 60 bars
+        assert momentum_12_1(rising.iloc[:60]) is None
+        assert momentum_12_1(rising.iloc[: MOMENTUM_MIN_BARS - 1]) is None
+        assert momentum_12_1(rising.iloc[:MOMENTUM_MIN_BARS]) is not None
+
+    def test_momentum_is_twelve_minus_one_months(self):
+        from src.discovery.factor_ranking import momentum_12_1
+
+        close = pd.Series([float(i) for i in range(1, 401)])
+        # From 252 bars back to 22 bars back (one month skipped)
+        assert momentum_12_1(close) == pytest.approx(close.iloc[-22] / close.iloc[-252] - 1)
+
+    def test_loss_maker_gets_a_negative_earnings_yield(self):
+        # Without a P/E the old code valued a loss-maker on book/price alone,
+        # so a cheap-looking book could rank it top on value
+        ranker = FactorRanker()
+        loss = ranker._value_components(
+            {"info": {"profit_margin": -0.20, "price_to_sales": 2.0, "price_to_book": 0.5}}
+        )
+        assert loss["earnings_yield"] == pytest.approx(-0.10)
+
+        ticker_data = {
+            "LOSS": {"info": {"profit_margin": -0.20, "price_to_sales": 2.0, "price_to_book": 0.5}},
+            "PROFIT": {"info": {"pe_ratio": 15, "price_to_book": 1.0}},
+            "PRICEY": {"info": {"pe_ratio": 40, "price_to_book": 4.0}},
+        }
+        results = {r.ticker: r for r in ranker.rank_universe(ticker_data)}
+        assert results["LOSS"].value_score < results["PROFIT"].value_score
+
+    def test_earnings_yield_prefers_the_pe(self):
+        components = FactorRanker()._value_components(
+            {"info": {"pe_ratio": 20, "profit_margin": 0.5, "price_to_sales": 1.0}}
+        )
+        assert components["earnings_yield"] == pytest.approx(0.05)

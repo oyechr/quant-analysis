@@ -422,3 +422,25 @@ def test_screen_command_requires_universe():
 
     assert result.exit_code != 0
     assert "sp500" in result.output
+
+
+def test_combined_tables_skip_an_index_change_log():
+    # Constituents split over two tables, plus Wikipedia's "Selected changes"
+    # table: its last Ticker column is the removed names
+    part1 = _wiki_table("Symbol", [f"A{i}" for i in range(15)])
+    part2 = _wiki_table("Symbol", [f"B{i}" for i in range(15)])
+    changes = "".join(
+        f"<tr><td>2026-01-0{i + 1}</td><td>NEW{i}</td><td>Co</td><td>GONE{i}</td><td>Co</td></tr>"
+        for i in range(5)
+    )
+    log = (
+        "<table><thead><tr><th rowspan='2'>Date</th><th colspan='2'>Added</th>"
+        "<th colspan='2'>Removed</th></tr>"
+        "<tr><th>Ticker</th><th>Security</th><th>Ticker</th><th>Security</th></tr></thead>"
+        f"<tbody>{changes}</tbody></table>"
+    )
+
+    tickers = parse_constituents(part1 + log + part2, SMALL_INDEX)
+
+    assert len(tickers) == 30
+    assert not any(t.startswith(("GONE", "NEW")) for t in tickers)

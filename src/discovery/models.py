@@ -36,11 +36,18 @@ class TrackedPortfolio:
     filing_date: Optional[datetime] = None
     period_of_report: Optional[datetime] = None
     description: Optional[str] = None
+    # EDGAR accession numbers the holdings were built from (to tell when a cache is out of date)
+    accessions: list[str] = field(default_factory=list)
 
     @property
     def tickers(self) -> set[str]:
         """Get all unique tickers in this portfolio."""
         return {h.ticker for h in self.holdings}
+
+    @property
+    def held(self) -> list[Holding]:
+        """Positions held at the report date: the "exit" placeholders left out."""
+        return [h for h in self.holdings if h.action != "exit"]
 
     @property
     def total_value(self) -> Optional[float]:

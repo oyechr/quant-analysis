@@ -119,10 +119,10 @@ quant screen --list                            # the built-in universes
 
 #### `quant discover`
 
-Finds patterns across the 13F filings of well-known funds (Berkshire Hathaway, ARK, Soros, Bridgewater, Renaissance, Pershing Square, Appaloosa, Icahn), from SEC EDGAR (free, no key). It compares each fund's two latest quarters to tell new, added, trimmed, held and exited positions apart. It then looks for four patterns: tickers held by several funds, sector clusters, several funds buying or selling the same name, and funds disagreeing.
+Finds patterns across the 13F filings of well-known funds (Berkshire Hathaway, ARK, Soros, Bridgewater, Renaissance, Pershing Square, Appaloosa, Icahn), from SEC EDGAR (free, no key). It compares each fund's two latest quarters to tell new, added, trimmed, held and exited positions apart. A quarter is the latest complete filing plus any "new holdings" amendment (a restatement replaces the original), with rows summed per security; options and bonds are left out. It then looks for four patterns: tickers held by several funds, sector clusters, several funds buying or selling the same name, and funds disagreeing. Positions a fund sold during the quarter count only as sells, never as holdings.
 
 ```bash
-quant --no-cache discover             # fetch the latest filings (about 30 s)
+quant --no-cache discover             # refetch every filing (about 30 s)
 quant discover --min-overlap 3        # held by 3+ funds: the strongest consensus
 quant discover --sector Technology
 quant screen discover                 # then rank and score the consensus picks
@@ -131,11 +131,12 @@ quant screen discover                 # then rank and score the consensus picks
 - **The output**, up to `--top` rows per section, strongest first (strength is 0-100):
   - **Ticker overlap:** names held by several funds. Overlap is funds holding it out of funds tracked, and strength is 80% the overlap share and 20% the average portfolio weight (5% or more counts in full). Under each: the funds, and what they did last quarter.
   - **Sector/industry clusters:** industries several funds are in. Strength is 60% how many funds are in it and 40% how many names each holds there (3 or more counts in full).
-  - **Activity convergence:** several funds buying (or selling) the same name within 90 days. Four or more funds is strength 100.
-  - **Contrarian signals:** names some funds bought and others sold. Net is the side with more funds; strength is higher the more evenly split and the more funds involved.
+  - **Activity convergence:** several funds buying (or selling) the same name within 90 days, each fund counted once. Four or more funds is strength 100.
+  - **Contrarian signals:** names some funds bought and others sold. A fund on both sides (adding one share class, trimming another) isn't counted. Net is the side with more funds; strength is higher the more evenly split and the more funds involved.
 - **Options:** `--min-overlap` (default 2), `--top` (default 20), `--sector`, `--enrich` (sector data for every holding, not just the top ones; slow), and `--list-sources`.
-- **Refreshing:** 13F filings arrive about 45 days after each quarter (mid-February, mid-May, mid-August, mid-November), so the data is 1-4 months old. Refresh with `--no-cache` after those dates.
-- **User-Agent:** SEC asks for one with contact details (`edgar_user_agent` in `config.json`).
+- **Refreshing:** 13F filings arrive about 45 days after each quarter (mid-February, mid-May, mid-August, mid-November), so the data is 1-4 months old. A cached fund is checked against EDGAR's filing list once a day and refetched when a filing was added or amended; if EDGAR can't be reached, the cache is used with a warning.
+- **Tickers:** 13F filings name securities by CUSIP. They are mapped to tickers with [OpenFIGI](https://www.openfigi.com/api) (free, no key needed; each share class keeps its own ticker), and sectors come from Yahoo. Mappings are cached in `data/_discovery/enrichment/`; a CUSIP OpenFIGI doesn't know is retried after 30 days, and a failed lookup is retried next run. An `openfigi_api_key` in `config.json` makes `--enrich` on the large funds about ten times faster.
+- **User-Agent:** SEC asks for one with your name and contact details (`edgar_user_agent` in `config.json`); `discover` warns while it's the placeholder.
 
 ### Vet
 
@@ -510,6 +511,7 @@ Many companies report in one currency and trade in another; most Oslo energy nam
     "benchmark_by_suffix": {".OL": "OBX.OL"},
     "cache_ttl_hours": {"fundamentals": 336, "prices": 6},
     "edgar_user_agent": "PersonalResearch you@email.com",
+    "openfigi_api_key": "...",
     "llm_model": "claude-haiku-5-5",
     "llm_anthropic_api_key": "sk-ant-...",
     "llm_github_token": "ghp_..."

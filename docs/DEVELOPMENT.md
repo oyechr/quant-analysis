@@ -104,7 +104,7 @@ quant-analysis/
 |   +-- discovery/
 |   |   +-- models.py                # holdings, portfolios, signals
 |   |   +-- analyzer.py              # cross-portfolio patterns
-|   |   +-- enrichment.py            # CUSIP -> ticker, sector/industry
+|   |   +-- enrichment.py            # CUSIP -> ticker (OpenFIGI), sector/industry
 |   |   +-- factor_ranking.py        # cross-sectional factor ranking
 |   |   +-- render.py                # discover output
 |   |   +-- sources/                 # pluggable sources (base.py, edgar_13f.py)

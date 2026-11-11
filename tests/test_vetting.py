@@ -549,7 +549,7 @@ class TestFundActivity:
         _write_fund(tmp_path, "3", "Fund Three", [_holding("111111111", "MICROSOFT CORP", "add")])
         enrichment = tmp_path / "_discovery" / "enrichment"
         enrichment.mkdir(parents=True)
-        (enrichment / "cusip_map.json").write_text(json.dumps({"037833100": "AAPL"}))
+        (enrichment / "cusip_tickers.json").write_text(json.dumps({"037833100": "AAPL"}))
 
         result = fund_activity("AAPL", "Apple Inc.", data_dir=str(tmp_path))
 
