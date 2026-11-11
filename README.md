@@ -84,8 +84,11 @@ Global options go **before** the command: `quant --period 2y report AAPL`.
 | `--period` | `1y` | Price history for analysis: `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y` |
 | `--format` | `all` | Report files: `json`, `markdown`, `toon`, `all` |
 | `--no-cache` | off | Fetch fresh data, ignoring the cache |
-| `--output-dir` | `data` | Folder for the cache, reports and history |
+| `--output-dir` | `data` | Folder for the cache, reports and history (created if missing) |
+| `--watchlist` | `watchlist.toml` | Watchlist file, for every command that reads or adds to it |
 | `-v` / `-q` | | Debug logging / errors only (the default shows warnings) |
+
+The result goes to stdout and progress to stderr, so `quant compare AAPL MSFT --json > out.json` gives clean JSON (`vet`, `review`, `rebalance`, `changes`, `journal ls/lookback` and `backtest` take `--json` too). A command that scores nothing (an unknown symbol, every ticker failing, no 13F filings fetched) exits with code 1, and a bad option with code 2.
 
 Most commands take `--config default|value|growth|income` (the scoring preset) and `--workers N` (tickers fetched in parallel; keep it modest, since Yahoo rate-limits).
 
@@ -313,7 +316,7 @@ quant watchlist rm MSFT
 quant watchlist ls                           # with each ticker's last recorded score
 ```
 
-The list lives in `watchlist.toml` (`--file` for another file). Target and stop are prices in the listing currency.
+The list lives in `watchlist.toml` (`quant --watchlist FILE ...` for another file, which `screen`, `rebalance`, `journal` and `backtest` then use too). Target and stop are prices in the listing currency.
 
 #### `quant changes`
 
@@ -338,7 +341,7 @@ quant -q changes --save --notify        # what the daily task runs
 
 #### Daily check
 
-The history is only as good as the days it covers, so let Windows run `changes` every weekday morning. By then the previous day's closes are final in both Oslo and New York. `scripts/daily.ps1` runs `quant -q changes --save --notify` and appends the output to `data/_changes/changes.log`. Register it once, from the repo folder, in PowerShell:
+The history is only as good as the days it covers, so let Windows run `changes` every weekday morning. By then the previous day's closes are final in both Oslo and New York. `scripts/daily.ps1` runs `quant -q changes --save --notify` and appends the output to `data/_changes/changes.log` (trimmed to its last 5,000 lines once it passes 1 MB). Register it once, from the repo folder, in PowerShell:
 
 ```powershell
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -WorkingDirectory $PWD `

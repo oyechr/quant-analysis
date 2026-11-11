@@ -39,7 +39,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import numpy as np
 import pandas as pd
 
-DEFAULT_TARGETS = Path("portfolio/targets.toml")
+from ..paths import TARGETS
+
+DEFAULT_TARGETS = Path(TARGETS)
 EXEMPT_SECTORS = ("Fund", "Unknown")
 
 ERC_TOLERANCE = 1e-10

@@ -1227,3 +1227,16 @@ def test_bear_target_fallback_takes_the_furthest_level():
     )
     assert result is not None and result.bearish is not None
     assert (result.bearish.target, result.bearish.target_basis) == (98.5, "support")
+
+
+def test_trade_levels_survive_failed_sections():
+    """The pipeline stores a failed step as None (an unknown symbol fails them all)."""
+    from src.scoring.trade_levels import compute_trade_levels_from_report
+
+    report = {
+        "info": {"current_price": 100.0},
+        "technical_analysis": None,
+        "valuation_analysis": None,
+    }
+    result = compute_trade_levels_from_report(report)
+    assert result is None or result.current_price == 100.0

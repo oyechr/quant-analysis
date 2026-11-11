@@ -1,8 +1,11 @@
 """Options and helpers shared by the command modules."""
 
+import json
 import logging
 import math
 import sys
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, Optional
 
 import click
 
@@ -34,18 +37,82 @@ def configure_logging(verbose: bool, quiet: bool):
 
 
 class FiniteFloat(click.ParamType):
-    """A float that isn't inf or nan (click.FLOAT accepts both)."""
+    """A float that isn't inf or nan (click.FLOAT accepts both), optionally >= min."""
 
     name = "float"
+
+    def __init__(self, min: Optional[float] = None) -> None:
+        self.min = min
 
     def convert(self, value, param, ctx):
         number = click.FLOAT.convert(value, param, ctx)
         if not math.isfinite(number):
             self.fail(f"{value!r} is not a usable number", param, ctx)
+        if self.min is not None and number < self.min:
+            self.fail(f"{value!r} is below {self.min:g}", param, ctx)
         return number
 
 
 FINITE_FLOAT = FiniteFloat()
+NON_NEGATIVE_FLOAT = FiniteFloat(min=0)
+POSITIVE_INT = click.IntRange(min=1)
+
+
+def to_json(data: Any) -> str:
+    return json.dumps(data, indent=2, default=str)
+
+
+def echo_status(message: str = "") -> None:
+    """Progress and status lines go to stderr, so stdout stays the result."""
+    click.echo(message, err=True)
+
+
+def echo_progress(ticker: str, error: Optional[str]) -> None:
+    """One ✓/✗ line per ticker, on stderr."""
+    mark = "✗" if error else "✓"
+    echo_status(f"  {mark} {ticker}" + (f": {error}" if error else ""))
+
+
+def echo_banner(title: str) -> None:
+    echo_status("=" * 70)
+    echo_status(f"  {title}")
+    echo_status("=" * 70)
+
+
+@contextmanager
+def stage_progress(labels: Dict[str, str]) -> Iterator[Callable[[str, int, int], None]]:
+    """
+    A progress callback (stage, done, total) drawing one bar per stage on
+    stderr. Each bar closes when its stage completes, and on the way out if
+    the run fails first.
+    """
+    bars: Dict[str, Any] = {}
+
+    def update(stage: str, done: int, total: int) -> None:
+        if stage not in bars:
+            bars[stage] = click.progressbar(
+                length=total, label=labels.get(stage, stage), file=sys.stderr
+            )
+            bars[stage].__enter__()
+        bars[stage].update(1)
+        if done == total:
+            bars.pop(stage).__exit__(None, None, None)
+
+    try:
+        yield update
+    finally:
+        for bar in bars.values():
+            bar.__exit__(None, None, None)
+
+
+def has_score(report: Dict[str, Any], scoring: Any) -> bool:
+    """
+    A usable score: something was scored and there's a price. An unknown
+    symbol still gets a meaningless 50/100 Hold at 0% confidence.
+    """
+    from ..vetting.verdict import current_price
+
+    return scoring is not None and current_price(report) is not None
 
 
 def get_scoring_config(config_name: str) -> ScoringConfig:

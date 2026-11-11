@@ -94,7 +94,7 @@ class DataFetcher:
             cache_dir: Directory to store cached data files
         """
         self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.config = get_config()
         # ticker -> resource -> ISO timestamp of when the data was fetched from the source
         self._fetched_at: Dict[str, Dict[str, str]] = {}
@@ -743,7 +743,8 @@ class DataFetcher:
             return news
 
         except Exception as e:
-            logger.error(f"Error fetching news for {ticker}: {e}")
+            # News is optional context; the report is complete without it
+            logger.warning(f"News unavailable for {ticker}: {e}")
             return []
 
     # ==================== Cache Helper Methods ====================

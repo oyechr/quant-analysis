@@ -8,9 +8,14 @@ from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisOptions
 from ..utils.files import atomic_write_text
 from .common import (
+    POSITIVE_INT,
     config_option,
+    echo_banner,
+    echo_status,
     get_scoring_config,
     record_history,
+    stage_progress,
+    to_json,
     workers_option,
 )
 
@@ -28,7 +33,9 @@ def _parse_amount_option(ctx, param, value):
 
 @click.command()
 @click.argument("universe", nargs=-1)
-@click.option("--top", default=20, show_default=True, help="Candidates to fully score.")
+@click.option(
+    "--top", default=20, show_default=True, type=POSITIVE_INT, help="Candidates to fully score."
+)
 @config_option()
 @click.option(
     "--sector",
@@ -66,7 +73,7 @@ def _parse_amount_option(ctx, param, value):
     "add_top",
     type=click.IntRange(min=1),
     default=None,
-    help="Add the N best-scoring results to watchlist.toml.",
+    help="Add the N best-scoring results to the watchlist (quant --watchlist).",
 )
 @click.pass_context
 def screen(
@@ -125,17 +132,18 @@ def screen(
 
     output_dir = ctx.obj["output_dir"]
     use_cache = ctx.obj["use_cache"]
+    watchlist_path = ctx.obj["watchlist_file"]
 
     try:
-        resolved = resolve_universe(list(universe), data_dir=output_dir, use_cache=use_cache)
+        resolved = resolve_universe(
+            list(universe), data_dir=output_dir, use_cache=use_cache, watchlist_path=watchlist_path
+        )
     except ValueError as e:
         raise click.ClickException(str(e)) from e
     if not resolved.tickers:
         raise click.ClickException("Universe is empty.")
 
-    click.echo("=" * 70)
-    click.echo(f"  Screening {len(resolved.tickers)} tickers ({resolved.label})")
-    click.echo("=" * 70)
+    echo_banner(f"Screening {len(resolved.tickers)} tickers ({resolved.label})")
 
     screener = Screener(
         fetcher=DataFetcher(cache_dir=output_dir),
@@ -156,23 +164,14 @@ def screen(
     )
 
     stage_labels = {"rank": "  Ranking universe  ", "score": "  Scoring shortlist "}
-    bars = {}
-
-    def _progress(stage: str, done: int, total: int):
-        if stage not in bars:
-            bars[stage] = click.progressbar(length=total, label=stage_labels[stage])
-            bars[stage].__enter__()
-        bars[stage].update(1)
-        if done == total:
-            bars[stage].__exit__(None, None, None)
-
-    result = screener.run(
-        resolved.tickers,
-        filters=filters,
-        top_n=top,
-        universe_label=resolved.label,
-        progress=_progress,
-    )
+    with stage_progress(stage_labels) as progress:
+        result = screener.run(
+            resolved.tickers,
+            filters=filters,
+            top_n=top,
+            universe_label=resolved.label,
+            progress=progress,
+        )
 
     click.echo()
     click.echo(format_screen_table(result))
@@ -187,7 +186,7 @@ def screen(
             sample = [t for t, r in result.excluded.items() if not r.startswith("filtered")][:8]
             click.echo(f"    no data: {', '.join(sample)}{' ...' if unavailable > 8 else ''}")
 
-    from ..tracking import DEFAULT_WATCHLIST, add_to_watchlist, history_row, load_watchlist
+    from ..tracking import add_to_watchlist, history_row, load_watchlist
 
     record_history(
         output_dir,
@@ -196,11 +195,17 @@ def screen(
 
     if save:
         for path in save_screen(result, output_dir, ctx.obj["output_format"]):
-            click.echo(f"  Saved: {path}")
+            echo_status(f"  Saved: {path}")
+
+    if not filtered and not any(c.scoring for c in result.scored):
+        # Filters that leave nothing are a result; no data for anything is a failure
+        raise click.ClickException("No ticker could be scored (no usable data).")
 
     if add_top:
-        watchlist_path = Path(DEFAULT_WATCHLIST)
-        listed = load_watchlist(watchlist_path)
+        try:
+            listed = load_watchlist(watchlist_path)
+        except ValueError as e:
+            raise click.ClickException(str(e)) from e
         best = [c for c in result.scored if c.scoring][:add_top]
         new = [c for c in best if c.ticker not in listed]  # keep existing theses
         for c in new:
@@ -215,10 +220,9 @@ def screen(
             + (f" ({already} already listed)" if already else "")
         )
 
-    if result.scored:
-        best = [c.ticker for c in result.scored[:3] if c.scoring]
-        if best:
-            click.echo(f"\n  Next: quant report {best[0]}   |   quant compare {' '.join(best)}")
+    best = [c.ticker for c in result.scored[:3] if c.scoring]
+    if best:
+        click.echo(f"\n  Next: quant report {best[0]}   |   quant compare {' '.join(best)}")
     click.echo()
 
 
@@ -226,13 +230,13 @@ def screen(
 @click.option(
     "--min-overlap",
     default=2,
-    type=int,
+    type=POSITIVE_INT,
     help="Minimum portfolios a ticker must appear in (default: 2).",
 )
 @click.option(
     "--top",
     default=20,
-    type=int,
+    type=POSITIVE_INT,
     help="Number of top signals to display (default: 20).",
 )
 @click.option(
@@ -286,18 +290,15 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
         click.echo()
         return
 
-    click.echo("=" * 70)
-    click.echo("  PORTFOLIO DISCOVERY")
-    click.echo("=" * 70)
-    click.echo("\n  Fetching notable portfolios from SEC EDGAR 13F filings...")
+    echo_banner("PORTFOLIO DISCOVERY")
+    echo_status("\n  Fetching notable portfolios from SEC EDGAR 13F filings...")
 
     portfolios = source.fetch_portfolios(use_cache=use_cache)
 
     if not portfolios:
-        click.echo("  No portfolios fetched. Check your internet connection.")
-        return
+        raise click.ClickException("No portfolios fetched. Check your internet connection.")
 
-    click.echo(f"  Loaded {len(portfolios)} portfolios")
+    echo_status(f"  Loaded {len(portfolios)} portfolios")
 
     # Show action stats from filing diff
     actions = {}
@@ -307,7 +308,7 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
                 actions[h.action] = actions.get(h.action, 0) + 1
     if actions:
         action_str = ", ".join(f"{k}: {v}" for k, v in sorted(actions.items()))
-        click.echo(f"  Actions inferred from quarter-over-quarter diff: {action_str}")
+        echo_status(f"  Actions inferred from quarter-over-quarter diff: {action_str}")
 
     # Enrichment: either full (--enrich) or auto (top overlap tickers only)
     from ..discovery.enrichment import HoldingEnricher
@@ -315,7 +316,7 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
     enricher = HoldingEnricher(cache_dir=output_dir)
 
     if enrich:
-        click.echo("  Enriching ALL holdings with sector/industry data (slow)...")
+        echo_status("  Enriching ALL holdings with sector/industry data (slow)...")
         for portfolio in portfolios:
             enricher.enrich_portfolio(portfolio)
     else:
@@ -324,7 +325,7 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
         pre_signals = analyzer_pre.detect_overlap(portfolios)
         top_tickers = {s.ticker for s in pre_signals[: top * 2]}  # Enrich a bit more than displayed
         if top_tickers:
-            click.echo(
+            echo_status(
                 f"  Auto-enriching top {len(top_tickers)} overlap tickers with sector data..."
             )
             enricher.enrich_tickers_in_portfolios(portfolios, top_tickers)
@@ -347,12 +348,10 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
 
     # Save output if requested
     if output_format in ("json", "all"):
-        import json as _json
-
         out_path = Path(output_dir) / "_discovery" / "discovery_result.json"
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(out_path, _json.dumps(result.to_dict(), indent=2))
-        click.echo(f"  Results saved to: {out_path}")
+        atomic_write_text(out_path, to_json(result.to_dict()))
+        echo_status(f"  Results saved to: {out_path}")
 
     if output_format in ("toon", "all"):
         try:
@@ -361,7 +360,7 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
             out_path = Path(output_dir) / "_discovery" / "discovery_result.toon"
             out_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_write_text(out_path, toon.encode(result.to_dict()))
-            click.echo(f"  TOON output:  {out_path}")
+            echo_status(f"  TOON output:  {out_path}")
         except ImportError:
             pass
 

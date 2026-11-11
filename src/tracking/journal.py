@@ -42,13 +42,14 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
+from ..paths import JOURNAL
 from ..utils.files import atomic_write_text
 from ..utils.financial import trading_dates
 from ..vetting.render import Section, Table, sections_to_text
 from .history import Row, flag_titles
 from .watchlist import _toml_string
 
-DEFAULT_JOURNAL = "portfolio/journal.toml"
+DEFAULT_JOURNAL = JOURNAL
 ACTIONS = ("buy", "add", "trim", "sell")
 OPENING = ("buy", "add")  # actions that carry a thesis to check
 

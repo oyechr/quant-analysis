@@ -21,11 +21,12 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
+from ..paths import WATCHLIST
 from ..utils.files import atomic_write_text
 from ..vetting.render import Section, Table, sections_to_text
 from .history import Row
 
-DEFAULT_WATCHLIST = "watchlist.toml"
+DEFAULT_WATCHLIST = WATCHLIST
 
 
 @dataclass

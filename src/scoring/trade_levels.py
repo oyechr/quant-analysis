@@ -600,19 +600,19 @@ def compute_trade_levels_from_report(
     currency = info.get("currency", "USD")
 
     # Fallback: get from technical analysis
-    tech_data = report_data.get("technical_analysis", {})
+    tech_data = report_data.get("technical_analysis") or {}
     if current_price is None:
-        latest_values = tech_data.get("latest_values", {})
+        latest_values = tech_data.get("latest_values") or {}
         current_price = finite_float(latest_values.get("close_price"))
 
     # Fallback: get from price statistics
     if current_price is None:
-        stats = tech_data.get("statistics", {})
-        current_price = finite_float(stats.get("price", {}).get("current"))
+        stats = tech_data.get("statistics") or {}
+        current_price = finite_float((stats.get("price") or {}).get("current"))
 
     # Fallback: get from support_resistance section (uses last valid close)
     if current_price is None:
-        sr_data = tech_data.get("support_resistance", {})
+        sr_data = tech_data.get("support_resistance") or {}
         current_price = finite_float(sr_data.get("current_price"))
 
     if current_price is None:
@@ -620,7 +620,7 @@ def compute_trade_levels_from_report(
         return None
 
     # Extract technical indicators
-    indicators = tech_data.get("latest_values", {}).get("indicators", {})
+    indicators = (tech_data.get("latest_values") or {}).get("indicators") or {}
     atr = finite_float(indicators.get("ATR"))
     bb_lower = finite_float(indicators.get("BB_lower"))
     bb_upper = finite_float(indicators.get("BB_upper"))
@@ -630,13 +630,13 @@ def compute_trade_levels_from_report(
     # Extract fair value from valuation
     fair_value = None
     fair_value_source = ""
-    val_data = report_data.get("valuation_analysis", {})
+    val_data = report_data.get("valuation_analysis") or {}
     # Free-cash-flow models say little about banks and insurers, which vet
     # leaves out too (verdict.fair_value_range): the DDM only
     financial = is_financial(info)
     if val_data:
         # Try DCF first
-        dcf = val_data.get("dcf_valuation", {})
+        dcf = val_data.get("dcf_valuation") or {}
         dcf_val = None if financial else finite_float(dcf.get("intrinsic_value_per_share"))
         if dcf_val and dcf_val > 0:
             fair_value = dcf_val
@@ -644,7 +644,7 @@ def compute_trade_levels_from_report(
 
         # Try DDM if no DCF
         if fair_value is None:
-            ddm = val_data.get("ddm_valuation", {})
+            ddm = val_data.get("ddm_valuation") or {}
             ddm_val = finite_float(ddm.get("intrinsic_value_per_share"))
             if ddm_val and ddm_val > 0:
                 fair_value = ddm_val
@@ -652,7 +652,7 @@ def compute_trade_levels_from_report(
 
         # Try Monte Carlo median
         if fair_value is None and not financial:
-            mc = val_data.get("monte_carlo_valuation", {})
+            mc = val_data.get("monte_carlo_valuation") or {}
             mc_val = finite_float(mc.get("intrinsic_value_median"))
             if mc_val and mc_val > 0:
                 fair_value = mc_val
@@ -663,7 +663,7 @@ def compute_trade_levels_from_report(
     resistance_levels: List[float] = []
 
     # First: use pivot-based S/R from technical analysis if available
-    sr_data = tech_data.get("support_resistance", {})
+    sr_data = tech_data.get("support_resistance") or {}
     if sr_data:
         pivot_supports = [finite_float(s) for s in sr_data.get("support_levels", [])]
         pivot_resistances = [finite_float(r) for r in sr_data.get("resistance_levels", [])]
@@ -671,7 +671,7 @@ def compute_trade_levels_from_report(
         resistance_levels.extend([r for r in pivot_resistances if r is not None])
 
     # Supplement with MAs, Bollinger bands, and period extremes
-    price_stats = tech_data.get("statistics", {}).get("price", {})
+    price_stats = (tech_data.get("statistics") or {}).get("price") or {}
     period_high = finite_float(price_stats.get("high"))
     period_low = finite_float(price_stats.get("low"))
 

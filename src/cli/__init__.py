@@ -10,14 +10,17 @@ Each module holds one command group; this module defines the `quant` group and
 registers them.
 """
 
+from pathlib import Path
+
 import click
 
+from ..paths import DATA_DIR, WATCHLIST
 from . import analyze, backtest, chat, find, portfolio, track
 from .common import configure_logging
 
 
 @click.group()
-@click.option("--output-dir", default="data", help="Output directory for reports and data.")
+@click.option("--output-dir", default=DATA_DIR, help="Output directory for reports and data.")
 @click.option("--no-cache", is_flag=True, default=False, help="Fetch fresh data (ignore cache).")
 @click.option(
     "--format",
@@ -27,10 +30,18 @@ from .common import configure_logging
     help="Output format (default: all).",
 )
 @click.option("--period", default="1y", help="Data period (e.g., 1mo, 3mo, 6mo, 1y, 2y, 5y).")
+@click.option(
+    "--watchlist",
+    "watchlist_file",
+    default=WATCHLIST,
+    show_default=True,
+    type=click.Path(dir_okay=False),
+    help="Watchlist file, for every command that reads or adds to it.",
+)
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Enable debug logging.")
 @click.option("-q", "--quiet", is_flag=True, default=False, help="Suppress info logging.")
 @click.pass_context
-def cli(ctx, output_dir, no_cache, output_format, period, verbose, quiet):
+def cli(ctx, output_dir, no_cache, output_format, period, watchlist_file, verbose, quiet):
     """Quantitative stock analysis tool.
 
     Analyze, score, compare, and watch stocks from the command line.
@@ -41,6 +52,7 @@ def cli(ctx, output_dir, no_cache, output_format, period, verbose, quiet):
     ctx.obj["use_cache"] = not no_cache
     ctx.obj["output_format"] = output_format
     ctx.obj["period"] = period
+    ctx.obj["watchlist_file"] = Path(watchlist_file)
 
 
 COMMANDS = (

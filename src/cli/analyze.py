@@ -24,10 +24,16 @@ from ..scoring import format_score_table
 from ..utils.concurrency import run_concurrently
 from ..utils.files import atomic_write_text
 from .common import (
+    FINITE_FLOAT,
+    POSITIVE_INT,
     config_option,
+    echo_banner,
     echo_freshness_warnings,
+    echo_status,
     get_scoring_config,
+    has_score,
     record_history,
+    to_json,
     workers_option,
 )
 
@@ -63,9 +69,7 @@ def report(
     ticker = ticker.upper()
     generator = ReportGenerator(output_dir=output_dir)
 
-    click.echo("=" * 70)
-    click.echo(f"  Generating report for {ticker}")
-    click.echo("=" * 70)
+    echo_banner(f"Generating report for {ticker}")
 
     bundle = generator.generate(
         ticker,
@@ -81,24 +85,27 @@ def report(
         output_format=output_format,
     )
 
-    click.echo(f"\nReport generated for {ticker}")
+    if not has_score(bundle.report, bundle.scoring):
+        raise click.ClickException(f"No data for {ticker}. Check the symbol (e.g. EQNR.OL).")
+
+    reports_dir = Path(output_dir) / ticker / "reports"
+    echo_status(f"\nReport generated for {ticker}")
     if output_format in ("json", "all"):
-        click.echo(f"  - JSON: {output_dir}/{ticker}/reports/full_report.json")
+        echo_status(f"  - JSON: {reports_dir / 'full_report.json'}")
     if output_format in ("markdown", "all"):
-        click.echo(f"  - Markdown: {output_dir}/{ticker}/reports/report.md")
+        echo_status(f"  - Markdown: {reports_dir / 'report.md'}")
     if output_format in ("toon", "all"):
-        click.echo(f"  - TOON: {output_dir}/{ticker}/reports/full_report.toon")
+        echo_status(f"  - TOON: {reports_dir / 'full_report.toon'}")
 
     echo_freshness_warnings(ticker, bundle.report)
 
-    if bundle.scoring:
-        from ..tracking import history_row
+    from ..tracking import history_row
 
-        record_history(output_dir, [history_row(bundle.report, bundle.scoring, "report")])
-        click.echo()
-        click.echo(bundle.scoring.format_scorecard())
+    record_history(output_dir, [history_row(bundle.report, bundle.scoring, "report")])
+    click.echo()
+    click.echo(bundle.scoring.format_scorecard())
 
-    click.echo(f"\nFiles saved in: {output_dir}/{ticker}/reports/")
+    echo_status(f"\nFiles saved in: {reports_dir}")
 
 
 @click.command()
@@ -126,7 +133,7 @@ def score(ctx, tickers, config_name, workers):
     )
     tickers_list = list(dict.fromkeys(t.upper() for t in tickers))
 
-    click.echo(f"  Analyzing {len(tickers_list)} ticker(s)...")
+    echo_status(f"  Analyzing {len(tickers_list)} ticker(s)...")
     results = {}
     history = []
     for ticker, bundle, error in run_concurrently(
@@ -134,8 +141,10 @@ def score(ctx, tickers, config_name, workers):
         tickers_list,
         workers=workers,
     ):
-        if error is not None or bundle.scoring is None:
-            click.echo(f"  ✗ Error for {ticker}: {error or 'scoring failed'}", err=True)
+        if error is None and not has_score(bundle.report, bundle.scoring):
+            error = "no data (check the symbol)"
+        if error is not None:
+            echo_status(f"  ✗ Error for {ticker}: {error}")
             results[ticker] = None
             continue
         echo_freshness_warnings(ticker, bundle.report)
@@ -144,6 +153,8 @@ def score(ctx, tickers, config_name, workers):
     record_history(ctx.obj["output_dir"], history)
 
     click.echo(format_score_table({t: results.get(t) for t in tickers_list}, config_name))
+    if not any(results.values()):
+        raise click.ClickException("No ticker could be scored.")
 
 
 @click.command()
@@ -179,8 +190,6 @@ def vet(ctx, ticker, peers, config_name, brief, as_json, save):
       quant vet EQNR.OL --peers "AKRBP.OL,VAR.OL"
       quant vet NVDA --config growth --save
     """
-    import json as _json
-
     from ..vetting import render_markdown, render_text, vet_ticker
 
     output_dir = ctx.obj["output_dir"]
@@ -211,16 +220,26 @@ def vet(ctx, ticker, peers, config_name, brief, as_json, save):
     )
     data = result.to_dict()
     if as_json:
-        click.echo(_json.dumps(data, indent=2, default=str))
+        click.echo(to_json(data))
     else:
         click.echo(render_text(data, brief=brief))
 
     if save:
         reports_dir = Path(output_dir) / ticker / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
-        atomic_write_text((reports_dir / "vet.json"), _json.dumps(data, indent=2, default=str))
+        atomic_write_text((reports_dir / "vet.json"), to_json(data))
         atomic_write_text((reports_dir / "vet.md"), render_markdown(data))
         click.echo(f"  Saved: {reports_dir / 'vet.json'}, {reports_dir / 'vet.md'}", err=True)
+
+
+def _parse_weights(ctx, param, value):
+    """'0.5,0.3,0.2' -> [0.5, 0.3, 0.2]; count and sum are checked against the tickers."""
+    if value is None:
+        return None
+    try:
+        return [FINITE_FLOAT.convert(w.strip(), param, ctx) for w in value.split(",")]
+    except click.BadParameter as e:
+        raise click.BadParameter(f"use numbers, e.g. 0.5,0.3,0.2 ({e.message})") from e
 
 
 @click.command()
@@ -235,17 +254,22 @@ def vet(ctx, ticker, peers, config_name, brief, as_json, save):
 @click.option(
     "--weights",
     default=None,
-    type=str,
-    help="Comma-separated portfolio weights (e.g., 0.5,0.3,0.2).",
+    callback=_parse_weights,
+    help="Comma-separated portfolio weights, one per ticker, summing to 1 (e.g. 0.5,0.3,0.2).",
 )
+@click.option("--json", "as_json", is_flag=True, help="Print the comparison as JSON.")
 @click.pass_context
-def compare(ctx, tickers, config_name, save_chart, weights):
+def compare(ctx, tickers, config_name, save_chart, weights, as_json):
     """Compare two or more tickers side-by-side.
 
     Shows scoring comparison, relative valuation, correlation matrix,
     highly correlated pairs and hedges, and risk-parity suggested weights.
+    --json prints the same as JSON (as does the older `--format json`).
 
-    Example: quant compare AAPL MSFT GOOGL --weights "0.5,0.3,0.2"
+    \b
+    Examples:
+      quant compare AAPL MSFT GOOGL --weights "0.5,0.3,0.2"
+      quant compare EQNR.OL AKRBP.OL --json
     """
     if len(tickers) < 2:
         raise click.UsageError("At least 2 tickers are required for comparison.")
@@ -257,10 +281,14 @@ def compare(ctx, tickers, config_name, save_chart, weights):
 
     scoring_config = get_scoring_config(config_name)
     tickers_list = [t.upper() for t in tickers]
+    portfolio_view = None
+    if weights:
+        try:
+            portfolio_view = PortfolioView(tickers=tickers_list, weights=weights)
+        except ValueError as e:
+            raise click.BadParameter(str(e), param_hint="--weights") from e
 
-    click.echo("=" * 70)
-    click.echo(f"  Comparing: {', '.join(tickers_list)}")
-    click.echo("=" * 70)
+    echo_banner(f"Comparing: {', '.join(tickers_list)}")
 
     comparator = TickerComparator(
         tickers=tickers_list,
@@ -270,10 +298,10 @@ def compare(ctx, tickers, config_name, save_chart, weights):
         output_format=output_format,
     )
 
-    click.echo("\n  Fetching data...")
+    echo_status("\n  Fetching data...")
     comparator.fetch_all(use_cache=use_cache)
 
-    click.echo("  Scoring...")
+    echo_status("  Scoring...")
     comparator.score_all()
 
     # Side-by-side scores
@@ -312,16 +340,14 @@ def compare(ctx, tickers, config_name, save_chart, weights):
 
     # Portfolio view
     portfolio_stats = None
-    if weights:
+    if portfolio_view is not None:
         try:
-            weight_list = [float(w.strip()) for w in weights.split(",")]
-            pv = PortfolioView(tickers=tickers_list, weights=weight_list)
-            portfolio_stats = pv.portfolio_stats(comparator)
+            portfolio_stats = portfolio_view.portfolio_stats(comparator)
         except Exception as e:
-            click.echo(f"  ✗ Portfolio error: {e}", err=True)
+            echo_status(f"  ✗ Portfolio view failed: {e}")
 
     # Output
-    if output_format == "json":
+    if as_json or output_format == "json":
         click.echo(
             format_comparison_json(
                 scores_df=scores_df,
@@ -355,16 +381,21 @@ def compare(ctx, tickers, config_name, save_chart, weights):
             click.echo(format_correlation_heatmap(corr_df, save_path=save_chart))
         click.echo(format_diversification(correlation_flags, risk_parity))
 
-    if portfolio_stats:
+    if portfolio_stats and not (as_json or output_format == "json"):
         click.echo(format_portfolio_view(portfolio_stats))
 
 
 @click.command()
 @click.argument("tickers", nargs=-1, required=True)
 @click.option(
-    "--interval", default=300, type=int, help="Refresh interval in seconds (default: 300)."
+    "--interval", default=300, type=POSITIVE_INT, help="Refresh interval in seconds (default: 300)."
 )
-@click.option("--count", default=0, type=int, help="Number of iterations (default: 0 = infinite).")
+@click.option(
+    "--count",
+    default=0,
+    type=click.IntRange(min=0),
+    help="Number of iterations (default: 0 = infinite).",
+)
 @config_option()
 @click.pass_context
 def watch(ctx, tickers, interval, count, config_name):

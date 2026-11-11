@@ -41,6 +41,7 @@ def _mock_report_data(ticker: str = "AAPL") -> dict:
         "generated_at": datetime.now().isoformat(),
         "info": {"trailingPE": 28.5, "marketCap": 3000000000000},
         "scoring": {"composite_score": 72.5},
+        "price_data": {"latest": {"close": 180.0}},
         "technical_analysis": {},
         "fundamental_analysis": {},
         "risk_analysis": {},

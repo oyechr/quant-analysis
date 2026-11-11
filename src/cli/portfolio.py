@@ -5,12 +5,17 @@ from pathlib import Path
 import click
 
 from ..data_fetcher import DataFetcher
+from ..paths import PORTFOLIO, TARGETS, TICKER_MAP
 from ..pipeline import AnalysisOptions
 from ..utils.files import atomic_write_text
 from .common import (
+    NON_NEGATIVE_FLOAT,
     config_option,
+    echo_progress,
+    echo_status,
     get_scoring_config,
     record_history,
+    to_json,
     workers_option,
 )
 
@@ -20,14 +25,14 @@ from .common import (
 @click.option(
     "--map",
     "map_path",
-    default="portfolio/tickers.csv",
+    default=TICKER_MAP,
     show_default=True,
     help="CSV mapping Nordnet names to Yahoo tickers (columns: name,ticker).",
 )
 @click.option(
     "--out",
     "out_path",
-    default="portfolio/portfolio.csv",
+    default=PORTFOLIO,
     show_default=True,
     help="Combined portfolio file to write.",
 )
@@ -65,10 +70,13 @@ def import_portfolio(ctx, exports, map_path, out_path, labels, verify):
         number = account_from_filename(Path(path))
         return label_map.get(number) if number else None
 
-    holdings, unmapped = combine_holdings(
-        [(Path(p), account_for(p)) for p in exports], load_ticker_map(Path(map_path))
-    )
-    write_portfolio(holdings, Path(out_path))
+    try:
+        holdings, unmapped = combine_holdings(
+            [(Path(p), account_for(p)) for p in exports], load_ticker_map(Path(map_path))
+        )
+        write_portfolio(holdings, Path(out_path))
+    except (ValueError, OSError) as e:
+        raise click.ClickException(str(e)) from e
     click.echo(f"  Wrote {len(holdings)} holdings from {len(exports)} account(s) to {out_path}")
     if unmapped:
         click.echo(f"  No ticker for {len(unmapped)} name(s); add them to {map_path}:")
@@ -96,7 +104,7 @@ def import_portfolio(ctx, exports, map_path, out_path, labels, verify):
 TARGETS_OPTION = click.option(
     "--targets",
     "targets_file",
-    default="portfolio/targets.toml",
+    default=TARGETS,
     show_default=True,
     type=click.Path(dir_okay=False),
     help="Limits and per-ticker targets (optional; defaults apply without it).",
@@ -106,7 +114,7 @@ TARGETS_OPTION = click.option(
 @click.command()
 @click.argument(
     "portfolio_file",
-    default="portfolio/portfolio.csv",
+    default=PORTFOLIO,
     type=click.Path(exists=True, dir_okay=False),
 )
 @config_option()
@@ -150,7 +158,7 @@ def review(ctx, portfolio_file, config_name, workers, base, as_json, save, targe
         ctx, portfolio_file, config_name, workers, base, targets_file, quiet=as_json
     )
     data = result.to_dict()
-    click.echo(_to_json(data) if as_json else render_text(data))
+    click.echo(to_json(data) if as_json else render_text(data))
     if save:
         _save(Path(portfolio_file).parent, "review", data, render_markdown(data))
 
@@ -158,12 +166,12 @@ def review(ctx, portfolio_file, config_name, workers, base, as_json, save, targe
 @click.command()
 @click.argument(
     "portfolio_file",
-    default="portfolio/portfolio.csv",
+    default=PORTFOLIO,
     type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
     "--cash",
-    type=float,
+    type=NON_NEGATIVE_FLOAT,
     default=0.0,
     show_default=True,
     help="Cash to invest, in --base (on top of what the sales raise).",
@@ -171,7 +179,7 @@ def review(ctx, portfolio_file, config_name, workers, base, as_json, save, targe
 @click.option(
     "--candidates",
     default="",
-    help="New names to consider: 'watchlist' (watchlist.toml) or tickers, comma-separated.",
+    help="New names to consider: 'watchlist' (quant --watchlist) or tickers, comma-separated.",
 )
 @TARGETS_OPTION
 @config_option()
@@ -191,7 +199,7 @@ def rebalance(
 
     Runs `review`, then turns its actions into trades, in this order:
 
-    
+    \b
       1. Exit: sell everything
       2. Review / Check: no trade
       3. Trim, or above the position limit: sell down to target or cap
@@ -205,7 +213,7 @@ def rebalance(
     Buys of non-EEA companies are AF only. Limits (max_position,
     max_sector, cash_reserve, min_trade, max_new) come from --targets.
 
-    
+    \b
     Examples:
       quant rebalance
       quant rebalance --cash 50000 --candidates watchlist
@@ -220,9 +228,9 @@ def rebalance(
     result, targets = _run_review(
         ctx, portfolio_file, config_name, workers, base, targets_file, quiet=as_json
     )
-    tickers = _candidate_tickers(candidates)
+    tickers = _candidate_tickers(candidates, ctx.obj["watchlist_file"])
     if tickers and not as_json:
-        click.echo(f"  Vetting {len(tickers)} candidate(s)...", err=True)
+        echo_status(f"  Vetting {len(tickers)} candidate(s)...")
     proposal = rebalance_portfolio(
         result,
         tickers,
@@ -232,10 +240,10 @@ def rebalance(
         options=_options(ctx, config_name),
         workers=workers,
         data_dir=ctx.obj["output_dir"],
-        progress=None if as_json else _progress,
+        progress=None if as_json else echo_progress,
     )
     data = proposal.to_dict()
-    click.echo(_to_json(data) if as_json else render_proposal_text(data))
+    click.echo(to_json(data) if as_json else render_proposal_text(data))
     if save:
         _save(Path(portfolio_file).parent, "rebalance", data, render_proposal_markdown(data))
 
@@ -244,7 +252,10 @@ def _run_review(ctx, portfolio_file, config_name, workers, base, targets_file, q
     """Load the portfolio and the targets file, and review the holdings."""
     from ..portfolio import load_portfolio, load_targets, review_portfolio
 
-    holdings, unmapped = load_portfolio(Path(portfolio_file))
+    try:
+        holdings, unmapped = load_portfolio(Path(portfolio_file))
+    except (ValueError, OSError) as e:
+        raise click.ClickException(f"{portfolio_file}: {e}") from e
     try:
         targets = load_targets(Path(targets_file))
     except (ValueError, OSError) as e:
@@ -253,7 +264,7 @@ def _run_review(ctx, portfolio_file, config_name, workers, base, targets_file, q
         raise click.ClickException(f"No holdings with a ticker in {portfolio_file}")
 
     if not quiet:
-        click.echo(f"  Reviewing {len(holdings)} holdings...", err=True)
+        echo_status(f"  Reviewing {len(holdings)} holdings...")
     output_dir = ctx.obj["output_dir"]
     result = review_portfolio(
         holdings,
@@ -262,7 +273,7 @@ def _run_review(ctx, portfolio_file, config_name, workers, base, targets_file, q
         base_currency=base.upper(),
         workers=workers,
         data_dir=output_dir,
-        progress=None if quiet else _progress,
+        progress=None if quiet else echo_progress,
         targets=targets,
     )
     result.unmapped = unmapped
@@ -270,15 +281,15 @@ def _run_review(ctx, portfolio_file, config_name, workers, base, targets_file, q
     return result, targets
 
 
-def _candidate_tickers(candidates: str) -> list[str]:
+def _candidate_tickers(candidates: str, watchlist_path: Path) -> list[str]:
     """'watchlist' -> the watchlist's tickers; otherwise a comma-separated list."""
-    from ..tracking import DEFAULT_WATCHLIST, load_watchlist
+    from ..tracking import load_watchlist
 
     tickers: list[str] = []
     for part in (p.strip() for p in candidates.split(",")):
         if part.lower() == "watchlist":
             try:
-                tickers += list(load_watchlist(Path(DEFAULT_WATCHLIST)))
+                tickers += list(load_watchlist(watchlist_path))
             except ValueError as e:
                 raise click.ClickException(str(e)) from e
         elif part:
@@ -295,18 +306,7 @@ def _options(ctx, config_name) -> AnalysisOptions:
     )
 
 
-def _progress(ticker, error):
-    mark = "✗" if error else "✓"
-    click.echo(f"  {mark} {ticker}" + (f": {error}" if error else ""), err=True)
-
-
-def _to_json(data) -> str:
-    import json
-
-    return json.dumps(data, indent=2, default=str)
-
-
 def _save(out_dir: Path, name: str, data, markdown: str) -> None:
-    atomic_write_text((out_dir / f"{name}.json"), _to_json(data))
+    atomic_write_text((out_dir / f"{name}.json"), to_json(data))
     atomic_write_text((out_dir / f"{name}.md"), markdown)
-    click.echo(f"  Saved: {out_dir / (name + '.json')}, {out_dir / (name + '.md')}", err=True)
+    echo_status(f"  Saved: {out_dir / (name + '.json')}, {out_dir / (name + '.md')}")

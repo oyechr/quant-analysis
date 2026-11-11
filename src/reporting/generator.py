@@ -32,7 +32,7 @@ class ReportGenerator:
         """
         self.fetcher = data_fetcher or DataFetcher(cache_dir=output_dir)
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def generate_full_report(
         self,

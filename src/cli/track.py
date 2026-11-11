@@ -5,36 +5,40 @@ from pathlib import Path
 import click
 
 from ..data_fetcher import DataFetcher
+from ..paths import JOURNAL, PORTFOLIO
 from ..pipeline import AnalysisOptions
 from ..utils.files import atomic_write_text
 from .common import (
     FINITE_FLOAT,
     config_option,
+    echo_progress,
+    echo_status,
     get_scoring_config,
+    to_json,
     workers_option,
 )
 
 
 def _watchlist_file_option():
-    from ..tracking import DEFAULT_WATCHLIST
-
     return click.option(
         "--file",
         "watchlist_file",
-        default=DEFAULT_WATCHLIST,
-        show_default=True,
+        default=None,
         type=click.Path(dir_okay=False, path_type=Path),
-        help="Watchlist file.",
+        help="Watchlist file (default: quant --watchlist, watchlist.toml).",
     )
 
 
-def _journal_file_option():
-    from ..tracking import DEFAULT_JOURNAL
+def _watchlist_path(ctx, watchlist_file) -> Path:
+    """--file if given, else the `quant --watchlist` choice."""
+    return Path(watchlist_file) if watchlist_file else ctx.obj["watchlist_file"]
 
+
+def _journal_file_option():
     return click.option(
         "--journal",
         "journal_file",
-        default=DEFAULT_JOURNAL,
+        default=JOURNAL,
         show_default=True,
         type=click.Path(dir_okay=False, path_type=Path),
         help="Decision journal file.",
@@ -48,7 +52,8 @@ def watchlist(ctx, watchlist_file):
     """Keep a list of tickers to follow, with a thesis and price levels.
 
     The list lives in watchlist.toml (gitignored; edit it by hand if you
-    like). `quant changes` checks it, and `quant screen watchlist` screens it.
+    like; `quant --watchlist FILE` or --file for another one). `quant changes`
+    checks it, and `quant screen watchlist` screens it.
 
     \b
     Examples:
@@ -57,7 +62,7 @@ def watchlist(ctx, watchlist_file):
       quant watchlist rm MSFT
       quant watchlist ls
     """
-    ctx.obj["watchlist_file"] = watchlist_file
+    ctx.obj["watchlist_file"] = _watchlist_path(ctx, watchlist_file)
 
 
 @watchlist.command("add")
@@ -126,7 +131,7 @@ def watchlist_ls(ctx):
 @click.option(
     "--portfolio",
     "portfolio_file",
-    default="portfolio/portfolio.csv",
+    default=PORTFOLIO,
     show_default=True,
     type=click.Path(dir_okay=False, path_type=Path),
     help="Holdings to check too (skipped if the file doesn't exist).",
@@ -176,8 +181,6 @@ def changes(
       quant changes --config value
       quant -q changes --save --notify
     """
-    import json as _json
-
     from ..tracking import (
         load_journal,
         load_watchlist,
@@ -188,6 +191,7 @@ def changes(
     )
 
     output_dir = ctx.obj["output_dir"]
+    watchlist_file = _watchlist_path(ctx, watchlist_file)
     try:
         watched = load_watchlist(watchlist_file)
         decisions = load_journal(journal_file)
@@ -206,13 +210,8 @@ def changes(
             f"{portfolio_file}. Add some with: quant watchlist add T --thesis '...'"
         )
 
-    def progress(ticker, error):
-        if not as_json:
-            mark = "✗" if error else "✓"
-            click.echo(f"  {mark} {ticker}" + (f": {error}" if error else ""), err=True)
-
     if not as_json:
-        click.echo(f"  Checking {len(tickers_list)} ticker(s)...", err=True)
+        echo_status(f"  Checking {len(tickers_list)} ticker(s)...")
     result = track_changes(
         tickers_list,
         fetcher=DataFetcher(cache_dir=output_dir),
@@ -225,13 +224,13 @@ def changes(
         watchlist=watched,
         data_dir=output_dir,
         workers=workers,
-        progress=progress,
+        progress=None if as_json else echo_progress,
         held=held,
         journal=decisions,
     )
     data = result.to_dict()
     if as_json:
-        click.echo(_json.dumps(data, indent=2, default=str))
+        click.echo(to_json(data))
     else:
         click.echo(render_text(data))
 
@@ -241,8 +240,8 @@ def changes(
         out_dir.mkdir(parents=True, exist_ok=True)
         digest = out_dir / f"changes_{data['date']}.md"
         atomic_write_text(digest, render_markdown(data))
-        atomic_write_text(digest.with_suffix(".json"), _json.dumps(data, indent=2, default=str))
-        click.echo(f"  Saved: {digest}, {digest.with_suffix('.json')}", err=True)
+        atomic_write_text(digest.with_suffix(".json"), to_json(data))
+        echo_status(f"  Saved: {digest}, {digest.with_suffix('.json')}")
     if notify:
         from ..utils.notify import toast
 
@@ -355,7 +354,6 @@ def journal_add(
     from datetime import date
 
     from ..tracking import (
-        DEFAULT_WATCHLIST,
         OPENING,
         Decision,
         add_decision,
@@ -371,7 +369,7 @@ def journal_add(
     decided = day.date() if day else today
     if action in OPENING:
         try:
-            watched = load_watchlist(Path(DEFAULT_WATCHLIST)).get(ticker)
+            watched = load_watchlist(ctx.obj["watchlist_file"]).get(ticker)
         except ValueError as e:
             raise click.ClickException(str(e)) from e
         if watched is not None:
@@ -466,8 +464,6 @@ def journal_ls(ctx, show_all, as_json):
     high red flag new since the decision. Check: target or review date
     reached, the score down 10+ points since the decision, or no score in a week.
     """
-    import json as _json
-
     from ..tracking import check_journal, load_history, load_journal, render_journal
 
     path = ctx.obj["journal_file"]
@@ -476,11 +472,16 @@ def journal_ls(ctx, show_all, as_json):
     except ValueError as e:
         raise click.ClickException(str(e)) from e
     if not decisions:
-        click.echo(f"  {path} is empty. Record a decision with: quant journal add T --thesis '...'")
+        if as_json:
+            click.echo("[]")
+        else:
+            click.echo(
+                f"  {path} is empty. Record a decision with: quant journal add T --thesis '...'"
+            )
         return
     checks = check_journal(decisions, load_history(ctx.obj["output_dir"]))
     if as_json:
-        click.echo(_json.dumps([c.to_dict() for c in checks], indent=2, default=str))
+        click.echo(to_json([c.to_dict() for c in checks]))
         return
     others = [d for d in decisions if not d.is_open] if show_all else []
     click.echo(render_journal(path, checks, others))
@@ -498,7 +499,6 @@ def journal_lookback(ctx, since, as_json):
     a trim or sell when the stock lagged it afterwards. Grouped by the
     signal at the time, to see whether following it helped.
     """
-    import json as _json
     import math
     from datetime import date
 
@@ -514,7 +514,10 @@ def journal_lookback(ctx, since, as_json):
     start = since.date() if since else None
     chosen = [d for d in decisions if start is None or d.date >= start]
     if not chosen:
-        click.echo(f"  No decisions in {path}" + (f" since {start}" if start else ""))
+        if as_json:
+            click.echo("[]")
+        else:
+            click.echo(f"  No decisions in {path}" + (f" since {start}" if start else ""))
         return
 
     years = max(1, math.ceil((date.today() - min(d.date for d in chosen)).days / 365))
@@ -528,12 +531,12 @@ def journal_lookback(ctx, since, as_json):
                 frame = fetcher.fetch_ticker(symbol, period=period, use_cache=ctx.obj["use_cache"])
                 cache[symbol] = frame["Close"] if "Close" in frame.columns else None
             except Exception as e:
-                click.echo(f"  ! No prices for {symbol}: {e}", err=True)
+                echo_status(f"  ! No prices for {symbol}: {e}")
                 cache[symbol] = None
         return cache[symbol]
 
     outcomes = look_back(chosen, closes, benchmark_for)
     if as_json:
-        click.echo(_json.dumps([o.to_dict() for o in outcomes], indent=2, default=str))
+        click.echo(to_json([o.to_dict() for o in outcomes]))
     else:
         click.echo(render_look_back(outcomes))

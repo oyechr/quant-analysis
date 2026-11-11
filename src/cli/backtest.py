@@ -1,13 +1,16 @@
 """Signal backtests: backtest."""
 
 import sys
+from contextlib import nullcontext
 
 import click
 
 from ..data_fetcher import DataFetcher
 from .common import (
     config_option,
+    echo_status,
     get_scoring_config,
+    to_json,
     workers_option,
 )
 
@@ -63,45 +66,48 @@ def backtest(ctx, universe, years, horizons, config_name, workers, as_json, save
       quant backtest obx --years 3 --horizons 1,3
       quant backtest sp100 --config growth --no-save
     """
-    import json as _json
-
     from ..backtest import backtest_to_dict, render_text, run_backtest, save_backtest
     from ..screening import resolve_universe
 
     output_dir = ctx.obj["output_dir"]
     use_cache = ctx.obj["use_cache"]
     try:
-        resolved = resolve_universe(list(universe), data_dir=output_dir, use_cache=use_cache)
+        resolved = resolve_universe(
+            list(universe),
+            data_dir=output_dir,
+            use_cache=use_cache,
+            watchlist_path=ctx.obj["watchlist_file"],
+        )
     except ValueError as e:
         raise click.ClickException(str(e)) from e
     if not resolved.tickers:
         raise click.ClickException("Universe is empty.")
 
-    bar = None
     if not as_json:
-        click.echo(f"  Backtesting {len(resolved.tickers)} tickers over {years} years...", err=True)
-        bar = click.progressbar(length=len(resolved.tickers), label="  Tickers", file=sys.stderr)
-        bar.__enter__()
-
-    result = run_backtest(
-        resolved.tickers,
-        fetcher=DataFetcher(cache_dir=output_dir),
-        years=years,
-        horizons=horizons,
-        config=get_scoring_config(config_name),
-        use_cache=use_cache,
-        workers=workers,
-        universe_label=resolved.label,
-        progress=lambda ticker, error: bar.update(1) if bar else None,
+        echo_status(f"  Backtesting {len(resolved.tickers)} tickers over {years} years...")
+    bar_context = (
+        nullcontext(None)
+        if as_json
+        else click.progressbar(length=len(resolved.tickers), label="  Tickers", file=sys.stderr)
     )
-    if bar:
-        bar.__exit__(None, None, None)
+    with bar_context as bar:
+        result = run_backtest(
+            resolved.tickers,
+            fetcher=DataFetcher(cache_dir=output_dir),
+            years=years,
+            horizons=horizons,
+            config=get_scoring_config(config_name),
+            use_cache=use_cache,
+            workers=workers,
+            universe_label=resolved.label,
+            progress=lambda ticker, error: bar.update(1) if bar else None,
+        )
 
     data = backtest_to_dict(result)
     if as_json:
-        click.echo(_json.dumps(data, indent=2, default=str))
+        click.echo(to_json(data))
     else:
         click.echo(render_text(data))
     if save:
         for path in save_backtest(result, data, output_dir):
-            click.echo(f"  Saved: {path}", err=True)
+            echo_status(f"  Saved: {path}")

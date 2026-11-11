@@ -122,6 +122,7 @@ def resolve_universe(
     data_dir: str = "data",
     use_cache: bool = True,
     fetch_text: Optional[Callable[[str], str]] = None,
+    watchlist_path: Path = Path(DEFAULT_WATCHLIST),
 ) -> Universe:
     """
     Resolve universe specs into a de-duplicated ticker list (order preserved).
@@ -129,7 +130,7 @@ def resolve_universe(
     Each spec is one of:
       - a built-in index name (sp500, sp100, nasdaq100, obx)
       - "discover": overlap tickers from data/_discovery/discovery_result.json
-      - "watchlist": the tickers in watchlist.toml
+      - "watchlist": the tickers in `watchlist_path`
       - a path to a ticker file (one per line or comma-separated; '#' comments;
         CSV with a ticker/symbol column also works)
       - otherwise, a literal ticker symbol
@@ -152,10 +153,10 @@ def resolve_universe(
             tickers.extend(load_discover_tickers(data_dir))
             sources.append(key)
         elif key == WATCHLIST_UNIVERSE:
-            watched = list(load_watchlist(Path(DEFAULT_WATCHLIST)))
+            watched = list(load_watchlist(Path(watchlist_path)))
             if not watched:
                 raise ValueError(
-                    f"No tickers in {DEFAULT_WATCHLIST}. Add some with `quant watchlist add`."
+                    f"No tickers in {watchlist_path}. Add some with `quant watchlist add`."
                 )
             tickers.extend(watched)
             sources.append(key)
