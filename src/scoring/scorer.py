@@ -7,7 +7,7 @@ Designed for dual-purpose use: standalone analysis and LLM-optimized output.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .config import ScoringConfig
 from .dimensions import (
@@ -61,6 +61,9 @@ class ScoringResult:
     config_name: str = "default"
     dimensions_available: int = 0
     dimensions_total: int = 4
+    # Dimension (or "trade_levels") -> the error that kept it out. A scorer
+    # bug would otherwise just reweight the composite, seen only in the log
+    errors: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
@@ -93,6 +96,8 @@ class ScoringResult:
 
         if self.trade_levels:
             result["trade_levels"] = self.trade_levels.to_dict()
+        if self.errors:
+            result["errors"] = dict(self.errors)
 
         return result
 
@@ -325,6 +330,7 @@ class StockScorer:
                 result.trade_levels = trade_levels
         except Exception as e:
             logger.warning(f"Error computing trade levels: {e}")
+            result.errors["trade_levels"] = f"{type(e).__name__}: {e}"
 
         return result
 
@@ -357,54 +363,43 @@ class StockScorer:
         all_strengths: List[str] = []
         all_concerns: List[str] = []
 
-        # Score each available dimension
-        technical_result = None
-        if technical_data:
-            try:
-                technical_result = self.technical_scorer.score(technical_data)
-                dimensions.append(("technical", technical_result))
-                all_strengths.extend(technical_result.strengths)
-                all_concerns.extend(technical_result.concerns)
-            except Exception as e:
-                logger.warning(f"Error scoring technical dimension: {e}")
+        errors: Dict[str, str] = {}
 
-        fundamental_result = None
-        if fundamental_data:
+        def run(name: str, data: Any, fn: Callable[[], DimensionResult]) -> Any:
+            if not data:
+                return None
             try:
-                fundamental_result = self.fundamental_scorer.score(fundamental_data, ticker_info)
-                dimensions.append(("fundamental", fundamental_result))
-                all_strengths.extend(fundamental_result.strengths)
-                all_concerns.extend(fundamental_result.concerns)
+                result = fn()
             except Exception as e:
-                logger.warning(f"Error scoring fundamental dimension: {e}")
+                # Recorded on the result: the composite is reweighted without it
+                logger.warning(f"Error scoring {name} dimension: {e}")
+                errors[name] = f"{type(e).__name__}: {e}"
+                return None
+            dimensions.append((name, result))
+            all_strengths.extend(result.strengths)
+            all_concerns.extend(result.concerns)
+            return result
 
-        risk_result = None
-        if risk_data:
-            try:
-                risk_result = self.risk_scorer.score(risk_data)
-                dimensions.append(("risk", risk_result))
-                all_strengths.extend(risk_result.strengths)
-                all_concerns.extend(risk_result.concerns)
-            except Exception as e:
-                logger.warning(f"Error scoring risk dimension: {e}")
-
-        valuation_result = None
-        if valuation_data:
-            try:
-                fcf_metrics = ((fundamental_data or {}).get("analysis") or {}).get(
-                    "fcf_metrics"
-                ) or {}
-                valuation_result = self.valuation_scorer.score(
-                    valuation_data,
-                    ticker_info,
-                    peer_valuation,
-                    fcf_yield=fcf_metrics.get("fcf_yield"),
-                )
-                dimensions.append(("valuation", valuation_result))
-                all_strengths.extend(valuation_result.strengths)
-                all_concerns.extend(valuation_result.concerns)
-            except Exception as e:
-                logger.warning(f"Error scoring valuation dimension: {e}")
+        fcf_metrics = ((fundamental_data or {}).get("analysis") or {}).get("fcf_metrics") or {}
+        technical_result = run(
+            "technical", technical_data, lambda: self.technical_scorer.score(technical_data or {})
+        )
+        fundamental_result = run(
+            "fundamental",
+            fundamental_data,
+            lambda: self.fundamental_scorer.score(fundamental_data or {}, ticker_info),
+        )
+        risk_result = run("risk", risk_data, lambda: self.risk_scorer.score(risk_data or {}))
+        valuation_result = run(
+            "valuation",
+            valuation_data,
+            lambda: self.valuation_scorer.score(
+                valuation_data or {},
+                ticker_info,
+                peer_valuation,
+                fcf_yield=fcf_metrics.get("fcf_yield"),
+            ),
+        )
 
         # A dimension with no usable data (a fund's statements, say) scores a
         # placeholder 50; keep it for display but out of the composite
@@ -436,6 +431,7 @@ class StockScorer:
             config_name=self.config.name,
             dimensions_available=len(dimensions),
             dimensions_total=4,
+            errors=errors,
         )
 
     def _calculate_composite(self, dimensions: List[tuple[str, DimensionResult]]) -> float:

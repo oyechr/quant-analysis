@@ -245,17 +245,17 @@ class TestTechnicalScorer:
     def _make_tech_data(self, **overrides):
         """Build a technical analysis data dict with defaults"""
         indicators = {
-            "RSI_14": 50.0,
+            "RSI": 50.0,
             "MACD_diff": 1.0,
             "SMA_20": 100.0,
             "SMA_50": 95.0,
             "SMA_200": 90.0,
-            "ADX_14": 30.0,
-            "MFI_14": 50.0,
+            "ADX": 30.0,
+            "MFI": 50.0,
             "BB_upper": 110.0,
             "BB_lower": 90.0,
             "BB_middle": 100.0,
-            "Williams_R_14": -50.0,
+            "Williams_R": -50.0,
         }
         indicators.update(overrides.get("indicators", {}))
         return {
@@ -286,21 +286,21 @@ class TestTechnicalScorer:
 
     def test_rsi_oversold_bullish(self):
         scorer = TechnicalScorer()
-        data = self._make_tech_data(indicators={"RSI_14": 20.0})
+        data = self._make_tech_data(indicators={"RSI": 20.0})
         result = scorer.score(data)
         rsi_score = next(s for s in result.sub_scores if s.name == "RSI")
         assert rsi_score.score >= 70.0  # Oversold = bullish
 
     def test_rsi_overbought_bearish(self):
         scorer = TechnicalScorer()
-        data = self._make_tech_data(indicators={"RSI_14": 80.0})
+        data = self._make_tech_data(indicators={"RSI": 80.0})
         result = scorer.score(data)
         rsi_score = next(s for s in result.sub_scores if s.name == "RSI")
         assert rsi_score.score <= 30.0  # Overbought = bearish
 
     def test_rsi_neutral(self):
         scorer = TechnicalScorer()
-        data = self._make_tech_data(indicators={"RSI_14": 50.0})
+        data = self._make_tech_data(indicators={"RSI": 50.0})
         result = scorer.score(data)
         rsi_score = next(s for s in result.sub_scores if s.name == "RSI")
         assert 40.0 <= rsi_score.score <= 70.0
@@ -311,23 +311,23 @@ class TestTechnicalScorer:
 
     def test_mfi_score_falls_steadily_into_overbought(self):
         """No jump up when MFI crosses 80, matching RSI's shape."""
-        scores = [self._sub("MFI", MFI_14=v).score for v in (50.0, 75.4, 79.9, 80.0, 95.0)]
+        scores = [self._sub("MFI", MFI=v).score for v in (50.0, 75.4, 79.9, 80.0, 95.0)]
         assert scores == sorted(scores, reverse=True)
         assert scores[0] == 65.0
-        assert self._sub("MFI", MFI_14=75.4).label == "Neutral"
-        assert self._sub("MFI", MFI_14=10.0).score >= 70.0
+        assert self._sub("MFI", MFI=75.4).label == "Neutral"
+        assert self._sub("MFI", MFI=10.0).score >= 70.0
 
     def test_williams_r_score_falls_steadily_into_overbought(self):
         values = (-100.0, -85.0, -50.0, -21.0, -19.0, -1.5)
-        scores = [self._sub("Williams %R", Williams_R_14=v).score for v in values]
+        scores = [self._sub("Williams %R", Williams_R=v).score for v in values]
         assert scores[2] == 65.0
         assert scores[2:] == sorted(scores[2:], reverse=True)  # -50 onwards: no jump at -20
         assert scores[0] > scores[1] >= 70.0  # deeper oversold scores higher
 
     def test_adx_label_matches_technical_signals(self):
-        assert self._sub("ADX", ADX_14=23.5).label == "Moderate trend"
-        assert self._sub("ADX", ADX_14=15.0).label == "Weak/no trend"
-        assert self._sub("ADX", ADX_14=30.0).label == "Strong trend"
+        assert self._sub("ADX", ADX=23.5).label == "Moderate trend"
+        assert self._sub("ADX", ADX=15.0).label == "Weak/no trend"
+        assert self._sub("ADX", ADX=30.0).label == "Strong trend"
 
     def _named(self, name, **overrides):
         result = TechnicalScorer().score(self._make_tech_data(**overrides))
@@ -713,6 +713,18 @@ class TestValuationScorer:
         result = scorer.score(self._make_val_data(pays_dividends=False), self._make_ticker_info())
         div_sub = next(s for s in result.sub_scores if s.name == "Dividend Sustainability")
         assert div_sub.score == 50.0
+        assert div_sub.available
+
+    def test_missing_or_failed_dividend_analysis_is_unknown(self):
+        # Not "No dividend": a neutral 50 that counts would undo the composite's
+        # rule that a dimension without data doesn't score (Phase 6b fix 7)
+        for analysis in (None, {}, {"pays_dividends": False, "error": "boom"}):
+            data = self._make_val_data()
+            data["dividend_analysis"] = analysis
+            result = ValuationScorer().score(data, self._make_ticker_info())
+            div_sub = next(s for s in result.sub_scores if s.name == "Dividend Sustainability")
+            assert not div_sub.available
+            assert div_sub.label != "No dividend"
 
     def test_dcf_error_unavailable(self):
         scorer = ValuationScorer()
@@ -933,16 +945,16 @@ class TestEdgeCases:
             "latest_values": {
                 "close_price": None,
                 "indicators": {
-                    "RSI_14": None,
+                    "RSI": None,
                     "MACD_diff": None,
                     "SMA_20": None,
                     "SMA_50": None,
                     "SMA_200": None,
-                    "ADX_14": None,
-                    "MFI_14": None,
+                    "ADX": None,
+                    "MFI": None,
                     "BB_upper": None,
                     "BB_lower": None,
-                    "Williams_R_14": None,
+                    "Williams_R": None,
                 },
             },
             "signals": {},
@@ -1002,7 +1014,7 @@ def test_dimension_without_data_is_left_out_of_the_composite():
     technical = {
         "latest_values": {
             "close_price": 100.0,
-            "indicators": {"RSI_14": 50.0, "SMA_50": 95.0, "SMA_200": 90.0},
+            "indicators": {"RSI": 50.0, "SMA_50": 95.0, "SMA_200": 90.0},
         },
         "state": {"macd_cross": None, "ma_regime": "bullish", "ma_cross": None},
     }
@@ -1033,3 +1045,75 @@ def test_a_thin_dimension_counts_less_in_the_composite():
     assert thin == pytest.approx((50.0 * t + 90.0 * f / 2) / (t + f / 2))
     assert coverage_weight(0.5) == coverage_weight(0.8) == 1.0  # a bank's partial fundamentals
     assert coverage_weight(0.0) == 0.0
+
+
+# ============================================================
+# Trade levels from a report
+# ============================================================
+
+
+def _trade_report(sector, **info):
+    return {
+        "info": {"sector": sector, "currency": "USD", **info},
+        "technical_analysis": {"latest_values": {"close_price": 100.0}},
+        "valuation_analysis": {
+            "dcf_valuation": {"intrinsic_value_per_share": 150.0},
+            "ddm_valuation": {"intrinsic_value_per_share": 120.0},
+            "monte_carlo_valuation": {"intrinsic_value_median": 140.0},
+        },
+    }
+
+
+def _fair_value_used(monkeypatch, report):
+    from src.scoring import trade_levels
+
+    seen = {}
+
+    def capture(**kwargs):
+        seen.update(kwargs)
+        return None
+
+    monkeypatch.setattr(trade_levels, "calculate_trade_levels", capture)
+    trade_levels.compute_trade_levels_from_report(report)
+    return seen
+
+
+def test_trade_levels_use_ddm_only_for_banks(monkeypatch):
+    # A free-cash-flow DCF says little about a bank, and vet leaves it out
+    seen = _fair_value_used(monkeypatch, _trade_report("Financial Services"))
+    assert (seen["fair_value"], seen["fair_value_source"]) == (120.0, "DDM")
+
+    report = _trade_report("Financial Services")
+    del report["valuation_analysis"]["ddm_valuation"]
+    seen = _fair_value_used(monkeypatch, report)
+    assert seen["fair_value"] is None  # not the Monte Carlo DCF either
+
+    seen = _fair_value_used(monkeypatch, _trade_report("Technology"))
+    assert (seen["fair_value"], seen["fair_value_source"]) == (150.0, "DCF")
+
+
+def test_trade_levels_read_the_normalized_price(monkeypatch):
+    # data_fetcher's info has current_price, not Yahoo's currentPrice
+    seen = _fair_value_used(monkeypatch, _trade_report("Technology", current_price=101.5))
+    assert seen["current_price"] == 101.5
+    seen = _fair_value_used(monkeypatch, _trade_report("Technology"))
+    assert seen["current_price"] == 100.0  # the close as fallback
+
+
+def test_a_dimension_scorer_error_is_recorded(monkeypatch):
+    # It used to be logged only, silently reweighting the composite
+    from src.scoring import StockScorer
+
+    scorer = StockScorer()
+
+    def broken(*args, **kwargs):
+        raise KeyError("sharpe_ratio")
+
+    monkeypatch.setattr(scorer.risk_scorer, "score", broken)
+    report = _trade_report("Technology")
+    report["risk_analysis"] = {"sharpe_ratio": 1.0}
+    result = scorer.score(report)
+    assert result.risk is None
+    assert result.errors == {"risk": "KeyError: 'sharpe_ratio'"}
+    assert result.to_dict()["errors"] == result.errors
+    assert "errors" not in StockScorer().score(_trade_report("Technology")).to_dict()

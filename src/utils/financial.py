@@ -10,6 +10,8 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 
+from .dataframe_utils import safe_get_dataframe_value
+
 # Financial constants
 TRADING_DAYS_PER_YEAR = 252
 
@@ -206,6 +208,41 @@ def safe_divide(numerator: Optional[float], denominator: Optional[float]) -> Opt
     if numerator is None or denominator is None or denominator == 0:
         return None
     return numerator / denominator
+
+
+# Operating cash flow under the names Yahoo uses for different reporters
+OCF_ROWS = (
+    "Operating Cash Flow",
+    "Cash From Operating Activities",
+    "Cash Flowsfromusedin Operating Activities Direct",
+    "Total Cash From Operating Activities",
+    "Net Cash Provided By Operating Activities",
+)
+
+
+def operating_cash_flow(cash_flow: Optional[pd.DataFrame], col: int = 0) -> Optional[float]:
+    """Operating cash flow in column `col` (0 = latest), or None."""
+    for row in OCF_ROWS:
+        value = safe_get_dataframe_value(cash_flow, row, col)
+        if value is not None:
+            return value
+    return None
+
+
+def free_cash_flow(cash_flow: Optional[pd.DataFrame], col: int = 0) -> Optional[float]:
+    """
+    Free cash flow in column `col` (0 = latest): Yahoo's "Free Cash Flow" row,
+    else operating cash flow minus capex. One rule for the DCF, the FCF yield
+    and FCF growth. A zero capex is a value, not a missing one.
+    """
+    fcf = safe_get_dataframe_value(cash_flow, "Free Cash Flow", col)
+    if fcf is not None:
+        return fcf
+    ocf = operating_cash_flow(cash_flow, col)
+    capex = safe_get_dataframe_value(cash_flow, "Capital Expenditure", col)
+    if ocf is None or capex is None:
+        return None
+    return ocf - abs(capex)  # Yahoo reports capex as negative; some sources don't
 
 
 def calculate_kelly_criterion(price_data: pd.DataFrame) -> Optional[dict]:

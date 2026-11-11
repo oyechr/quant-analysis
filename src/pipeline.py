@@ -293,6 +293,8 @@ def analyze_ticker(
     bundle.scoring = _run_step("scoring", _score)
     if bundle.scoring is not None:
         report["scoring"] = bundle.scoring.to_dict()
+        # A dimension the scorer failed on is left out of the composite
+        bundle.errors.update({f"scoring.{k}": v for k, v in bundle.scoring.errors.items()})
 
     report["data_freshness"] = _freshness_summary(ticker, base_fetcher, report)
     return bundle

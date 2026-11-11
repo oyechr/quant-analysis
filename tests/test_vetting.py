@@ -803,6 +803,27 @@ class TestVetEndToEnd:
         base_pe = next(s for s in result.base_scoring.valuation.sub_scores if s.name == "P/E Ratio")
         assert "vs peers" not in base_pe.label
 
+    def test_a_rescoring_bug_is_not_a_peer_failure(self, vet_market, monkeypatch):
+        # Peers were fetched fine; the rescore with them failed on one dimension
+        from src.scoring.dimensions import RiskScorer
+
+        _, tmp_path = vet_market
+        real = RiskScorer.score
+        calls = []
+
+        def second_call_breaks(self, *args, **kwargs):
+            calls.append(1)
+            if len(calls) > 1:
+                raise ValueError("boom")
+            return real(self, *args, **kwargs)
+
+        monkeypatch.setattr(RiskScorer, "score", second_call_breaks)
+        result = vet_ticker("AAPL", DataFetcher(cache_dir=str(tmp_path)), data_dir=str(tmp_path))
+        data = result.to_dict()
+        assert "peer_valuation" not in data["errors"]
+        assert data["errors"]["scoring.risk"] == "ValueError: boom"
+        assert "Errors: scoring.risk (ValueError: boom)" in render_text(data)
+
     def test_vet_writes_no_report_files(self, vet_market):
         _, tmp_path = vet_market
         vet_ticker("AAPL", DataFetcher(cache_dir=str(tmp_path)), data_dir=str(tmp_path))

@@ -185,7 +185,7 @@ class TechnicalScorer:
         close = _safe_float(latest.get("close_price") or indicators.get("close_price"))
 
         # 1. RSI Score (weight: 0.20)
-        rsi = _safe_float(indicators.get("RSI_14"))
+        rsi = _safe_float(indicators.get("RSI"))
         sub_scores.append(self._score_rsi(rsi, strengths, concerns))
 
         # 2. MACD Score (weight: 0.20)
@@ -205,11 +205,11 @@ class TechnicalScorer:
         )
 
         # 4. ADX Trend Strength (weight: 0.10)
-        adx = _safe_float(indicators.get("ADX_14"))
+        adx = _safe_float(indicators.get("ADX"))
         sub_scores.append(self._score_adx(adx, strengths, concerns))
 
         # 5. MFI Score (weight: 0.10)
-        mfi = _safe_float(indicators.get("MFI_14"))
+        mfi = _safe_float(indicators.get("MFI"))
         sub_scores.append(self._score_mfi(mfi, strengths, concerns))
 
         # 6. Bollinger Band Position (weight: 0.10)
@@ -221,7 +221,7 @@ class TechnicalScorer:
         )
 
         # 7. Williams %R (weight: 0.05)
-        williams_r = _safe_float(indicators.get("Williams_R_14"))
+        williams_r = _safe_float(indicators.get("Williams_R"))
         sub_scores.append(self._score_williams_r(williams_r, strengths, concerns))
 
         return self._build_result("Technical", sub_scores, strengths, concerns)
@@ -1336,9 +1336,15 @@ class ValuationScorer:
         sub_scores.append(self._score_fcf_yield(fcf_yield, strengths, concerns))
 
         # 5. Dividend Sustainability (weight: 0.10)
-        div_analysis = valuation_data.get("dividend_analysis", {})
+        div_analysis = valuation_data.get("dividend_analysis") or {}
         div_sustainability = _safe_float(div_analysis.get("sustainability_score"))
-        pays_dividends = div_analysis.get("pays_dividends", False)
+        # No analysis, or one that failed, says nothing about the dividend:
+        # unknown, not "No dividend" (a neutral 50 that would still count)
+        pays_dividends: Optional[bool] = (
+            None
+            if not div_analysis or div_analysis.get("error")
+            else bool(div_analysis.get("pays_dividends"))
+        )
         sub_scores.append(
             self._score_dividend_sustainability(
                 div_sustainability, pays_dividends, strengths, concerns
@@ -1536,10 +1542,14 @@ class ValuationScorer:
     def _score_dividend_sustainability(
         self,
         sustainability_score: Optional[float],
-        pays_dividends: bool,
+        pays_dividends: Optional[bool],
         strengths: List[str],
         concerns: List[str],
     ) -> SubScore:
+        if pays_dividends is None:
+            return SubScore(
+                name="Dividend Sustainability", score=50.0, weight=0.10, available=False
+            )
         if not pays_dividends:
             # Non-dividend stocks get neutral score (not penalized)
             return SubScore(

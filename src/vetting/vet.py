@@ -125,12 +125,19 @@ def vet_ticker(
             min_peers=config.valuation.min_peers,
         )
         report["peer_valuation"] = result.peers.to_dict()
-        if bundle.scoring is not None:
-            bundle.scoring = StockScorer(config=config).score(report)
-            report["scoring"] = bundle.scoring.to_dict()
     except Exception as e:
         logger.warning(f"Peer valuation failed for {ticker}: {e}")
         bundle.errors["peer_valuation"] = str(e)
+    if result.peers is not None and bundle.scoring is not None:
+        # Rescoring is its own step: a scorer bug isn't a peer failure
+        try:
+            bundle.scoring = StockScorer(config=config).score(report)
+            report["scoring"] = bundle.scoring.to_dict()
+        except Exception as e:
+            logger.warning(f"Rescoring with peers failed for {ticker}: {e}")
+            bundle.errors["scoring_with_peers"] = str(e)
+    if bundle.scoring is not None:
+        bundle.errors.update({f"scoring.{k}": v for k, v in bundle.scoring.errors.items()})
 
     result.red_flags = find_red_flags(report)
     result.funds = fund_activity(ticker, info.get("name"), data_dir=data_dir)

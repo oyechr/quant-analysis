@@ -236,3 +236,27 @@ def test_vet_shows_the_reverse_dcf():
 
     assert "the price implies" in text
     assert "fading to 2.5% over 10y" in text
+
+
+def test_current_price_reads_the_normalized_info():
+    # data_fetcher's info has current_price (not Yahoo's currentPrice); the
+    # last close is only the fallback
+    prices = pd.DataFrame({"Close": [18.0]})
+    assert ValuationAnalyzer("T", {"current_price": 19.5}, price_data=prices).current_price == 19.5
+    assert ValuationAnalyzer("T", {"currentPrice": 19.0}, price_data=prices).current_price == 19.0
+    assert ValuationAnalyzer("T", {}, price_data=prices).current_price == 18.0
+
+
+def test_growth_periods_are_the_span_not_the_values_found():
+    import math
+
+    # FCF [100, NaN, 81]: two years from 81 to 100 is 11.1%/yr, not 23.5% over one
+    analyzer = _analyzer(fcf=(100.0, math.nan, 81.0))
+    assert analyzer._estimate_fcf_growth_rate() == pytest.approx(11.1, abs=0.05)
+
+    # Dividends 1.00 then a skipped year then 1.21: 10%/yr over two years, not 21%
+    this_year = pd.Timestamp.now().year
+    analyzer.dividends_data = _quarterly_dividends(
+        {this_year - 3: (4, 1.0), this_year - 1: (4, 1.21)}
+    )
+    assert analyzer._estimate_dividend_growth_rate() == pytest.approx(10.0)

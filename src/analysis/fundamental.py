@@ -10,7 +10,14 @@ import pandas as pd
 
 from ..config import AnalysisConfig, get_config
 from ..utils.dataframe_utils import safe_get_dataframe_value
-from ..utils.financial import calculate_cagr, calculate_growth_rate, safe_divide
+from ..utils.financial import (
+    OCF_ROWS,
+    calculate_cagr,
+    calculate_growth_rate,
+    free_cash_flow,
+    operating_cash_flow,
+    safe_divide,
+)
 from ..utils.fx import market_cap_in_listing_units
 
 logger = logging.getLogger(__name__)
@@ -30,6 +37,12 @@ ALTMAN_ZONES: Dict[str, Tuple[float, float]] = {"Z": (1.81, 2.99), "Z''": (1.10,
 def altman_zones(model: Optional[str]) -> Tuple[float, float]:
     """(distress below, safe above) for a model; reports from before Z'' mean Z."""
     return ALTMAN_ZONES.get(model or "Z", ALTMAN_ZONES["Z"])
+
+
+def _rises(current: Optional[float], previous: Optional[float]) -> bool:
+    """A Piotroski "improved" test; False when either year's ratio is undefined
+    (a zero denominator: no revenue yet, no current liabilities)."""
+    return current is not None and previous is not None and current > previous
 
 
 class FundamentalAnalyzer:
@@ -133,49 +146,9 @@ class FundamentalAnalyzer:
             growth["earnings"]["5y_cagr"] = self._calculate_cagr(earnings_current, earnings_5y, 5)
 
         if self.cash_flow_a is not None and not self.cash_flow_a.empty:
-            # FCF growth - try direct field first, then calculate
-            # Define OCF field name variants upfront for all fallback calculations
-            ocf_field_names = [
-                "Operating Cash Flow",
-                "Cash Flowsfromusedin Operating Activities Direct",
-                "Total Cash From Operating Activities",
-                "Net Cash Provided By Operating Activities",
-            ]
-
-            fcf_current = self._get_value(self.cash_flow_a, "Free Cash Flow", 0)
-            fcf_1y = self._get_value(self.cash_flow_a, "Free Cash Flow", 1)
-            fcf_3y = self._get_value(self.cash_flow_a, "Free Cash Flow", 3)
-
-            # If FCF not available directly, calculate from OCF - CapEx
-            if fcf_current is None:
-                ocf_current = None
-                for field_name in ocf_field_names:
-                    ocf_current = self._get_value(self.cash_flow_a, field_name, 0)
-                    if ocf_current is not None:
-                        break
-
-                capex_current = self._get_value(self.cash_flow_a, "Capital Expenditure", 0)
-                fcf_current = (
-                    ocf_current + capex_current if ocf_current and capex_current else None
-                )  # CapEx is negative
-
-            if fcf_1y is None:
-                ocf_1y = None
-                for field_name in ocf_field_names:
-                    ocf_1y = self._get_value(self.cash_flow_a, field_name, 1)
-                    if ocf_1y is not None:
-                        break
-                capex_1y = self._get_value(self.cash_flow_a, "Capital Expenditure", 1)
-                fcf_1y = ocf_1y + capex_1y if ocf_1y and capex_1y else None
-
-            if fcf_3y is None:
-                ocf_3y = None
-                for field_name in ocf_field_names:
-                    ocf_3y = self._get_value(self.cash_flow_a, field_name, 3)
-                    if ocf_3y is not None:
-                        break
-                capex_3y = self._get_value(self.cash_flow_a, "Capital Expenditure", 3)
-                fcf_3y = ocf_3y + capex_3y if ocf_3y and capex_3y else None
+            fcf_current = free_cash_flow(self.cash_flow_a, 0)
+            fcf_1y = free_cash_flow(self.cash_flow_a, 1)
+            fcf_3y = free_cash_flow(self.cash_flow_a, 3)
 
             growth["fcf"]["1y"] = self._calculate_growth_rate(fcf_current, fcf_1y)
             growth["fcf"]["3y_cagr"] = self._calculate_cagr(fcf_current, fcf_3y, 3)
@@ -205,28 +178,7 @@ class FundamentalAnalyzer:
 
         # Get FCF from cash flow statement
         if self.cash_flow_a is not None and not self.cash_flow_a.empty:
-            # Try to get FCF directly first (some providers include it)
-            fcf = self._get_value(self.cash_flow_a, "Free Cash Flow", 0)
-
-            # If not available, calculate from OCF - CapEx
-            if fcf is None:
-                # Try multiple field name variants for Operating Cash Flow
-                ocf_field_names = [
-                    "Operating Cash Flow",
-                    "Cash Flowsfromusedin Operating Activities Direct",
-                    "Total Cash From Operating Activities",
-                    "Net Cash Provided By Operating Activities",
-                ]
-                ocf = None
-                for field_name in ocf_field_names:
-                    ocf = self._get_value(self.cash_flow_a, field_name, 0)
-                    if ocf is not None:
-                        break
-
-                capex = self._get_value(self.cash_flow_a, "Capital Expenditure", 0)
-
-                if ocf and capex:
-                    fcf = ocf + capex  # CapEx is negative
+            fcf = free_cash_flow(self.cash_flow_a, 0)
 
             if fcf:
                 fcf_metrics["fcf"] = fcf
@@ -537,7 +489,7 @@ class FundamentalAnalyzer:
             score += 1
 
         # 2. Positive Operating Cash Flow
-        ocf = self._get_value(self.cash_flow_a, "Operating Cash Flow", 0)
+        ocf = operating_cash_flow(self.cash_flow_a, 0)
         if ocf and ocf > 0:
             score += 1
 
@@ -546,16 +498,11 @@ class FundamentalAnalyzer:
         total_assets = self._get_value(self.balance_sheet_a, "Total Assets", 0)
         total_assets_prev = self._get_value(self.balance_sheet_a, "Total Assets", 1)
 
-        if (
-            net_income is not None
-            and net_income_prev is not None
-            and total_assets is not None
-            and total_assets_prev is not None
+        if _rises(
+            self._safe_divide(net_income, total_assets),
+            self._safe_divide(net_income_prev, total_assets_prev),
         ):
-            roa_current = net_income / total_assets
-            roa_prev = net_income_prev / total_assets_prev
-            if roa_current > roa_prev:
-                score += 1
+            score += 1
 
         # 4. Quality of Earnings (OCF > Net Income)
         if ocf and net_income and ocf > net_income:
@@ -574,16 +521,11 @@ class FundamentalAnalyzer:
         current_assets_prev = self._get_value(self.balance_sheet_a, "Current Assets", 1)
         current_liabilities_prev = self._get_value(self.balance_sheet_a, "Current Liabilities", 1)
 
-        if (
-            current_assets is not None
-            and current_liabilities is not None
-            and current_assets_prev is not None
-            and current_liabilities_prev is not None
+        if _rises(
+            self._safe_divide(current_assets, current_liabilities),
+            self._safe_divide(current_assets_prev, current_liabilities_prev),
         ):
-            current_ratio = current_assets / current_liabilities
-            current_ratio_prev = current_assets_prev / current_liabilities_prev
-            if current_ratio > current_ratio_prev:
-                score += 1
+            score += 1
 
         # 7. No new shares issued: period-end share count (or average diluted
         # shares) not up on the year before
@@ -604,29 +546,18 @@ class FundamentalAnalyzer:
         revenue_prev = self._get_value(self.income_stmt_a, "Total Revenue", 1)
         gross_profit_prev = self._get_value(self.income_stmt_a, "Gross Profit", 1)
 
-        if (
-            revenue is not None
-            and gross_profit is not None
-            and revenue_prev is not None
-            and gross_profit_prev is not None
+        if _rises(
+            self._safe_divide(gross_profit, revenue),
+            self._safe_divide(gross_profit_prev, revenue_prev),
         ):
-            gross_margin = gross_profit / revenue
-            gross_margin_prev = gross_profit_prev / revenue_prev
-            if gross_margin > gross_margin_prev:
-                score += 1
+            score += 1
 
         # 9. Increasing Asset Turnover
-        if revenue is not None and total_assets is not None:
-            # revenue_prev and total_assets_prev already exist from earlier checks
-            revenue_prev_at = self._get_value(
-                self.income_stmt_a, "Total Revenue", 1
-            )  # Get again to be safe
-            total_assets_prev_at = self._get_value(self.balance_sheet_a, "Total Assets", 1)
-            if revenue_prev_at is not None and total_assets_prev_at is not None:
-                asset_turnover = revenue / total_assets
-                asset_turnover_prev = revenue_prev_at / total_assets_prev_at
-                if asset_turnover > asset_turnover_prev:
-                    score += 1
+        if _rises(
+            self._safe_divide(revenue, total_assets),
+            self._safe_divide(revenue_prev, total_assets_prev),
+        ):
+            score += 1
 
         return score
 
@@ -684,7 +615,7 @@ class FundamentalAnalyzer:
         long_term_debt_t = self._get_value(self.balance_sheet_a, "Long Term Debt", 0)
         long_term_debt_t1 = self._get_value(self.balance_sheet_a, "Long Term Debt", 1)
 
-        ocf_t = self._get_value(self.cash_flow_a, "Operating Cash Flow", 0)
+        ocf_t = operating_cash_flow(self.cash_flow_a, 0)
 
         # Validate minimum required data
         if not all([revenue_t, revenue_t1, total_assets_t, total_assets_t1]):
@@ -853,7 +784,7 @@ class FundamentalAnalyzer:
             return None
 
         net_income = self._get_value(self.income_stmt_a, "Net Income", 0)
-        ocf = self._get_value(self.cash_flow_a, "Operating Cash Flow", 0)
+        ocf = operating_cash_flow(self.cash_flow_a, 0)
         total_assets = self._get_value(self.balance_sheet_a, "Total Assets", 0)
 
         # Try average total assets for more accuracy
@@ -914,7 +845,7 @@ class FundamentalAnalyzer:
         if self.cash_flow_a is None or self.income_stmt_a is None:
             return None
 
-        ocf = self._get_value(self.cash_flow_a, "Operating Cash Flow", 0)
+        ocf = operating_cash_flow(self.cash_flow_a, 0)
         ebitda = self._get_value(self.income_stmt_a, "EBITDA", 0)
 
         # A ratio over negative EBITDA means nothing (and would read as "poor")
@@ -926,7 +857,7 @@ class FundamentalAnalyzer:
         # Historical trend (3 years)
         trend = []
         for i in range(3):
-            ocf_i = self._get_value(self.cash_flow_a, "Operating Cash Flow", i)
+            ocf_i = operating_cash_flow(self.cash_flow_a, i)
             ebitda_i = self._get_value(self.income_stmt_a, "EBITDA", i)
             if ocf_i is not None and ebitda_i is not None and ebitda_i > 0:
                 trend.append((ocf_i / ebitda_i) * 100)
@@ -984,7 +915,7 @@ class FundamentalAnalyzer:
             return values
 
         fcf = row(self.cash_flow_a, "Free Cash Flow")
-        ocf = row(self.cash_flow_a, "Operating Cash Flow", "Total Cash From Operating Activities")
+        ocf = row(self.cash_flow_a, *OCF_ROWS)
         capex = row(self.cash_flow_a, "Capital Expenditure")
         fcf = [
             f if f is not None else (o + c if o is not None and c is not None else None)

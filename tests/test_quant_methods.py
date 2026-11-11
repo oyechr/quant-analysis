@@ -554,3 +554,115 @@ class TestRiskFormulas:
         var = RiskMetrics().calculate_var(prices)["var_parametric"]
         assert var == pytest.approx(returns.mean() - 1.6449 * returns.std(), rel=1e-4)
         assert RiskMetrics().calculate_var(prices)["var_parametric"] == var
+
+
+def test_piotroski_survives_zero_revenue_and_current_liabilities(default_config):
+    # A pre-revenue biotech: tests 6, 8 and 9 have zero denominators. They
+    # earn no point instead of crashing the whole fundamental analysis
+    from conftest import make_statements
+
+    from src.analysis.fundamental import FundamentalAnalyzer
+
+    statements = make_statements()
+    income = statements["income_stmt"].copy()
+    balance = statements["balance_sheet"].copy()
+    income.loc["Total Revenue"] = 0.0
+    income.loc["Gross Profit"] = 0.0
+    balance.loc["Current Liabilities"] = 0.0
+    fundamentals = {
+        "income_stmt_annual": income,
+        "balance_sheet_annual": balance,
+        "cash_flow_annual": statements["cashflow"],
+    }
+    analyzer = FundamentalAnalyzer({}, fundamentals)
+    score = analyzer.calculate_piotroski_f_score()
+    assert score is not None and 0 <= score <= 6
+
+
+class TestUndefinedRiskRatios:
+    """Undefined is None ("unknown"), not 0.0, which scored as poor."""
+
+    def test_ratios_without_variation_or_losses_are_none(self, default_config):
+        from src.analysis.risk import RiskMetrics
+
+        flat = pd.DataFrame({"Close": [100.0] * 60})
+        rising = pd.DataFrame({"Close": 100 * np.cumprod(np.full(60, 1.01))})
+        risk = RiskMetrics()
+        assert risk.calculate_sharpe_ratio(flat) is None
+        assert risk.calculate_sortino_ratio(rising, 0.0) is None  # no losing day
+        assert risk.calculate_calmar_ratio(rising) is None  # no drawdown
+        assert risk.calculate_information_ratio(rising, None) is None
+
+    def test_no_benchmark_means_no_fetch(self, default_config, monkeypatch):
+        # The analysis doesn't build its own DataFetcher behind the cache
+        from src import data_fetcher
+        from src.analysis.risk import RiskMetrics
+
+        def no_fetcher(*args, **kwargs):
+            raise AssertionError("risk analysis went to the network")
+
+        monkeypatch.setattr(data_fetcher, "DataFetcher", no_fetcher)
+        prices = pd.DataFrame(
+            {"Close": 100 * np.cumprod(1 + np.tile([0.01, -0.012], 60))},
+            index=pd.bdate_range("2025-01-01", periods=120),
+        )
+        risk = RiskMetrics()
+        assert risk.calculate_beta_alpha(prices, pd.DataFrame()) == {}
+        assert risk.calculate_information_ratio(prices) is None
+
+    def test_reports_show_na_for_undefined_ratios(self, default_config):
+        from src.analysis.risk import RiskMetrics
+        from src.reporting.markdown import render_report_markdown
+
+        metrics = {"sharpe_ratio": None, "sortino_ratio": None, "calmar_ratio": None}
+        lines = "\n".join(RiskMetrics().format_markdown("T", metrics))
+        assert "| Sharpe Ratio | N/A | Not enough data |" in lines
+        assert "Negative return" not in lines
+
+        data = {"info": {}, "generated_at": "2026-11-10T00:00", "risk_analysis": metrics}
+        report = render_report_markdown("T", data)
+        assert "| Calmar | N/A | Not enough data |" in report
+
+
+def test_free_cash_flow_one_rule():
+    from src.utils.financial import free_cash_flow, operating_cash_flow
+
+    cols = [pd.Timestamp("2025-12-31"), pd.Timestamp("2024-12-31")]
+    yahoo = pd.DataFrame(
+        {cols[0]: {"Free Cash Flow": 80.0, "Operating Cash Flow": 100.0}}, columns=cols[:1]
+    )
+    assert free_cash_flow(yahoo) == 80.0  # Yahoo's row first
+
+    # No FCF row: OCF under another reporter's name, minus capex; a zero
+    # capex is a value (it used to drop the FCF)
+    other = pd.DataFrame(
+        {
+            cols[0]: {"Total Cash From Operating Activities": 100.0, "Capital Expenditure": 0.0},
+            cols[1]: {"Total Cash From Operating Activities": 90.0, "Capital Expenditure": -30.0},
+        }
+    )
+    assert operating_cash_flow(other, 1) == 90.0
+    assert free_cash_flow(other, 0) == 100.0
+    assert free_cash_flow(other, 1) == 60.0
+    assert free_cash_flow(pd.DataFrame({cols[0]: {"Operating Cash Flow": 100.0}})) is None
+    assert free_cash_flow(None) is None
+
+
+def test_dcf_and_fcf_yield_read_the_same_fcf(default_config):
+    # A reporter without Yahoo's FCF row: the FCF yield had it from OCF -
+    # capex, while the DCF said "Free Cash Flow not available"
+    from src.analysis.fundamental import FundamentalAnalyzer
+    from src.analysis.valuation import ValuationAnalyzer
+
+    cols = [pd.Timestamp(f"{2025 - i}-12-31") for i in range(3)]
+    cash_flow = pd.DataFrame(
+        {c: {"Operating Cash Flow": 120.0, "Capital Expenditure": -20.0} for c in cols}
+    )
+    info = {"market_cap": 2000.0, "shares_outstanding": 100.0}
+    fundamentals = {"cash_flow_annual": cash_flow}
+    fcf_metrics = FundamentalAnalyzer(info, fundamentals).calculate_fcf_metrics()
+    valuation = ValuationAnalyzer(
+        "T", info, price_data=pd.DataFrame({"Close": [20.0]}), fundamentals=fundamentals
+    )
+    assert fcf_metrics["fcf"] == 100.0
+    assert valuation._dcf_inputs()["fcf_current"] == 100.0

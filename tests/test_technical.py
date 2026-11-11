@@ -58,3 +58,44 @@ def test_ma_trend_text_names_a_cross_only_on_the_cross_bar():
     assert above["MA_Trend"] == "Bullish (SMA 50 above SMA 200)"
     golden = _analyzer(SMA_50=[99.0, 101.0], SMA_200=[100.0, 100.0]).generate_signals()
     assert golden["MA_Trend"].startswith("Golden Cross today")
+
+
+def test_indicator_keys_dont_depend_on_the_configured_period(tmp_path):
+    # rsi_period 21 used to write RSI_21, which the scorer (reading RSI_14)
+    # silently dropped
+    from src.config import AnalysisConfig
+    from src.scoring.dimensions import TechnicalScorer
+
+    rng = np.random.default_rng(0)
+    close = 100 * np.cumprod(1 + rng.normal(0, 0.01, 300))
+    prices = pd.DataFrame(
+        {
+            "Open": close,
+            "High": close * 1.01,
+            "Low": close * 0.99,
+            "Close": close,
+            "Volume": 1e6,
+        },
+        index=pd.bdate_range("2025-01-01", periods=300),
+    )
+    config = AnalysisConfig(rsi_period=21, atr_period=10)
+    analyzer = TechnicalAnalyzer(prices, config=config)
+    analyzer.calculate_all_indicators()
+    summary = analyzer.get_summary()
+    indicators = summary["latest_values"]["indicators"]
+    assert indicators["RSI"] is not None and indicators["ATR"] is not None
+
+    rsi = next(s for s in TechnicalScorer().score(summary).sub_scores if s.name == "RSI")
+    assert rsi.available
+
+
+def test_unknown_config_keys_are_skipped_not_the_whole_file(tmp_path, caplog):
+    import json
+
+    from src.config import AnalysisConfig
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"rsi_period": 21, "rsi_overbought": 75.0}))
+    config = AnalysisConfig.load_from_file(path)
+    assert config.rsi_period == 21
+    assert "rsi_overbought" in caplog.text

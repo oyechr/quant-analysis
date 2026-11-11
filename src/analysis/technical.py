@@ -118,7 +118,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with RSI column added
         """
-        self.df[f"RSI_{period}"] = TA.RSI(self._finta_df(), period=period).values
+        self.df["RSI"] = TA.RSI(self._finta_df(), period=period).values
         return self.df
 
     def calculate_stochastic(self, k_period: int = 14, d_period: int = 3) -> pd.DataFrame:
@@ -166,7 +166,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with ATR column added
         """
-        self.df[f"ATR_{period}"] = TA.ATR(self._finta_df(), period=period).values
+        self.df["ATR"] = TA.ATR(self._finta_df(), period=period).values
         return self.df
 
     def calculate_adx(self, period: int = 14) -> pd.DataFrame:
@@ -179,7 +179,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with ADX column added
         """
-        self.df[f"ADX_{period}"] = TA.ADX(self._finta_df(), period=period).values
+        self.df["ADX"] = TA.ADX(self._finta_df(), period=period).values
         return self.df
 
     # ==================== Volume Indicators ====================
@@ -214,7 +214,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with MFI column added
         """
-        self.df[f"MFI_{period}"] = TA.MFI(self._finta_df(), period=period).values
+        self.df["MFI"] = TA.MFI(self._finta_df(), period=period).values
         return self.df
 
     def calculate_williams_r(self, period: int = 14) -> pd.DataFrame:
@@ -227,7 +227,7 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with Williams %R column added
         """
-        self.df[f"Williams_R_{period}"] = TA.WILLIAMS(self._finta_df(), period=period).values
+        self.df["Williams_R"] = TA.WILLIAMS(self._finta_df(), period=period).values
         return self.df
 
     def calculate_statistics(self) -> Dict[str, Any]:
@@ -416,8 +416,8 @@ class TechnicalAnalyzer:
         signals = {}
 
         # RSI signals
-        if "RSI_14" in self.df.columns and not pd.isna(latest["RSI_14"]):
-            rsi = latest["RSI_14"]
+        if "RSI" in self.df.columns and not pd.isna(latest["RSI"]):
+            rsi = latest["RSI"]
             if rsi > 70:
                 signals["RSI"] = "Overbought (>70) - potential sell signal"
             elif rsi < 30:
@@ -482,8 +482,8 @@ class TechnicalAnalyzer:
                     signals["Bollinger_Bands"] = "Price within bands - normal"
 
         # ADX - Trend Strength
-        if "ADX_14" in self.df.columns and not pd.isna(latest["ADX_14"]):
-            adx = latest["ADX_14"]
+        if "ADX" in self.df.columns and not pd.isna(latest["ADX"]):
+            adx = latest["ADX"]
             if adx > 25:
                 signals["ADX"] = f"Strong trend ({adx:.1f})"
             elif adx > 20:
@@ -492,8 +492,8 @@ class TechnicalAnalyzer:
                 signals["ADX"] = f"Weak/no trend ({adx:.1f})"
 
         # MFI - Money Flow
-        if "MFI_14" in self.df.columns and not pd.isna(latest["MFI_14"]):
-            mfi = latest["MFI_14"]
+        if "MFI" in self.df.columns and not pd.isna(latest["MFI"]):
+            mfi = latest["MFI"]
             if mfi > 80:
                 signals["MFI"] = "Overbought (>80) - high buying pressure"
             elif mfi < 20:
@@ -502,8 +502,8 @@ class TechnicalAnalyzer:
                 signals["MFI"] = f"Neutral ({mfi:.1f})"
 
         # Williams %R
-        if "Williams_R_14" in self.df.columns and not pd.isna(latest["Williams_R_14"]):
-            williams = latest["Williams_R_14"]
+        if "Williams_R" in self.df.columns and not pd.isna(latest["Williams_R"]):
+            williams = latest["Williams_R"]
             if williams > -20:
                 signals["Williams_R"] = "Overbought (>-20) - potential reversal"
             elif williams < -80:
@@ -675,13 +675,13 @@ class TechnicalAnalyzer:
         md.append("| Indicator | Value | Interpretation |")
         md.append("|-----------|-------|----------------|")
 
-        if "RSI_14" in indicators and indicators["RSI_14"] is not None:
-            rsi = indicators["RSI_14"]
+        if "RSI" in indicators and indicators["RSI"] is not None:
+            rsi = indicators["RSI"]
             interp = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
             md.append(f"| RSI (14) | {rsi:.2f} | {interp} |")
 
-        if "MFI_14" in indicators and indicators["MFI_14"] is not None:
-            mfi = indicators["MFI_14"]
+        if "MFI" in indicators and indicators["MFI"] is not None:
+            mfi = indicators["MFI"]
             interp = "Overbought" if mfi > 80 else "Oversold" if mfi < 20 else "Neutral"
             md.append(f"| MFI (14) | {mfi:.2f} | {interp} |")
 
@@ -694,8 +694,8 @@ class TechnicalAnalyzer:
             interp = "Overbought" if stoch_d > 80 else "Oversold" if stoch_d < 20 else "Neutral"
             md.append(f"| Stochastic %D | {stoch_d:.2f} | {interp} |")
 
-        if "Williams_R_14" in indicators and indicators["Williams_R_14"] is not None:
-            williams = indicators["Williams_R_14"]
+        if "Williams_R" in indicators and indicators["Williams_R"] is not None:
+            williams = indicators["Williams_R"]
             interp = "Overbought" if williams > -20 else "Oversold" if williams < -80 else "Neutral"
             md.append(f"| Williams %R (14) | {williams:.2f} | {interp} |")
         md.append("")
@@ -734,11 +734,11 @@ class TechnicalAnalyzer:
                     label = key.replace("BB_", "Bollinger ").replace("_", " ").title()
                     md.append(f"| {label} | {symbol}{indicators[key]:.2f} | |")
 
-        if "ATR_14" in indicators and indicators["ATR_14"] is not None:
-            current_atr = indicators["ATR_14"]
+        if "ATR" in indicators and indicators["ATR"] is not None:
+            current_atr = indicators["ATR"]
             # Compare to 20-day average to show if volatility is expanding/contracting
-            if "ATR_14" in self.df.columns and len(self.df) >= 20:
-                atr_sma = self.df["ATR_14"].rolling(20).mean().iloc[-1]
+            if "ATR" in self.df.columns and len(self.df) >= 20:
+                atr_sma = self.df["ATR"].rolling(20).mean().iloc[-1]
                 if not pd.isna(atr_sma) and atr_sma > 0:
                     if current_atr > atr_sma * 1.2:
                         atr_interp = "Expanding (high)"
@@ -752,8 +752,8 @@ class TechnicalAnalyzer:
                 atr_interp = "Volatility measure"
             md.append(f"| ATR (14) | {symbol}{current_atr:.2f} | {atr_interp} |")
 
-        if "ADX_14" in indicators and indicators["ADX_14"] is not None:
-            adx = indicators["ADX_14"]
+        if "ADX" in indicators and indicators["ADX"] is not None:
+            adx = indicators["ADX"]
             strength = "Strong" if adx > 25 else "Moderate" if adx > 20 else "Weak"
             md.append(f"| ADX (14) | {adx:.2f} | {strength} trend |")
         md.append("")
@@ -775,7 +775,7 @@ class TechnicalAnalyzer:
         md.append("")
         # Add key indicators if available
         display_cols = ["Close", "Volume"]
-        optional_cols = ["SMA_20", "RSI_14", "MACD"]
+        optional_cols = ["SMA_20", "RSI", "MACD"]
         for col in optional_cols:
             if col in self.df.columns:
                 display_cols.append(col)

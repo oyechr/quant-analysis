@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from .dimensions import is_financial
+
 logger = logging.getLogger(__name__)
 
 
@@ -605,8 +607,11 @@ def compute_trade_levels_from_report(
         TradeLevelsResult or None if insufficient data
     """
     # Extract current price
-    info = report_data.get("info", {})
-    current_price = _safe_float(info.get("currentPrice"))
+    info = report_data.get("info") or {}
+    # Normalized info (data_fetcher) has current_price; raw Yahoo info currentPrice
+    current_price = _safe_float(info.get("current_price"))
+    if current_price is None:
+        current_price = _safe_float(info.get("currentPrice"))
     currency = info.get("currency", "USD")
 
     # Fallback: get from technical analysis
@@ -631,7 +636,7 @@ def compute_trade_levels_from_report(
 
     # Extract technical indicators
     indicators = tech_data.get("latest_values", {}).get("indicators", {})
-    atr = _safe_float(indicators.get("ATR_14"))
+    atr = _safe_float(indicators.get("ATR"))
     bb_lower = _safe_float(indicators.get("BB_lower"))
     bb_upper = _safe_float(indicators.get("BB_upper"))
     sma_50 = _safe_float(indicators.get("SMA_50"))
@@ -641,10 +646,13 @@ def compute_trade_levels_from_report(
     fair_value = None
     fair_value_source = ""
     val_data = report_data.get("valuation_analysis", {})
+    # Free-cash-flow models say little about banks and insurers, which vet
+    # leaves out too (verdict.fair_value_range): the DDM only
+    financial = is_financial(info)
     if val_data:
         # Try DCF first
         dcf = val_data.get("dcf_valuation", {})
-        dcf_val = _safe_float(dcf.get("intrinsic_value_per_share"))
+        dcf_val = None if financial else _safe_float(dcf.get("intrinsic_value_per_share"))
         if dcf_val and dcf_val > 0:
             fair_value = dcf_val
             fair_value_source = "DCF"
@@ -658,7 +666,7 @@ def compute_trade_levels_from_report(
                 fair_value_source = "DDM"
 
         # Try Monte Carlo median
-        if fair_value is None:
+        if fair_value is None and not financial:
             mc = val_data.get("monte_carlo_valuation", {})
             mc_val = _safe_float(mc.get("intrinsic_value_median"))
             if mc_val and mc_val > 0:

@@ -11,7 +11,7 @@ import pandas as pd
 
 from ..config import get_config
 from ..utils.dataframe_utils import normalize_datetime_index, safe_get_dataframe_value
-from ..utils.financial import calculate_cagr, to_float
+from ..utils.financial import calculate_cagr, free_cash_flow, operating_cash_flow, to_float
 from ..utils.fx import market_cap_in_listing_units
 
 logger = logging.getLogger(__name__)
@@ -133,7 +133,10 @@ class ValuationAnalyzer:
         self.currency = ticker_info.get("currency", "USD")
 
         # Extract current price
-        self.current_price = to_float(ticker_info.get("currentPrice"))
+        # Normalized info (data_fetcher) has current_price; raw Yahoo info currentPrice
+        self.current_price = to_float(
+            ticker_info.get("current_price") or ticker_info.get("currentPrice")
+        )
         if (
             (self.current_price is None or self.current_price == 0.0)
             and price_data is not None
@@ -382,7 +385,7 @@ class ValuationAnalyzer:
         if self._dcf_inputs_cache is not None:
             return self._dcf_inputs_cache
         inputs: Dict[str, Any]
-        fcf = self._get_value(self.fundamentals.get("cash_flow_annual"), "Free Cash Flow", 0)
+        fcf = free_cash_flow(self.fundamentals.get("cash_flow_annual"), 0)
         shares = self._shares_outstanding()
         if fcf is None:
             inputs = {"error": "Free Cash Flow not available"}
@@ -449,14 +452,17 @@ class ValuationAnalyzer:
             if cash_flow_a is None or cash_flow_a.empty:
                 return None
 
+            # (column, value): the periods are the span between the columns,
+            # not the count of values found ([100, NaN, 81] is two years)
             fcf_values = []
             for i in range(3):
-                fcf = self._get_value(cash_flow_a, "Free Cash Flow", i)
+                fcf = free_cash_flow(cash_flow_a, i)
                 if fcf is not None:
-                    fcf_values.append(fcf)
+                    fcf_values.append((i, fcf))
 
-            if len(fcf_values) >= 2 and fcf_values[-1] > 0:
-                return self._calculate_cagr(fcf_values[0], fcf_values[-1], len(fcf_values) - 1)
+            if len(fcf_values) >= 2 and fcf_values[-1][1] > 0:
+                (latest_col, latest), (oldest_col, oldest) = fcf_values[0], fcf_values[-1]
+                return self._calculate_cagr(latest, oldest, oldest_col - latest_col)
 
         except Exception as e:
             logger.warning(f"Could not estimate FCF growth rate: {e}")
@@ -758,7 +764,11 @@ class ValuationAnalyzer:
         try:
             recent = self._complete_year_dividends().tail(5)
             if len(recent) >= 2:
-                return self._calculate_cagr(recent.iloc[-1], recent.iloc[0], len(recent) - 1)
+                # Over the calendar span: a year without payments is still a year
+                years = pd.DatetimeIndex(recent.index).year
+                return self._calculate_cagr(
+                    recent.iloc[-1], recent.iloc[0], int(years[-1] - years[0])
+                )
         except Exception as e:
             logger.warning(f"Could not estimate dividend growth rate: {e}")
         return None
@@ -1085,19 +1095,7 @@ class ValuationAnalyzer:
 
             net_income = self._get_value(income_stmt, "Net Income", 0)
 
-            # Try multiple field names for operating cash flow
-            ocf = None
-            ocf_field_names = [
-                "Operating Cash Flow",
-                "Cash From Operating Activities",
-                "Cash Flowsfromusedin Operating Activities Direct",
-                "Total Cash From Operating Activities",
-                "Net Cash Provided By Operating Activities",
-            ]
-            for field_name in ocf_field_names:
-                ocf = self._get_value(cash_flow, field_name, 0)
-                if ocf is not None and ocf != 0:
-                    break
+            ocf = operating_cash_flow(cash_flow, 0)
 
             if net_income and ocf and net_income > 0:
                 # Cash flow to net income ratio

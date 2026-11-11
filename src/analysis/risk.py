@@ -11,6 +11,7 @@ Calculates risk and performance metrics for stock analysis:
 """
 
 import logging
+import math
 from statistics import NormalDist
 from typing import Any, Dict, List, Optional
 
@@ -30,10 +31,22 @@ from ..utils.financial import (
     to_float,
     validate_price_data,
 )
-from ..utils.report import validate_dataframe
+from ..utils.report import (
+    CALMAR_LADDER,
+    SHARPE_LADDER,
+    SORTINO_LADDER,
+    rate_ratio,
+    validate_dataframe,
+)
 from ..utils.serialization import format_date
 
 logger = logging.getLogger(__name__)
+
+
+def _finite(value: Any) -> Optional[float]:
+    """A ratio as a float, or None when it's undefined (NaN or infinite)."""
+    result = to_float(value)
+    return result if math.isfinite(result) else None
 
 
 class RiskMetrics:
@@ -165,7 +178,7 @@ class RiskMetrics:
 
     def calculate_sharpe_ratio(
         self, price_data: pd.DataFrame, risk_free_rate: Optional[float] = None
-    ) -> float:
+    ) -> Optional[float]:
         """
         Calculate Sharpe Ratio (risk-adjusted return)
 
@@ -174,17 +187,17 @@ class RiskMetrics:
             risk_free_rate: Annual risk-free rate (uses config default if None)
 
         Returns:
-            Sharpe ratio (annualized)
+            Sharpe ratio (annualized), or None when undefined (no data, no variation)
         """
         if not validate_dataframe(price_data, required_columns=["Close"]):
             logger.warning("Invalid price data for Sharpe ratio")
-            return 0.0
+            return None
 
         try:
             daily_returns = price_data["Close"].pct_change().dropna()
 
             if daily_returns.empty or daily_returns.std() == 0:
-                return 0.0
+                return None
 
             # Use config risk-free rate if not specified
             rf_rate = risk_free_rate if risk_free_rate is not None else self.config.risk_free_rate
@@ -198,15 +211,15 @@ class RiskMetrics:
             # Sharpe ratio (annualized)
             sharpe = (excess_returns.mean() / excess_returns.std()) * np.sqrt(TRADING_DAYS_PER_YEAR)
 
-            return to_float(sharpe)
+            return _finite(sharpe)
 
         except Exception as e:
             logger.error(f"Error calculating Sharpe ratio: {e}")
-            return 0.0
+            return None
 
     def calculate_sortino_ratio(
         self, price_data: pd.DataFrame, risk_free_rate: Optional[float] = None
-    ) -> float:
+    ) -> Optional[float]:
         """
         Calculate Sortino Ratio (downside risk-adjusted return)
 
@@ -215,17 +228,17 @@ class RiskMetrics:
             risk_free_rate: Annual risk-free rate (uses config default if None)
 
         Returns:
-            Sortino ratio (annualized)
+            Sortino ratio (annualized), or None when undefined (no losing days)
         """
         if not validate_dataframe(price_data, required_columns=["Close"]):
             logger.warning("Invalid price data for Sortino ratio")
-            return 0.0
+            return None
 
         try:
             daily_returns = price_data["Close"].pct_change().dropna()
 
             if daily_returns.empty:
-                return 0.0
+                return None
 
             # Use config risk-free rate if not specified
             rf_rate = risk_free_rate if risk_free_rate is not None else self.config.risk_free_rate
@@ -238,16 +251,16 @@ class RiskMetrics:
 
             downside_std = downside_deviation(excess_returns)
             if downside_std == 0:
-                return 0.0
+                return None
 
             # Sortino ratio (annualized)
             sortino = (excess_returns.mean() / downside_std) * np.sqrt(TRADING_DAYS_PER_YEAR)
 
-            return to_float(sortino)
+            return _finite(sortino)
 
         except Exception as e:
             logger.error(f"Error calculating Sortino ratio: {e}")
-            return 0.0
+            return None
 
     def calculate_drawdown(self, price_data: pd.DataFrame) -> Dict[str, Any]:
         """
@@ -318,7 +331,7 @@ class RiskMetrics:
 
         Args:
             price_data: DataFrame with 'Close' prices
-            benchmark_data: DataFrame with benchmark 'Close' prices (fetches if None)
+            benchmark_data: DataFrame with benchmark 'Close' prices (none: no result)
 
         Returns:
             Dictionary with beta, alpha, correlation
@@ -328,26 +341,11 @@ class RiskMetrics:
             return {}
 
         try:
-            # Fetch benchmark data if not provided
+            # The caller fetches the benchmark (reporting.sections, the backtest);
+            # without one there is no beta. No I/O here.
             if benchmark_data is None or benchmark_data.empty:
-                from ..data_fetcher import DataFetcher
-
-                fetcher = DataFetcher()
-                benchmark_ticker = self.benchmark_ticker
-
-                # Infer approximate period from price_data length and use period=
-                # so the cache filename stays stable (start/end shifts daily).
-                days = (price_data.index[-1] - price_data.index[0]).days
-                period = "2y" if days > 400 else "1y" if days > 180 else "6mo"
-
-                benchmark_data = fetcher.fetch_ticker(
-                    benchmark_ticker,
-                    period=period,
-                )
-
-                if benchmark_data is None or benchmark_data.empty:
-                    logger.warning(f"Could not fetch benchmark data for {benchmark_ticker}")
-                    return {}
+                logger.warning(f"No benchmark data ({self.benchmark_ticker}) for beta/alpha")
+                return {}
 
             # Calculate returns
             stock_returns = price_data["Close"].pct_change().dropna()
@@ -443,7 +441,7 @@ class RiskMetrics:
 
     def calculate_information_ratio(
         self, price_data: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None
-    ) -> float:
+    ) -> Optional[float]:
         """
         Calculate Information Ratio (active return / tracking error)
 
@@ -452,32 +450,19 @@ class RiskMetrics:
 
         Args:
             price_data: DataFrame with 'Close' prices
-            benchmark_data: DataFrame with benchmark 'Close' prices (fetches if None)
+            benchmark_data: DataFrame with benchmark 'Close' prices (none: no result)
 
         Returns:
-            Information ratio
+            Information ratio, or None without a benchmark or tracking error
         """
         if price_data is None or price_data.empty or "Close" not in price_data.columns:
             logger.warning("Invalid price data for Information Ratio")
-            return 0.0
+            return None
 
         try:
-            # Fetch benchmark if not provided
-            if benchmark_data is None or benchmark_data.empty:
-                from ..data_fetcher import DataFetcher
-
-                fetcher = DataFetcher()
-                start_date = price_data.index.min()
-                end_date = price_data.index.max()
-                benchmark_data = fetcher.fetch_ticker(
-                    self.benchmark_ticker,
-                    start=start_date.strftime("%Y-%m-%d"),
-                    end=end_date.strftime("%Y-%m-%d"),
-                )
-
             if benchmark_data is None or benchmark_data.empty:
                 logger.warning("Benchmark data not available for Information Ratio")
-                return 0.0
+                return None
 
             # Calculate daily returns
             stock_returns = price_data["Close"].pct_change().dropna()
@@ -487,7 +472,7 @@ class RiskMetrics:
             aligned = align_daily_returns(stock_returns, benchmark_returns)
 
             if aligned.empty or len(aligned) < 2:
-                return 0.0
+                return None
 
             # Active returns (excess return over benchmark)
             active_returns = aligned["stock"] - aligned["benchmark"]
@@ -496,7 +481,7 @@ class RiskMetrics:
             tracking_error = active_returns.std()
 
             if tracking_error == 0:
-                return 0.0
+                return None
 
             # Information Ratio (annualized)
             mean_active_return = active_returns.mean()
@@ -504,13 +489,13 @@ class RiskMetrics:
                 TRADING_DAYS_PER_YEAR
             )
 
-            return to_float(information_ratio)
+            return _finite(information_ratio)
 
         except Exception as e:
             logger.error(f"Error calculating Information Ratio: {e}")
-            return 0.0
+            return None
 
-    def calculate_calmar_ratio(self, price_data: pd.DataFrame) -> float:
+    def calculate_calmar_ratio(self, price_data: pd.DataFrame) -> Optional[float]:
         """
         Calculate Calmar Ratio (annualized return / max drawdown)
 
@@ -521,11 +506,11 @@ class RiskMetrics:
             price_data: DataFrame with 'Close' prices
 
         Returns:
-            Calmar ratio
+            Calmar ratio, or None when undefined (no drawdown)
         """
         if price_data is None or price_data.empty or "Close" not in price_data.columns:
             logger.warning("Invalid price data for Calmar Ratio")
-            return 0.0
+            return None
 
         try:
             # Get annualized return
@@ -537,15 +522,15 @@ class RiskMetrics:
             max_drawdown = abs(drawdown_metrics.get("max_drawdown", 0.0))
 
             if max_drawdown == 0:
-                return 0.0
+                return None
 
             calmar = annualized_return / max_drawdown
 
-            return float(calmar)
+            return _finite(calmar)
 
         except Exception as e:
             logger.error(f"Error calculating Calmar Ratio: {e}")
-            return 0.0
+            return None
 
     def calculate_rolling_ratios(
         self, price_data: pd.DataFrame, windows: List[int] = [30, 60, 90]
@@ -869,7 +854,7 @@ class RiskMetrics:
         Args:
             price_data: DataFrame with 'Close' prices and DatetimeIndex.
                         If None, uses self.price_data from __init__.
-            benchmark_data: Optional benchmark data for beta/alpha (fetches if None).
+            benchmark_data: Optional benchmark data for beta/alpha (none: no beta).
                            If None, uses self.benchmark_data from __init__.
 
         Returns:
@@ -996,49 +981,23 @@ class RiskMetrics:
         )
         md.append("")
 
-        sharpe = metrics.get("sharpe_ratio", 0)
-        sortino = metrics.get("sortino_ratio", 0)
-        calmar = metrics.get("calmar_ratio", 0)
+        sharpe = metrics.get("sharpe_ratio")
+        sortino = metrics.get("sortino_ratio")
+        calmar = metrics.get("calmar_ratio")
 
         md.append("| Metric | Value | What it means |")
         md.append("|--------|-------|---------------|")
 
-        sharpe_comment = (
-            "Excellent"
-            if sharpe > 2
-            else "Good"
-            if sharpe > 1
-            else "Acceptable"
-            if sharpe > 0.5
-            else "Poor"
-            if sharpe > 0
-            else "Negative — losing vs. cash"
-        )
-        md.append(f"| Sharpe Ratio | {sharpe:.2f} | {sharpe_comment} |")
+        value, comment = rate_ratio(sharpe, SHARPE_LADDER, "Negative — losing vs. cash")
+        md.append(f"| Sharpe Ratio | {value} | {comment} |")
 
-        sortino_comment = (
-            "Excellent"
-            if sortino > 3
-            else "Good"
-            if sortino > 1.5
-            else "Acceptable"
-            if sortino > 0.5
-            else "Poor"
-        )
-        md.append(
-            f"| Sortino Ratio | {sortino:.2f} | {sortino_comment} (focuses on downside only) |"
-        )
+        value, comment = rate_ratio(sortino, SORTINO_LADDER, "Poor")
+        md.append(f"| Sortino Ratio | {value} | {comment} (focuses on downside only) |")
 
-        calmar_comment = (
-            "Excellent"
-            if calmar > 3
-            else "Good"
-            if calmar > 1
-            else "Concerning"
-            if calmar > 0
-            else "Negative return"
+        value, comment = rate_ratio(
+            calmar, (*CALMAR_LADDER, (0.0, "Concerning")), "Negative return"
         )
-        md.append(f"| Calmar Ratio | {calmar:.2f} | {calmar_comment} (return ÷ max loss) |")
+        md.append(f"| Calmar Ratio | {value} | {comment} (return ÷ max loss) |")
         md.append("")
 
         # Drawdown (the big one for non-pros)

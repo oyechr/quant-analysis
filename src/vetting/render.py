@@ -131,6 +131,10 @@ def _header_section(data: Dict[str, Any], header: Dict[str, Any], sym: str) -> S
         blocks.append(f"Score {_num(header.get('score'), 0)}/100:  {dim_text}")
     if data.get("next_earnings"):
         blocks.append(f"Next earnings: {data['next_earnings']}")
+    errors = data.get("errors") or {}
+    if errors:
+        # A failed step leaves the score built from less than it should be
+        blocks.append("Errors: " + "; ".join(f"{k} ({v})" for k, v in errors.items()))
     return Section(title, blocks)
 
 

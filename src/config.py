@@ -5,7 +5,7 @@ Centralized configuration for analysis parameters
 
 import json
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -52,15 +52,12 @@ class AnalysisConfig:
     ema_short: int = 12
     ema_long: int = 26
 
-    # Momentum indicators
+    # Momentum indicators. Scoring thresholds (RSI bands, growth, FCF yield,
+    # Altman zones) live in scoring.config and analysis.fundamental.altman_zones
     rsi_period: int = 14
-    rsi_overbought: float = 70.0
-    rsi_oversold: float = 30.0
 
     stochastic_k_period: int = 14
     stochastic_d_period: int = 3
-    stochastic_overbought: float = 80.0
-    stochastic_oversold: float = 20.0
 
     # Volatility
     bollinger_period: int = 20
@@ -71,13 +68,6 @@ class AnalysisConfig:
     # Quality score thresholds
     min_f_score_strong: int = 8  # Piotroski F-Score >= 8 = Strong
     min_f_score_average: int = 5  # 5-7 = Average
-
-    z_score_safe: float = 2.99  # Altman Z-Score > 2.99 = Safe
-    z_score_distress: float = 1.81  # < 1.81 = Distress zone
-
-    # Growth expectations
-    revenue_growth_strong: float = 15.0  # >15% CAGR = strong growth
-    fcf_yield_attractive: float = 5.0  # >5% FCF yield = attractive
 
     # ==================== Data Fetching ====================
     default_period: str = "1y"
@@ -159,8 +149,14 @@ class AnalysisConfig:
             with open(path, "r") as f:
                 data = json.load(f)
 
+            # A removed or misspelled key would make cls(**data) fail and drop
+            # the whole file to defaults: skip it, and say so
+            known = {f.name for f in fields(cls)}
+            unknown = sorted(set(data) - known)
+            if unknown:
+                logger.warning(f"Ignoring unknown config keys in {path}: {', '.join(unknown)}")
             logger.info(f"Loaded configuration from {path}")
-            return cls(**data)
+            return cls(**{k: v for k, v in data.items() if k in known})
 
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in config file {path}: {e}")

@@ -253,6 +253,23 @@ def log_calculation_error(metric_name: str, error: Exception) -> None:
 
 # ==================== Interpretation Helpers ====================
 
+# (above this, label) from the highest threshold down, then the label below all
+SHARPE_LADDER = ((2.0, "Excellent"), (1.0, "Good"), (0.5, "Acceptable"), (0.0, "Poor"))
+SORTINO_LADDER = ((3.0, "Excellent"), (1.5, "Good"), (0.5, "Acceptable"))
+CALMAR_LADDER = ((3.0, "Excellent"), (1.0, "Good"))
+
+
+def rate_ratio(
+    value: Optional[float], ladder: tuple[tuple[float, str], ...], lowest: str
+) -> tuple[str, str]:
+    """A risk ratio as (value text, rating); "N/A" when it's undefined."""
+    if value is None:
+        return "N/A", "Not enough data"
+    for threshold, label in ladder:
+        if value > threshold:
+            return f"{value:.2f}", label
+    return f"{value:.2f}", lowest
+
 
 def interpret_sharpe_ratio(sharpe: float) -> str:
     """

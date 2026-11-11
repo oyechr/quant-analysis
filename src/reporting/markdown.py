@@ -5,7 +5,14 @@ from typing import Any, Dict, Optional
 from ..analysis.fundamental import altman_zones
 from ..markets import benchmark_name
 from ..scoring.scorer import ScoringResult
-from ..utils.report import format_number, get_currency_symbol
+from ..utils.report import (
+    CALMAR_LADDER,
+    SHARPE_LADDER,
+    SORTINO_LADDER,
+    format_number,
+    get_currency_symbol,
+    rate_ratio,
+)
 
 
 def render_report_markdown(
@@ -282,10 +289,10 @@ def render_report_markdown(
 
         # Momentum summary
         if latest_vals:
-            rsi = latest_vals.get("RSI_14")
+            rsi = latest_vals.get("RSI")
             macd = latest_vals.get("MACD_12_26")
             macd_sig = latest_vals.get("MACD_Signal")
-            adx = latest_vals.get("ADX_14")
+            adx = latest_vals.get("ADX")
             md.append("### Momentum & Trend Strength")
             md.append("")
             if rsi is not None:
@@ -568,9 +575,9 @@ def render_report_markdown(
             md.append("")
 
         # Risk-adjusted ratios
-        sharpe = risk_data.get("sharpe_ratio", 0)
-        sortino = risk_data.get("sortino_ratio", 0)
-        calmar = risk_data.get("calmar_ratio", 0)
+        sharpe = risk_data.get("sharpe_ratio")
+        sortino = risk_data.get("sortino_ratio")
+        calmar = risk_data.get("calmar_ratio")
 
         md.append("### Risk-Adjusted Performance")
         md.append("")
@@ -578,40 +585,12 @@ def render_report_markdown(
         md.append("")
         md.append("| Ratio | Value | Rating | What it measures |")
         md.append("|-------|-------|--------|------------------|")
-        sharpe_rating = (
-            "Excellent"
-            if sharpe > 2
-            else "Good"
-            if sharpe > 1
-            else "Acceptable"
-            if sharpe > 0.5
-            else "Poor"
-            if sharpe > 0
-            else "Negative"
-        )
-        md.append(f"| Sharpe | {sharpe:.2f} | {sharpe_rating} | Return per unit of total risk |")
-        sortino_rating = (
-            "Excellent"
-            if sortino > 3
-            else "Good"
-            if sortino > 1.5
-            else "Acceptable"
-            if sortino > 0.5
-            else "Poor"
-        )
-        md.append(
-            f"| Sortino | {sortino:.2f} | {sortino_rating} | Return per unit of downside risk |"
-        )
-        calmar_rating = (
-            "Excellent"
-            if calmar > 3
-            else "Good"
-            if calmar > 1
-            else "Weak"
-            if calmar > 0
-            else "Negative"
-        )
-        md.append(f"| Calmar | {calmar:.2f} | {calmar_rating} | Return divided by worst drawdown |")
+        value, rating = rate_ratio(sharpe, SHARPE_LADDER, "Negative")
+        md.append(f"| Sharpe | {value} | {rating} | Return per unit of total risk |")
+        value, rating = rate_ratio(sortino, SORTINO_LADDER, "Poor")
+        md.append(f"| Sortino | {value} | {rating} | Return per unit of downside risk |")
+        value, rating = rate_ratio(calmar, (*CALMAR_LADDER, (0.0, "Weak")), "Negative")
+        md.append(f"| Calmar | {value} | {rating} | Return divided by worst drawdown |")
         md.append("")
 
         # Drawdown
