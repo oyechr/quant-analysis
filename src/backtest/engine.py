@@ -52,6 +52,9 @@ logger = logging.getLogger(__name__)
 LOOKBACK_BARS = 252  # one year: the 200-day SMA and the one-year risk window
 DEFAULT_HORIZONS = (1, 3, 6)  # months
 SIGNALS = ("composite", "technical", "risk", "momentum", "low_vol")
+# A month whose last bar is further than this before its last calendar day has
+# no month-end (a stale cache, a halt): long holidays stay within it
+MAX_MONTH_END_GAP_DAYS = 5
 
 # yfinance only takes these periods; the history must cover the test plus a lookback year
 _PERIODS = (("2y", 2), ("5y", 5), ("10y", 10))
@@ -88,11 +91,23 @@ def backtest_months(years: int, today: Optional[date] = None) -> List[pd.Period]
 
 
 def month_end_positions(index: pd.DatetimeIndex) -> Dict[pd.Period, int]:
-    """Month -> position of that month's last bar."""
+    """
+    Month -> position of that month's last bar.
+
+    Months whose last bar is more than MAX_MONTH_END_GAP_DAYS before the
+    month's last day are left out: the series stopped (an expired cache used
+    after a failed fetch, or a halt), so that bar isn't the month-end, and
+    returns to or from it would cover a different span than the benchmark's.
+    """
+    dates = trading_dates(index)
     ends: Dict[pd.Period, int] = {}
-    for position, month in enumerate(trading_dates(index).to_period("M")):
+    for position, month in enumerate(dates.to_period("M")):
         ends[month] = position  # later bars overwrite, so the last one wins
-    return ends
+    return {
+        month: position
+        for month, position in ends.items()
+        if (month.end_time.normalize() - dates[position]).days <= MAX_MONTH_END_GAP_DAYS
+    }
 
 
 def score_window(

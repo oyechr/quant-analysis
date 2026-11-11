@@ -11,11 +11,12 @@ import pandas as pd
 import pytest
 
 from src.config import AnalysisConfig, set_config
-from src.data_fetcher import DataFetcher
+from src.data_fetcher import DataFetcher, normalize_bar_index
 from src.markets import benchmark_for, benchmark_name
 from src.pipeline import AnalysisOptions, analyze_ticker
 from src.utils.concurrency import run_concurrently
 from src.utils.financial import align_daily_returns, convert_annual_to_daily_rate
+from tests.conftest import make_prices
 
 # ============================================================
 # Pipeline
@@ -271,6 +272,64 @@ def test_tests_cannot_reach_yahoo(tmp_path):
     # Without fake_market, the autouse _isolated fixture blocks yfinance
     with pytest.raises(RuntimeError, match="use the fake_market fixture"):
         DataFetcher(cache_dir=str(tmp_path)).fetch_ticker("AAPL")
+
+
+class TestPriceIndex:
+    """Fresh and cached bars share one index: tz-naive trading dates."""
+
+    @pytest.mark.parametrize("symbol", ["EQNR.OL", "AAPL", "HSBA.L"])
+    def test_cached_bars_keep_the_trading_date(self, fake_market, tmp_path, symbol):
+        fetcher = DataFetcher(cache_dir=str(tmp_path))
+        fresh = fetcher.fetch_ticker(symbol, period="1y")
+
+        cached = fetcher.fetch_ticker(symbol, period="1y")
+
+        assert fake_market.calls[("history", symbol)] == 1
+        assert fresh.index.tz is None
+        pd.testing.assert_index_equal(cached.index, fresh.index, check_names=False)
+        exchange_last = make_prices(symbol).index[-1]  # exchange-local midnight
+        assert cached.index[-1] == exchange_last.tz_localize(None)
+
+    def test_expired_cache_fallback_has_the_same_index(self, fake_market, tmp_path):
+        fetcher = DataFetcher(cache_dir=str(tmp_path))
+        fresh = fetcher.fetch_ticker("EQNR.OL", period="1y")
+        _age_file(tmp_path / "EQNR.OL" / "cache" / "prices_1y_1d.csv", hours=48)
+        fake_market.failing.add("EQNR.OL")
+
+        fallback = fetcher.fetch_ticker("EQNR.OL", period="1y")
+
+        pd.testing.assert_index_equal(fallback.index, fresh.index, check_names=False)
+
+    def test_reads_caches_written_with_exchange_offsets(self, tmp_path):
+        # Caches written before the fix hold "2026-03-27 00:00:00+01:00" stamps,
+        # with the offset changing at DST
+        stamps = pd.DatetimeIndex(["2026-03-27", "2026-03-30", "2026-11-04"]).tz_localize(
+            "Europe/Oslo"
+        )
+        bars = pd.DataFrame(
+            {"Open": 1.0, "High": 1.0, "Low": 1.0, "Close": 1.0, "Volume": 1},
+            index=pd.DatetimeIndex(stamps, name="Date"),
+        )
+        cache_dir = tmp_path / "EQNR.OL" / "cache"
+        cache_dir.mkdir(parents=True)
+        bars.to_csv(cache_dir / "prices_1y_1d.csv")
+
+        loaded = DataFetcher(cache_dir=str(tmp_path)).fetch_ticker("EQNR.OL", period="1y")
+
+        assert list(loaded.index) == list(
+            pd.DatetimeIndex(["2026-03-27", "2026-03-30", "2026-11-04"])
+        )
+
+    def test_intraday_bars_keep_their_time_in_utc(self):
+        stamps = pd.DatetimeIndex(["2026-11-04 09:00", "2026-11-04 09:05"]).tz_localize(
+            "Europe/Oslo"
+        )
+        bars = pd.DataFrame({"Close": [1.0, 2.0]}, index=stamps)
+
+        out = normalize_bar_index(bars, "5m")
+
+        assert str(out.index.tz) == "UTC"
+        assert out.index[0] == pd.Timestamp("2026-11-04 08:00", tz="UTC")
 
 
 # ============================================================

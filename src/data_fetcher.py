@@ -15,6 +15,7 @@ import yfinance as yf
 
 from .config import get_config
 from .utils.files import atomic_write, atomic_write_text
+from .utils.financial import trading_dates
 from .utils.serialization import dataframe_to_json_dict, dataframe_to_records, series_to_dataframe
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,28 @@ def clean_price_bars(data: pd.DataFrame) -> pd.DataFrame:
             bad = ~(pd.to_numeric(out[column], errors="coerce") > 0)
             if bad.any():
                 out.loc[bad, column] = out.loc[bad, "Close"]
+    return out
+
+
+_INTRADAY_INTERVALS = frozenset({"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"})
+
+
+def normalize_bar_index(data: pd.DataFrame, interval: str = "1d") -> pd.DataFrame:
+    """
+    One index convention for fresh and cached bars.
+
+    Daily and longer bars get tz-naive trading dates: yfinance stamps them at
+    exchange-local midnight, and a CSV round trip reloads them in UTC, which
+    moves Oslo's 4 Nov to 3 Nov 23:00. Intraday bars keep their time, in UTC.
+    """
+    if data is None or data.empty or not isinstance(data.index, pd.DatetimeIndex):
+        return data
+    out = data.copy()
+    index = pd.DatetimeIndex(out.index)
+    if interval in _INTRADAY_INTERVALS:
+        out.index = index.tz_convert("UTC") if index.tz is not None else index.tz_localize("UTC")
+    else:
+        out.index = trading_dates(index)
     return out
 
 
@@ -183,7 +206,7 @@ class DataFetcher:
         # Check cache. Invalid symbols are caught below when history() comes back
         # empty, so no separate (network-bound) validate_ticker() call is needed.
         if use_cache and self._is_fresh(cache_file, "prices"):
-            cached = self._load_price_cache(cache_file)
+            cached = self._load_price_cache(cache_file, interval)
             if cached is not None:
                 return cached
 
@@ -197,7 +220,7 @@ class DataFetcher:
             else:
                 data = stock.history(period=period, interval=interval)
 
-            data = clean_price_bars(data)
+            data = normalize_bar_index(clean_price_bars(data), interval)
             if data.empty:
                 raise ValueError(
                     f"No data returned for ticker {ticker}. "
@@ -222,7 +245,7 @@ class DataFetcher:
             # Network trouble or rate limiting: an expired cache beats no data.
             # yfinance often reports connection failures as an empty history
             # ("possibly delisted"), so the empty-data ValueError gets the same fallback.
-            stale = self._load_price_cache(cache_file) if cache_file.exists() else None
+            stale = self._load_price_cache(cache_file, interval) if cache_file.exists() else None
             if stale is not None:
                 logger.warning(f"Fetch failed for {ticker} ({e}); using expired cache")
                 return stale
@@ -776,15 +799,17 @@ class DataFetcher:
         with self._fetched_at_lock:
             return dict(self._fetched_at.get(ticker.upper(), {}))
 
-    def _load_price_cache(self, cache_file: Path) -> Optional[pd.DataFrame]:
+    def _load_price_cache(self, cache_file: Path, interval: str = "1d") -> Optional[pd.DataFrame]:
         """Load a cached price CSV, recording its age. Returns None if unreadable."""
         try:
             logger.info(f"Loading cached prices from {cache_file}")
             df = pd.read_csv(cache_file, index_col=0)
+            # utc=True parses both plain dates and older caches with mixed
+            # exchange offsets (DST); normalize_bar_index then recovers the dates
             df.index = pd.to_datetime(df.index, utc=True)
             ticker = cache_file.parent.parent.name
             self._record_fetch(ticker, "prices", datetime.fromtimestamp(cache_file.stat().st_mtime))
-            return clean_price_bars(df)
+            return normalize_bar_index(clean_price_bars(df), interval)
         except Exception as e:
             logger.warning(f"Failed to load price cache {cache_file}: {e}")
             return None

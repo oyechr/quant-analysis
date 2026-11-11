@@ -29,7 +29,8 @@ Goal: make `quant` a practical companion for **finding** candidate tickers, **ve
 
 1. **Batch B:** done and live-checked on the real portfolio (2026-11-10).
 2. **Review Batch C:** the H rows are done and live-checked, and the M rows are done and live-checked (2026-11-11: `quant vet BNY` with DDM-only fair value and trade levels, `quant report AAPL` with the risk ratios and stable indicator keys; see REVIEW-2026-11.md for the score effect: no signal changed). The L rows are done and live-checked (2026-11-11, 798 tests; two holdings Hold → Buy at 65, as predicted offline). Batch C is closed; one open follow-up is in REVIEW-2026-11.md (FCF yield N/A in the peer table for statements in another currency).
-3. Then Batches D (price cache timezone) and E (report.md); F-I as time allows; then plan Phase 8.
+3. **Review Batch D:** done offline (2026-11-11, 807 tests): price bars are tz-naive trading dates on both the fresh and the cached path, and the backtest drops a month whose last bar is more than 5 days before month-end. Live-checked the same day: `quant report EQNR.OL` from cache shows the 2026-11-11 bar (an old-format cache), and `quant backtest obx` (10y caches in the new format) dropped no complete month for any ticker or the benchmark. Batch D is closed.
+4. Then Batch E (report.md); F-I as time allows; then plan Phase 8.
 
 **2026-11-05:** S1 live-checked: the daily `changes` covers the 37 holdings, the journal works on a real entry. The first holdings run had been throttled and cached empty statements for every holding; fixed with the Batch A follow-ups (see REVIEW-2026-11.md, Batch A), and the bad history rows removed. Every holding now has a correct baseline from 2026-11-05. Still to do: register the scheduled task (README, "Daily check").
 

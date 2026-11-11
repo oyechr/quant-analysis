@@ -64,6 +64,24 @@ class TestCalendar:
         assert ends[pd.Period("2026-05", "M")] == 0
         assert ends[pd.Period("2026-06", "M")] == 2
 
+    def test_month_that_stops_early_has_no_month_end(self):
+        """An expired cache used after a failed fetch ends mid-month: no month-end then."""
+        index = pd.DatetimeIndex(["2026-08-31", "2026-09-30", "2026-10-20"])
+        ends = month_end_positions(index)
+        assert pd.Period("2026-10", "M") not in ends
+        assert ends[pd.Period("2026-09", "M")] == 1
+
+    def test_long_holiday_keeps_the_month_end(self):
+        # Oslo, Easter 2024: closed Thursday 28 March to Monday 1 April
+        ends = month_end_positions(pd.DatetimeIndex(["2024-03-27"]))
+        assert ends[pd.Period("2024-03", "M")] == 0
+
+    def test_gap_limit_is_five_days(self):
+        assert pd.Period("2026-10", "M") in month_end_positions(pd.DatetimeIndex(["2026-10-26"]))
+        assert pd.Period("2026-10", "M") not in month_end_positions(
+            pd.DatetimeIndex(["2026-10-25"])
+        )
+
 
 class TestObservations:
     def _rows(self, prices, bench, months=None, horizons=(1, 3)):
