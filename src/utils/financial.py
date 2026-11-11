@@ -5,6 +5,7 @@ Provides reusable financial calculations and type-safe conversions
 used across technical, fundamental, and risk analysis modules.
 """
 
+import math
 from typing import Any, Optional
 
 import numpy as np
@@ -29,6 +30,19 @@ def to_float(value: Any) -> float:
     if isinstance(value, (int, float, np.number)):
         return float(value)
     return 0.0
+
+
+def finite_float(value: Any, default: Optional[float] = None) -> Optional[float]:
+    """
+    A value as a float, or `default` when it's missing, not a number, NaN or
+    infinite. Use this where a missing value must stay missing; `to_float`
+    turns it into 0.0.
+    """
+    try:
+        result = float(value)
+    except TypeError, ValueError:
+        return default
+    return result if math.isfinite(result) else default
 
 
 def calculate_daily_returns(price_data: pd.DataFrame, column: str = "Close") -> pd.Series:

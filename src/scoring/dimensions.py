@@ -5,11 +5,11 @@ Each scorer normalizes metrics to a 0-100 scale and tracks data coverage for con
 """
 
 import logging
-import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..analysis.fundamental import altman_zones
+from ..utils.financial import finite_float
 from .config import ScoringConfig
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,30 @@ logger = logging.getLogger(__name__)
 # continuously; see TechnicalScorer._score_macd and _score_ma_alignment)
 MACD_CROSS_BONUS = 10.0
 MA_CROSS_BONUS = 10.0
+
+# Where the sub-score curves end (see _piecewise). Inside the configured
+# thresholds (ScoringConfig) the score is interpolated; these are the outer
+# points, and the thresholds that aren't configurable.
+MARGIN_FLOOR = -20.0  # gross or operating margin (%) that scores the minimum, 10
+FCF_YIELD_FLOOR = -5.0  # FCF yield (%) that scores the minimum, 10
+# Beneish M-Score: above LIKELY a likely manipulator (Beneish 1999), below
+# UNLIKELY not; the grey zone between is the ramp from 80 down to 15
+BENEISH_LIKELY = -1.78
+BENEISH_UNLIKELY = -2.22
+# Sortino ratio: acceptable, good, excellent
+SORTINO_ACCEPTABLE = 0.5
+SORTINO_GOOD = 1.5
+SORTINO_EXCELLENT = 3.0
+# Daily 95% VaR (absolute): low, moderate, elevated, high
+VAR_LOW = 0.02
+VAR_MODERATE = 0.03
+VAR_ELEVATED = 0.05
+VAR_HIGH = 0.07
+# An oscillator (0-100) between its bands: 65 at the middle, 0.5 a point less
+# per point away (RSI and MFI; Williams %R shifted by 100)
+OSCILLATOR_NEUTRAL = [(0.0, 40.0), (50.0, 65.0), (100.0, 40.0)]
+BETA_CONCERN = 1.8  # above: "highly volatile relative to market"
+DCF_CONCERN_PREMIUM = 50.0  # % over intrinsic value: "significantly overvalued"
 
 
 @dataclass
@@ -73,19 +97,6 @@ class DimensionResult:
         }
 
 
-def _safe_float(value: Any, default: Optional[float] = None) -> Optional[float]:
-    """Safely convert a value to float, returning default if not possible"""
-    if value is None:
-        return default
-    try:
-        result = float(value)
-        if math.isnan(result) or math.isinf(result):
-            return default
-        return result
-    except TypeError, ValueError:
-        return default
-
-
 def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     """Clamp a value between low and high"""
     return max(low, min(high, value))
@@ -135,25 +146,46 @@ def beneish_is_partial(beneish: Optional[Dict[str, Any]]) -> bool:
     return components is not None and components < BENEISH_MIN_COMPONENTS
 
 
-def _linear_scale(value: float, worst: float, best: float, invert: bool = False) -> float:
+def _piecewise(x: float, points: Sequence[Tuple[float, float]]) -> float:
     """
-    Linearly scale a value to 0-100.
-
-    Args:
-        value: The raw metric value
-        worst: The value that maps to 0
-        best: The value that maps to 100
-        invert: If True, lower values are better (e.g. drawdown)
-
-    Returns:
-        Score between 0 and 100
+    A score from a curve: linear between (x, score) points sorted by x, and
+    flat beyond the first and last. Continuous, so a metric crossing a
+    threshold moves the score a little, not by a whole band.
     """
-    if abs(best - worst) < 1e-10:
-        return 50.0
-    score = ((value - worst) / (best - worst)) * 100.0
-    if invert:
-        score = 100.0 - score
-    return _clamp(score)
+    if x <= points[0][0]:
+        return points[0][1]
+    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+        if x <= x1:
+            return y0 + (x - x0) / (x1 - x0) * (y1 - y0) if x1 > x0 else y1
+    return points[-1][1]
+
+
+def _build_result(
+    dimension: str,
+    sub_scores: List[SubScore],
+    strengths: List[str],
+    concerns: List[str],
+) -> DimensionResult:
+    """A dimension's score: the weighted average of its available sub-scores
+    (weights renormalized over them), or a neutral 50 with none."""
+    available = [s for s in sub_scores if s.available]
+    total_available_weight = sum(s.weight for s in available)
+
+    if total_available_weight > 0:
+        score = sum(s.score * (s.weight / total_available_weight) for s in available)
+    else:
+        score = 50.0
+
+    data_coverage = len(available) / len(sub_scores) if sub_scores else 0.0
+
+    return DimensionResult(
+        dimension=dimension,
+        score=_clamp(score),
+        sub_scores=sub_scores,
+        data_coverage=data_coverage,
+        strengths=strengths,
+        concerns=concerns,
+    )
 
 
 class TechnicalScorer:
@@ -182,22 +214,22 @@ class TechnicalScorer:
         latest = technical_data.get("latest_values", {})
         indicators = latest.get("indicators", {})
         state = technical_data.get("state") or {}
-        close = _safe_float(latest.get("close_price") or indicators.get("close_price"))
+        close = finite_float(latest.get("close_price") or indicators.get("close_price"))
 
         # 1. RSI Score (weight: 0.20)
-        rsi = _safe_float(indicators.get("RSI"))
+        rsi = finite_float(indicators.get("RSI"))
         sub_scores.append(self._score_rsi(rsi, strengths, concerns))
 
         # 2. MACD Score (weight: 0.20)
-        macd_diff = _safe_float(indicators.get("MACD_diff"))
+        macd_diff = finite_float(indicators.get("MACD_diff"))
         sub_scores.append(
             self._score_macd(macd_diff, state.get("macd_cross"), close, strengths, concerns)
         )
 
         # 3. Moving Average Alignment (weight: 0.25)
-        sma_20 = _safe_float(indicators.get("SMA_20"))
-        sma_50 = _safe_float(indicators.get("SMA_50"))
-        sma_200 = _safe_float(indicators.get("SMA_200"))
+        sma_20 = finite_float(indicators.get("SMA_20"))
+        sma_50 = finite_float(indicators.get("SMA_50"))
+        sma_200 = finite_float(indicators.get("SMA_200"))
         sub_scores.append(
             self._score_ma_alignment(
                 close, sma_20, sma_50, sma_200, state.get("ma_cross"), strengths, concerns
@@ -205,26 +237,26 @@ class TechnicalScorer:
         )
 
         # 4. ADX Trend Strength (weight: 0.10)
-        adx = _safe_float(indicators.get("ADX"))
+        adx = finite_float(indicators.get("ADX"))
         sub_scores.append(self._score_adx(adx, strengths, concerns))
 
         # 5. MFI Score (weight: 0.10)
-        mfi = _safe_float(indicators.get("MFI"))
+        mfi = finite_float(indicators.get("MFI"))
         sub_scores.append(self._score_mfi(mfi, strengths, concerns))
 
         # 6. Bollinger Band Position (weight: 0.10)
-        bb_upper = _safe_float(indicators.get("BB_upper"))
-        bb_lower = _safe_float(indicators.get("BB_lower"))
-        bb_middle = _safe_float(indicators.get("BB_middle"))
+        bb_upper = finite_float(indicators.get("BB_upper"))
+        bb_lower = finite_float(indicators.get("BB_lower"))
+        bb_middle = finite_float(indicators.get("BB_middle"))
         sub_scores.append(
             self._score_bollinger(close, bb_upper, bb_lower, bb_middle, strengths, concerns)
         )
 
         # 7. Williams %R (weight: 0.05)
-        williams_r = _safe_float(indicators.get("Williams_R"))
+        williams_r = finite_float(indicators.get("Williams_R"))
         sub_scores.append(self._score_williams_r(williams_r, strengths, concerns))
 
-        return self._build_result("Technical", sub_scores, strengths, concerns)
+        return _build_result("Technical", sub_scores, strengths, concerns)
 
     def _score_rsi(
         self, rsi: Optional[float], strengths: List[str], concerns: List[str]
@@ -234,19 +266,16 @@ class TechnicalScorer:
 
         # RSI scoring: oversold (high score), neutral (moderate), overbought (low score)
         if rsi <= self.params.rsi_oversold:
-            score = _linear_scale(rsi, 0, self.params.rsi_oversold, invert=True)
-            score = 70.0 + (score * 0.30)  # 70-100 range for oversold
+            score = _piecewise(rsi, [(0.0, 100.0), (self.params.rsi_oversold, 70.0)])
             label = "Oversold (bullish)"
             strengths.append(f"RSI oversold at {rsi:.1f}  -  potential buying opportunity")
         elif rsi >= self.params.rsi_overbought:
-            score = _linear_scale(rsi, self.params.rsi_overbought, 100, invert=False)
-            score = 30.0 - (score * 0.30)  # 0-30 range for overbought
+            score = _piecewise(rsi, [(self.params.rsi_overbought, 30.0), (100.0, 0.0)])
             label = "Overbought (bearish)"
             concerns.append(f"RSI overbought at {rsi:.1f}  -  potential reversal risk")
         else:
             # Neutral zone: score peaks at 50 RSI
-            distance_from_center = abs(rsi - 50.0)
-            score = 65.0 - (distance_from_center * 0.5)
+            score = _piecewise(rsi, OSCILLATOR_NEUTRAL)
             label = "Neutral"
 
         return SubScore(name="RSI", score=_clamp(score), weight=0.20, raw_value=rsi, label=label)
@@ -274,7 +303,7 @@ class TechnicalScorer:
         else:
             macd_diff_pct = macd_diff  # fallback if close unavailable
 
-        score = 50.0 + _clamp(macd_diff_pct * 20, -35.0, 35.0)
+        score = _piecewise(macd_diff_pct, [(-1.75, 15.0), (1.75, 85.0)])
         if cross == "bullish":
             score += MACD_CROSS_BONUS
             label = "Bullish crossover"
@@ -373,16 +402,20 @@ class TechnicalScorer:
             return SubScore(name="ADX", score=50.0, weight=0.10, available=False)
 
         # ADX measures trend strength (not direction). Strong trend = higher score
+        score = _piecewise(
+            adx,
+            [
+                (0.0, 20.0),
+                (self.params.adx_strong_trend, 60.0),
+                (self.params.adx_very_strong, 85.0),
+            ],
+        )
         if adx >= self.params.adx_very_strong:
-            score = 85.0
             label = "Very strong trend"
             strengths.append(f"ADX {adx:.1f}  -  very strong trend")
         elif adx >= self.params.adx_strong_trend:
-            score = 70.0
             label = "Strong trend"
         else:
-            # Weak trend: 20-60 range
-            score = 20.0 + (adx / self.params.adx_strong_trend) * 40.0
             label = "Moderate trend" if adx >= self.params.adx_moderate_trend else "Weak/no trend"
 
         return SubScore(name="ADX", score=_clamp(score), weight=0.10, raw_value=adx, label=label)
@@ -395,18 +428,16 @@ class TechnicalScorer:
 
         # Same shape as RSI, so the score never jumps up when MFI crosses into a band
         if mfi <= self.params.mfi_oversold:
-            score = _linear_scale(mfi, 0, self.params.mfi_oversold, invert=True)
-            score = 70.0 + (score * 0.30)  # 70-100 range for oversold
+            score = _piecewise(mfi, [(0.0, 100.0), (self.params.mfi_oversold, 70.0)])
             label = "Oversold (bullish)"
             strengths.append(f"MFI oversold at {mfi:.1f}  -  money flow suggests buying pressure")
         elif mfi >= self.params.mfi_overbought:
-            score = _linear_scale(mfi, self.params.mfi_overbought, 100, invert=False)
-            score = 30.0 - (score * 0.30)  # 0-30 range for overbought
+            score = _piecewise(mfi, [(self.params.mfi_overbought, 30.0), (100.0, 0.0)])
             label = "Overbought (bearish)"
             concerns.append(f"MFI overbought at {mfi:.1f}  -  heavy selling pressure possible")
         else:
             # Neutral zone: score peaks at 50 MFI
-            score = 65.0 - (abs(mfi - 50.0) * 0.5)
+            score = _piecewise(mfi, OSCILLATOR_NEUTRAL)
             label = "Neutral"
 
         return SubScore(name="MFI", score=_clamp(score), weight=0.10, raw_value=mfi, label=label)
@@ -467,15 +498,15 @@ class TechnicalScorer:
         # Williams %R ranges from -100 (oversold) to 0 (overbought). Same shape
         # as RSI and MFI, so the score never jumps up when %R crosses into a band.
         if williams_r <= -80:
-            score = 70.0 + _linear_scale(williams_r, -80, -100) * 0.30  # 70-100
+            score = _piecewise(williams_r, [(-100.0, 100.0), (-80.0, 70.0)])
             label = "Oversold"
         elif williams_r >= -20:
-            score = 30.0 - _linear_scale(williams_r, -20, 0) * 0.30  # 0-30
+            score = _piecewise(williams_r, [(-20.0, 30.0), (0.0, 0.0)])
             label = "Overbought"
             concerns.append(f"Williams %R at {williams_r:.1f}  -  overbought zone")
         else:
             # Neutral zone: score peaks at -50
-            score = 65.0 - abs(williams_r + 50.0) * 0.5
+            score = _piecewise(williams_r + 100.0, OSCILLATOR_NEUTRAL)
             label = "Neutral"
 
         return SubScore(
@@ -484,34 +515,6 @@ class TechnicalScorer:
             weight=0.05,
             raw_value=williams_r,
             label=label,
-        )
-
-    def _build_result(
-        self,
-        dimension: str,
-        sub_scores: List[SubScore],
-        strengths: List[str],
-        concerns: List[str],
-    ) -> DimensionResult:
-        """Build dimension result from sub-scores with proper weight normalization"""
-        available = [s for s in sub_scores if s.available]
-        total_available_weight = sum(s.weight for s in available)
-
-        if total_available_weight > 0:
-            # Re-normalize weights so available metrics sum to 1.0
-            score = sum(s.score * (s.weight / total_available_weight) for s in available)
-        else:
-            score = 50.0  # Default neutral if no data
-
-        data_coverage = len(available) / len(sub_scores) if sub_scores else 0.0
-
-        return DimensionResult(
-            dimension=dimension,
-            score=_clamp(score),
-            sub_scores=sub_scores,
-            data_coverage=data_coverage,
-            strengths=strengths,
-            concerns=concerns,
         )
 
 
@@ -549,31 +552,31 @@ class FundamentalScorer:
         quality = analysis.get("quality_scores", {})
         excluded = set(QUALITY_MODELS) - set(applicable_quality_models(ticker_info))
         quality = {k: v for k, v in quality.items() if k not in excluded}
-        f_score = _safe_float(quality.get("piotroski_f"))
+        f_score = finite_float(quality.get("piotroski_f"))
         sub_scores.append(self._score_piotroski(f_score, strengths, concerns))
 
         # 2. Altman Z-Score (weight: 0.20)
-        z_score = _safe_float(quality.get("altman_z"))
+        z_score = finite_float(quality.get("altman_z"))
         model = quality.get("altman_model") or "Z"
         sub_scores.append(self._score_altman_z(z_score, model, strengths, concerns))
 
         # 3. Revenue Growth (weight: 0.15)
         growth = analysis.get("growth_rates", {})
         revenue_growth = growth.get("revenue", {})
-        rev_1y = _safe_float(revenue_growth.get("1y"))
-        rev_3y = _safe_float(revenue_growth.get("3y_cagr"))
+        rev_1y = finite_float(revenue_growth.get("1y"))
+        rev_3y = finite_float(revenue_growth.get("3y_cagr"))
         sub_scores.append(self._score_revenue_growth(rev_1y, rev_3y, strengths, concerns))
 
         # 4. Earnings Growth (weight: 0.15)
         earnings_growth = growth.get("earnings", {})
-        earn_1y = _safe_float(earnings_growth.get("1y"))
-        earn_3y = _safe_float(earnings_growth.get("3y_cagr"))
+        earn_1y = finite_float(earnings_growth.get("1y"))
+        earn_3y = finite_float(earnings_growth.get("3y_cagr"))
         sub_scores.append(self._score_earnings_growth(earn_1y, earn_3y, strengths, concerns))
 
         # 5. Profitability / Margins (weight: 0.15)
         margins = analysis.get("margins", {}).get("current", {})
-        gross_margin = _safe_float(margins.get("gross_margin"))
-        operating_margin = _safe_float(margins.get("operating_margin"))
+        gross_margin = finite_float(margins.get("gross_margin"))
+        operating_margin = finite_float(margins.get("operating_margin"))
         sub_scores.append(
             self._score_profitability(gross_margin, operating_margin, strengths, concerns)
         )
@@ -582,12 +585,12 @@ class FundamentalScorer:
         # decimal (AAPL 1.49 = 149%); the DuPont values are already in %.
         roe_pct = None
         if ticker_info:
-            roe = _safe_float(ticker_info.get("roe"))
+            roe = finite_float(ticker_info.get("roe"))
             roe_pct = roe * 100.0 if roe is not None else None
         if roe_pct is None:
             dupont = analysis.get("dupont", {})
-            roe_pct = _safe_float(dupont.get("roe_reported") or dupont.get("roe_calculated"))
-        net_margin = _safe_float(margins.get("net_margin"))
+            roe_pct = finite_float(dupont.get("roe_reported") or dupont.get("roe_calculated"))
+        net_margin = finite_float(margins.get("net_margin"))
         sub_scores.append(self._score_roe(roe_pct, net_margin, strengths, concerns))
 
         # 7. Beneish M-Score / Earnings Manipulation (weight: 0.05)
@@ -598,7 +601,7 @@ class FundamentalScorer:
         accruals = quality.get("accruals_quality")
         sub_scores.append(self._score_accruals_quality(accruals, strengths, concerns))
 
-        return self._build_result("Fundamental", sub_scores, strengths, concerns)
+        return _build_result("Fundamental", sub_scores, strengths, concerns)
 
     def _score_piotroski(
         self, f_score: Optional[float], strengths: List[str], concerns: List[str]
@@ -642,20 +645,16 @@ class FundamentalScorer:
             grey, safe = self.params.z_score_grey, self.params.z_score_safe
         else:
             grey, safe = altman_zones(model)
+        # Distress 0-40, grey 40-70, safe 70-100 (reached 6 points above safe)
+        score = _piecewise(z_score, [(0.0, 0.0), (grey, 40.0), (safe, 70.0), (safe + 6.0, 100.0)])
         if z_score > safe:
-            # Safe zone: score 70-100 based on how far above threshold
-            score = 70.0 + min((z_score - safe) * 5, 30.0)
             label = "Safe zone"
             strengths.append(
                 f"Altman {model}-Score {z_score:.2f}  -  safe zone (low bankruptcy risk)"
             )
         elif z_score > grey:
-            # Grey zone: 40-70
-            score = 40.0 + ((z_score - grey) / (safe - grey)) * 30.0
             label = "Grey zone"
         else:
-            # Distress zone: 0-40
-            score = max(z_score / grey * 40.0, 0.0)
             label = "Distress zone"
             concerns.append(f"Altman {model}-Score {z_score:.2f}  -  financial distress risk")
         if model != "Z":
@@ -692,19 +691,15 @@ class FundamentalScorer:
                 available=False,
             )
 
-        # M-Score interpretation: lower (more negative) is better
-        # > -1.78: likely manipulator (bad)
-        # -1.78 to -2.22: grey zone
-        # < -2.22: unlikely manipulator (good)
-        if m_score > -1.78:
-            score = 15.0
+        # Lower (more negative) is better: 80 up to BENEISH_UNLIKELY, 15 from
+        # BENEISH_LIKELY, a straight line across the grey zone between
+        score = _piecewise(m_score, [(BENEISH_UNLIKELY, 80.0), (BENEISH_LIKELY, 15.0)])
+        if m_score > BENEISH_LIKELY:
             label = "Likely manipulator"
             concerns.append(f"Beneish M-Score {m_score:.2f}  -  earnings manipulation risk")
-        elif m_score > -2.22:
-            score = 50.0
+        elif m_score > BENEISH_UNLIKELY:
             label = "Grey zone"
         else:
-            score = 80.0
             label = "Unlikely manipulator"
 
         return SubScore(
@@ -765,25 +760,19 @@ class FundamentalScorer:
         if growth is None:
             return SubScore(name="Revenue Growth", score=50.0, weight=0.15, available=False)
 
-        if growth >= self.params.revenue_growth_strong:
-            score = 75.0 + min((growth - self.params.revenue_growth_strong) * 0.5, 25.0)
+        moderate, strong = self.params.revenue_growth_moderate, self.params.revenue_growth_strong
+        score = _piecewise(
+            growth,
+            [(-30.0, 0.0), (0.0, 30.0), (moderate, 50.0), (strong, 75.0), (strong + 50.0, 100.0)],
+        )
+        if growth >= strong:
             label = "Strong growth"
             strengths.append(f"Revenue growth {growth:.1f}%  -  strong")
-        elif growth >= self.params.revenue_growth_moderate:
-            score = (
-                50.0
-                + (
-                    (growth - self.params.revenue_growth_moderate)
-                    / (self.params.revenue_growth_strong - self.params.revenue_growth_moderate)
-                )
-                * 25.0
-            )
+        elif growth >= moderate:
             label = "Moderate growth"
         elif growth >= 0:
-            score = 30.0 + (growth / self.params.revenue_growth_moderate) * 20.0
             label = "Slow growth"
         else:
-            score = max(30.0 + growth, 0.0)  # Negative growth penalized
             label = "Declining"
             concerns.append(f"Revenue declining at {growth:.1f}%")
 
@@ -806,25 +795,19 @@ class FundamentalScorer:
         if growth is None:
             return SubScore(name="Earnings Growth", score=50.0, weight=0.15, available=False)
 
-        if growth >= self.params.earnings_growth_strong:
-            score = 75.0 + min((growth - self.params.earnings_growth_strong) * 0.4, 25.0)
+        moderate, strong = self.params.earnings_growth_moderate, self.params.earnings_growth_strong
+        score = _piecewise(
+            growth,
+            [(-60.0, 0.0), (0.0, 30.0), (moderate, 50.0), (strong, 75.0), (strong + 62.5, 100.0)],
+        )
+        if growth >= strong:
             label = "Strong growth"
             strengths.append(f"Earnings growth {growth:.1f}%  -  strong")
-        elif growth >= self.params.earnings_growth_moderate:
-            score = (
-                50.0
-                + (
-                    (growth - self.params.earnings_growth_moderate)
-                    / (self.params.earnings_growth_strong - self.params.earnings_growth_moderate)
-                )
-                * 25.0
-            )
+        elif growth >= moderate:
             label = "Moderate growth"
         elif growth >= 0:
-            score = 30.0 + (growth / self.params.earnings_growth_moderate) * 20.0
             label = "Slow growth"
         else:
-            score = max(30.0 + growth * 0.5, 0.0)
             label = "Declining"
             concerns.append(f"Earnings declining at {growth:.1f}%")
 
@@ -846,26 +829,27 @@ class FundamentalScorer:
         if gross_margin is None and operating_margin is None:
             return SubScore(name="Profitability", score=50.0, weight=0.15, available=False)
 
+        def margin_score(margin: float, good: float, excellent: float) -> float:
+            # 35 at break-even, 60 at good, 85 from excellent; 10 at MARGIN_FLOOR
+            return _piecewise(
+                margin, [(MARGIN_FLOOR, 10.0), (0.0, 35.0), (good, 60.0), (excellent, 85.0)]
+            )
+
         scores = []
         if gross_margin is not None:
-            if gross_margin >= self.params.gross_margin_excellent:
-                scores.append(85.0)
-            elif gross_margin >= self.params.gross_margin_good:
-                scores.append(60.0)
-            elif gross_margin >= 0:
-                scores.append(35.0)
-            else:
-                scores.append(10.0)
-
+            scores.append(
+                margin_score(
+                    gross_margin, self.params.gross_margin_good, self.params.gross_margin_excellent
+                )
+            )
         if operating_margin is not None:
-            if operating_margin >= self.params.operating_margin_excellent:
-                scores.append(85.0)
-            elif operating_margin >= self.params.operating_margin_good:
-                scores.append(60.0)
-            elif operating_margin >= 0:
-                scores.append(35.0)
-            else:
-                scores.append(10.0)
+            scores.append(
+                margin_score(
+                    operating_margin,
+                    self.params.operating_margin_good,
+                    self.params.operating_margin_excellent,
+                )
+            )
 
         score = sum(scores) / len(scores)
 
@@ -920,56 +904,30 @@ class FundamentalScorer:
                 available=False,
             )
 
-        if roe_pct >= self.params.roe_excellent:
-            score = 80.0 + min((roe_pct - self.params.roe_excellent) * 0.3, 20.0)
+        good, excellent = self.params.roe_good, self.params.roe_excellent
+        score = _piecewise(
+            roe_pct,
+            [
+                (-25.0, 0.0),
+                (0.0, 25.0),
+                (good, 55.0),
+                (excellent, 80.0),
+                (excellent + 20 / 0.3, 100.0),
+            ],
+        )
+        if roe_pct >= excellent:
             label = "Excellent"
             strengths.append(f"ROE {roe_pct:.1f}%  -  excellent return on equity")
-        elif roe_pct >= self.params.roe_good:
-            score = (
-                55.0
-                + (
-                    (roe_pct - self.params.roe_good)
-                    / (self.params.roe_excellent - self.params.roe_good)
-                )
-                * 25.0
-            )
+        elif roe_pct >= good:
             label = "Good"
         elif roe_pct >= 0:
-            score = 25.0 + (roe_pct / self.params.roe_good) * 30.0
             label = "Low"
         else:
-            score = max(25.0 + roe_pct, 0.0)
             label = "Negative"
             concerns.append(f"Negative ROE ({roe_pct:.1f}%)  -  company losing money on equity")
 
         return SubScore(
             name="ROE", score=_clamp(score), weight=0.10, raw_value=roe_pct, label=label
-        )
-
-    def _build_result(
-        self,
-        dimension: str,
-        sub_scores: List[SubScore],
-        strengths: List[str],
-        concerns: List[str],
-    ) -> DimensionResult:
-        available = [s for s in sub_scores if s.available]
-        total_available_weight = sum(s.weight for s in available)
-
-        if total_available_weight > 0:
-            score = sum(s.score * (s.weight / total_available_weight) for s in available)
-        else:
-            score = 50.0
-
-        data_coverage = len(available) / len(sub_scores) if sub_scores else 0.0
-
-        return DimensionResult(
-            dimension=dimension,
-            score=_clamp(score),
-            sub_scores=sub_scores,
-            data_coverage=data_coverage,
-            strengths=strengths,
-            concerns=concerns,
         )
 
 
@@ -996,34 +954,34 @@ class RiskScorer:
         concerns: List[str] = []
 
         # 1. Sharpe Ratio (weight: 0.25)
-        sharpe = _safe_float(risk_data.get("sharpe_ratio"))
+        sharpe = finite_float(risk_data.get("sharpe_ratio"))
         sub_scores.append(self._score_sharpe(sharpe, strengths, concerns))
 
         # 2. Sortino Ratio (weight: 0.15)
-        sortino = _safe_float(risk_data.get("sortino_ratio"))
+        sortino = finite_float(risk_data.get("sortino_ratio"))
         sub_scores.append(self._score_sortino(sortino, strengths, concerns))
 
         # 3. Maximum Drawdown (weight: 0.25)
         drawdown = risk_data.get("drawdown", {})
-        max_dd = _safe_float(drawdown.get("max_drawdown"))
+        max_dd = finite_float(drawdown.get("max_drawdown"))
         sub_scores.append(self._score_drawdown(max_dd, strengths, concerns))
 
         # 4. Beta (weight: 0.15)
         market_risk = risk_data.get("market_risk", {})
-        beta = _safe_float(market_risk.get("beta"))
+        beta = finite_float(market_risk.get("beta"))
         sub_scores.append(self._score_beta(beta, strengths, concerns))
 
         # 5. Volatility (weight: 0.15)
         vol_data = risk_data.get("volatility", {})
-        ann_vol = _safe_float(vol_data.get("annualized_volatility"))
+        ann_vol = finite_float(vol_data.get("annualized_volatility"))
         sub_scores.append(self._score_volatility(ann_vol, strengths, concerns))
 
         # 6. VaR (weight: 0.05)
         var_data = risk_data.get("var_95", {})
-        var_95 = _safe_float(var_data.get("var_historical"))
+        var_95 = finite_float(var_data.get("var_historical"))
         sub_scores.append(self._score_var(var_95, strengths, concerns))
 
-        return self._build_result("Risk", sub_scores, strengths, concerns)
+        return _build_result("Risk", sub_scores, strengths, concerns)
 
     def _score_sharpe(
         self, sharpe: Optional[float], strengths: List[str], concerns: List[str]
@@ -1031,37 +989,23 @@ class RiskScorer:
         if sharpe is None:
             return SubScore(name="Sharpe Ratio", score=50.0, weight=0.25, available=False)
 
-        if sharpe >= self.params.sharpe_excellent:
-            score = 90.0
+        acceptable = self.params.sharpe_acceptable
+        good, excellent = self.params.sharpe_good, self.params.sharpe_excellent
+        score = _piecewise(
+            sharpe, [(-2.5, 0.0), (0.0, 25.0), (acceptable, 50.0), (good, 70.0), (excellent, 90.0)]
+        )
+        if sharpe >= excellent:
             label = "Excellent"
             strengths.append(f"Sharpe ratio {sharpe:.2f}  -  excellent risk-adjusted returns")
-        elif sharpe >= self.params.sharpe_good:
-            score = (
-                70.0
-                + (
-                    (sharpe - self.params.sharpe_good)
-                    / (self.params.sharpe_excellent - self.params.sharpe_good)
-                )
-                * 20.0
-            )
+        elif sharpe >= good:
             label = "Good"
             strengths.append(f"Sharpe ratio {sharpe:.2f}  -  good risk-adjusted returns")
-        elif sharpe >= self.params.sharpe_acceptable:
-            score = (
-                50.0
-                + (
-                    (sharpe - self.params.sharpe_acceptable)
-                    / (self.params.sharpe_good - self.params.sharpe_acceptable)
-                )
-                * 20.0
-            )
+        elif sharpe >= acceptable:
             label = "Acceptable"
         elif sharpe >= 0:
-            score = 25.0 + (sharpe / self.params.sharpe_acceptable) * 25.0
             label = "Poor"
             concerns.append(f"Sharpe ratio {sharpe:.2f}  -  poor risk-adjusted returns")
         else:
-            score = max(25.0 + sharpe * 10, 0.0)
             label = "Negative"
             concerns.append(
                 f"Negative Sharpe ratio ({sharpe:.2f})  -  underperforming risk-free rate"
@@ -1078,20 +1022,25 @@ class RiskScorer:
             return SubScore(name="Sortino Ratio", score=50.0, weight=0.15, available=False)
 
         # Similar logic to Sharpe but typically higher values
-        if sortino >= 3.0:
-            score = 90.0
+        score = _piecewise(
+            sortino,
+            [
+                (-4.0, 0.0),
+                (0.0, 20.0),
+                (SORTINO_ACCEPTABLE, 45.0),
+                (SORTINO_GOOD, 70.0),
+                (SORTINO_EXCELLENT, 90.0),
+            ],
+        )
+        if sortino >= SORTINO_EXCELLENT:
             label = "Excellent"
-        elif sortino >= 1.5:
-            score = 70.0 + ((sortino - 1.5) / 1.5) * 20.0
+        elif sortino >= SORTINO_GOOD:
             label = "Good"
-        elif sortino >= 0.5:
-            score = 45.0 + ((sortino - 0.5) / 1.0) * 25.0
+        elif sortino >= SORTINO_ACCEPTABLE:
             label = "Acceptable"
         elif sortino >= 0:
-            score = 20.0 + (sortino / 0.5) * 25.0
             label = "Poor"
         else:
-            score = max(20.0 + sortino * 5, 0.0)
             label = "Negative"
 
         return SubScore(
@@ -1107,33 +1056,21 @@ class RiskScorer:
         # max_dd is typically negative, work with absolute value
         dd_abs = abs(max_dd)
 
-        if dd_abs <= self.params.drawdown_low:
-            score = 90.0
+        low, moderate, high = (
+            self.params.drawdown_low,
+            self.params.drawdown_moderate,
+            self.params.drawdown_high,
+        )
+        score = _piecewise(dd_abs, [(low, 90.0), (moderate, 65.0), (high, 35.0), (high + 0.7, 0.0)])
+        if dd_abs <= low:
             label = "Low risk"
             strengths.append(f"Max drawdown only {dd_abs:.1%}  -  low downside risk")
-        elif dd_abs <= self.params.drawdown_moderate:
-            score = (
-                65.0
-                + (
-                    (self.params.drawdown_moderate - dd_abs)
-                    / (self.params.drawdown_moderate - self.params.drawdown_low)
-                )
-                * 25.0
-            )
+        elif dd_abs <= moderate:
             label = "Moderate"
-        elif dd_abs <= self.params.drawdown_high:
-            score = (
-                35.0
-                + (
-                    (self.params.drawdown_high - dd_abs)
-                    / (self.params.drawdown_high - self.params.drawdown_moderate)
-                )
-                * 30.0
-            )
+        elif dd_abs <= high:
             label = "High risk"
             concerns.append(f"Max drawdown {dd_abs:.1%}  -  significant downside risk")
         else:
-            score = max(35.0 - (dd_abs - self.params.drawdown_high) * 50, 0.0)
             label = "Very high risk"
             concerns.append(f"Max drawdown {dd_abs:.1%}  -  severe drawdown risk")
 
@@ -1151,25 +1088,21 @@ class RiskScorer:
         if beta is None:
             return SubScore(name="Beta", score=50.0, weight=0.15, available=False)
 
-        # Ideal beta: 0.7-1.3 (moderate market sensitivity)
-        if self.params.beta_ideal_low <= beta <= self.params.beta_ideal_high:
-            score = 75.0
+        # Ideal beta: 0.7-1.3 (moderate market sensitivity). Low beta is
+        # defensive, generally good but may underperform; high is aggressive
+        low, high = self.params.beta_ideal_low, self.params.beta_ideal_high
+        score = _piecewise(beta, [(0.0, 65.0), (low, 75.0), (high, 75.0), (high + 2.4, 15.0)])
+        if low <= beta <= high:
             label = "Moderate"
-        elif beta < self.params.beta_ideal_low:
-            # Low beta = defensive, generally good but may underperform
-            if beta >= 0:
-                score = 65.0 + (beta / self.params.beta_ideal_low) * 10.0
-                label = "Defensive"
-                strengths.append(f"Beta {beta:.2f}  -  defensive, low market sensitivity")
-            else:
-                score = 50.0  # Negative beta is unusual
-                label = "Negative (unusual)"
+        elif beta < 0:
+            score = 50.0  # Negative beta is unusual
+            label = "Negative (unusual)"
+        elif beta < low:
+            label = "Defensive"
+            strengths.append(f"Beta {beta:.2f}  -  defensive, low market sensitivity")
         else:
-            # High beta = aggressive, higher risk
-            excess = beta - self.params.beta_ideal_high
-            score = max(75.0 - excess * 25, 15.0)
             label = "Aggressive"
-            if beta > 1.8:
+            if beta > BETA_CONCERN:
                 concerns.append(f"Beta {beta:.2f}  -  highly volatile relative to market")
 
         return SubScore(name="Beta", score=_clamp(score), weight=0.15, raw_value=beta, label=label)
@@ -1180,33 +1113,23 @@ class RiskScorer:
         if ann_vol is None:
             return SubScore(name="Volatility", score=50.0, weight=0.15, available=False)
 
-        if ann_vol <= self.params.volatility_low:
-            score = 90.0
+        low, moderate, high = (
+            self.params.volatility_low,
+            self.params.volatility_moderate,
+            self.params.volatility_high,
+        )
+        score = _piecewise(
+            ann_vol, [(low, 90.0), (moderate, 60.0), (high, 25.0), (high + 25 / 30, 0.0)]
+        )
+        if ann_vol <= low:
             label = "Low"
             strengths.append(f"Annualized volatility {ann_vol:.1%}  -  low")
-        elif ann_vol <= self.params.volatility_moderate:
-            score = (
-                60.0
-                + (
-                    (self.params.volatility_moderate - ann_vol)
-                    / (self.params.volatility_moderate - self.params.volatility_low)
-                )
-                * 30.0
-            )
+        elif ann_vol <= moderate:
             label = "Moderate"
-        elif ann_vol <= self.params.volatility_high:
-            score = (
-                25.0
-                + (
-                    (self.params.volatility_high - ann_vol)
-                    / (self.params.volatility_high - self.params.volatility_moderate)
-                )
-                * 35.0
-            )
+        elif ann_vol <= high:
             label = "High"
             concerns.append(f"Annualized volatility {ann_vol:.1%}  -  elevated risk")
         else:
-            score = max(25.0 - (ann_vol - self.params.volatility_high) * 30, 0.0)
             label = "Very high"
             concerns.append(f"Annualized volatility {ann_vol:.1%}  -  very high risk")
 
@@ -1227,17 +1150,17 @@ class RiskScorer:
         # VaR is typically negative (worst expected daily loss)
         var_abs = abs(var_95)
 
-        if var_abs <= 0.02:
-            score = 85.0
+        score = _piecewise(
+            var_abs,
+            [(VAR_LOW, 85.0), (VAR_MODERATE, 65.0), (VAR_ELEVATED, 40.0), (VAR_HIGH, 20.0)],
+        )
+        if var_abs <= VAR_LOW:
             label = "Low daily risk"
-        elif var_abs <= 0.03:
-            score = 65.0
+        elif var_abs <= VAR_MODERATE:
             label = "Moderate daily risk"
-        elif var_abs <= 0.05:
-            score = 40.0
+        elif var_abs <= VAR_ELEVATED:
             label = "Elevated daily risk"
         else:
-            score = 20.0
             label = "High daily risk"
 
         return SubScore(
@@ -1246,32 +1169,6 @@ class RiskScorer:
             weight=0.05,
             raw_value=var_95,
             label=label,
-        )
-
-    def _build_result(
-        self,
-        dimension: str,
-        sub_scores: List[SubScore],
-        strengths: List[str],
-        concerns: List[str],
-    ) -> DimensionResult:
-        available = [s for s in sub_scores if s.available]
-        total_available_weight = sum(s.weight for s in available)
-
-        if total_available_weight > 0:
-            score = sum(s.score * (s.weight / total_available_weight) for s in available)
-        else:
-            score = 50.0
-
-        data_coverage = len(available) / len(sub_scores) if sub_scores else 0.0
-
-        return DimensionResult(
-            dimension=dimension,
-            score=_clamp(score),
-            sub_scores=sub_scores,
-            data_coverage=data_coverage,
-            strengths=strengths,
-            concerns=concerns,
         )
 
 
@@ -1314,30 +1211,30 @@ class ValuationScorer:
 
         # 1. DCF Valuation (weight: 0.25)
         dcf = valuation_data.get("dcf_valuation", {})
-        dcf_premium = None if financial else _safe_float(dcf.get("discount_premium_pct"))
+        dcf_premium = None if financial else finite_float(dcf.get("discount_premium_pct"))
         dcf_error = dcf.get("error")
         sub_scores.append(self._score_dcf(dcf_premium, dcf_error, strengths, concerns))
 
         # 2. P/E Ratio (weight: 0.20)
         pe = None
         if ticker_info:
-            pe = _safe_float(ticker_info.get("pe_ratio"))
+            pe = finite_float(ticker_info.get("pe_ratio"))
         peer_median = self.peer_pe_median(peer_valuation)
         sub_scores.append(self._score_pe(pe, strengths, concerns, peer_median))
 
         # 3. PEG Ratio (weight: 0.15)
         peg = None
         if ticker_info:
-            peg = _safe_float(ticker_info.get("peg_ratio"))
+            peg = finite_float(ticker_info.get("peg_ratio"))
         sub_scores.append(self._score_peg(peg, strengths, concerns))
 
         # 4. FCF Yield (weight: 0.15)
-        fcf_yield = None if financial else _safe_float(fcf_yield)
+        fcf_yield = None if financial else finite_float(fcf_yield)
         sub_scores.append(self._score_fcf_yield(fcf_yield, strengths, concerns))
 
         # 5. Dividend Sustainability (weight: 0.10)
         div_analysis = valuation_data.get("dividend_analysis") or {}
-        div_sustainability = _safe_float(div_analysis.get("sustainability_score"))
+        div_sustainability = finite_float(div_analysis.get("sustainability_score"))
         # No analysis, or one that failed, says nothing about the dividend:
         # unknown, not "No dividend" (a neutral 50 that would still count)
         pays_dividends: Optional[bool] = (
@@ -1356,14 +1253,14 @@ class ValuationScorer:
         earnings_quality_score = (
             None
             if financial
-            else _safe_float((earnings.get("earnings_quality") or {}).get("score"))
+            else finite_float((earnings.get("earnings_quality") or {}).get("score"))
         )
-        beat_rate = _safe_float((earnings.get("surprise_stats") or {}).get("beat_rate"))
+        beat_rate = finite_float((earnings.get("surprise_stats") or {}).get("beat_rate"))
         sub_scores.append(
             self._score_earnings_quality(earnings_quality_score, beat_rate, strengths, concerns)
         )
 
-        return self._build_result("Valuation", sub_scores, strengths, concerns)
+        return _build_result("Valuation", sub_scores, strengths, concerns)
 
     def _score_dcf(
         self,
@@ -1377,39 +1274,27 @@ class ValuationScorer:
 
         # premium_pct: positive = overvalued (price > intrinsic), negative = undervalued
         # Invert: lower premium = higher score
-        if premium_pct <= self.params.dcf_deep_discount:
-            score = 90.0
+        deep, moderate, fair = (
+            self.params.dcf_deep_discount,
+            self.params.dcf_moderate_discount,
+            self.params.dcf_fair_value_range,
+        )
+        score = _piecewise(
+            premium_pct, [(deep, 90.0), (moderate, 70.0), (fair, 50.0), (fair + 150.0, 5.0)]
+        )
+        if premium_pct <= deep:
             label = "Deeply undervalued"
             strengths.append(
                 f"DCF shows {abs(premium_pct):.0f}% discount to intrinsic value  -  deeply undervalued"
             )
-        elif premium_pct <= self.params.dcf_moderate_discount:
-            score = (
-                70.0
-                + (
-                    (self.params.dcf_moderate_discount - premium_pct)
-                    / (self.params.dcf_moderate_discount - self.params.dcf_deep_discount)
-                )
-                * 20.0
-            )
+        elif premium_pct <= moderate:
             label = "Undervalued"
             strengths.append(f"DCF shows {abs(premium_pct):.0f}% discount  -  undervalued")
-        elif premium_pct <= self.params.dcf_fair_value_range:
-            score = (
-                50.0
-                + (
-                    (self.params.dcf_fair_value_range - premium_pct)
-                    / (self.params.dcf_fair_value_range - self.params.dcf_moderate_discount)
-                )
-                * 20.0
-            )
+        elif premium_pct <= fair:
             label = "Near fair value"
         else:
-            # Overvalued
-            excess = premium_pct - self.params.dcf_fair_value_range
-            score = max(50.0 - excess * 0.3, 5.0)
             label = "Overvalued"
-            if premium_pct > 50:
+            if premium_pct > DCF_CONCERN_PREMIUM:
                 concerns.append(
                     f"DCF shows {premium_pct:.0f}% premium  -  significantly overvalued"
                 )
@@ -1427,7 +1312,7 @@ class ValuationScorer:
         if not self.params.peer_relative or not peer_valuation:
             return None
         pe = (peer_valuation.get("metrics") or {}).get("pe_ratio") or {}
-        median = _safe_float(pe.get("median"))
+        median = finite_float(pe.get("median"))
         if median is None or median <= 0 or (pe.get("n") or 0) < self.params.min_peers:
             return None
         return median
@@ -1454,18 +1339,24 @@ class ValuationScorer:
         # The outer slopes are per P/E point on the absolute scale; rescale them too
         unit = fair / self.params.pe_fair
 
+        score = _piecewise(
+            pe,
+            [
+                (undervalued - 20 / 1.5 * unit, 100.0),
+                (undervalued, 80.0),
+                (fair, 50.0),
+                (expensive, 25.0),
+                (expensive + 20 / 0.3 * unit, 5.0),
+            ],
+        )
         if pe <= undervalued:
-            score = 80.0 + min((undervalued - pe) / unit * 1.5, 20.0)
             label = "Attractive"
             strengths.append(f"P/E {pe:.1f}{context}  -  attractively valued")
         elif pe <= fair:
-            score = 50.0 + ((fair - pe) / (fair - undervalued)) * 30.0
             label = "Fair"
         elif pe <= expensive:
-            score = 25.0 + ((expensive - pe) / (expensive - fair)) * 25.0
             label = "Expensive"
         else:
-            score = max(25.0 - (pe - expensive) / unit * 0.3, 5.0)
             label = "Very expensive"
             concerns.append(f"P/E {pe:.1f}{context}  -  richly valued")
 
@@ -1481,22 +1372,14 @@ class ValuationScorer:
         if peg is None or peg <= 0:
             return SubScore(name="PEG Ratio", score=50.0, weight=0.15, available=False)
 
-        if peg <= self.params.peg_undervalued:
-            score = 85.0
+        undervalued, fair = self.params.peg_undervalued, self.params.peg_fair
+        score = _piecewise(peg, [(undervalued, 85.0), (fair, 50.0), (fair + 4.0, 10.0)])
+        if peg <= undervalued:
             label = "Undervalued for growth"
             strengths.append(f"PEG {peg:.2f}  -  undervalued relative to growth rate")
-        elif peg <= self.params.peg_fair:
-            score = (
-                50.0
-                + (
-                    (self.params.peg_fair - peg)
-                    / (self.params.peg_fair - self.params.peg_undervalued)
-                )
-                * 35.0
-            )
+        elif peg <= fair:
             label = "Fair"
         else:
-            score = max(50.0 - (peg - self.params.peg_fair) * 10, 10.0)
             label = "Expensive for growth"
 
         return SubScore(
@@ -1509,25 +1392,25 @@ class ValuationScorer:
         if fcf_yield is None:
             return SubScore(name="FCF Yield", score=50.0, weight=0.15, available=False)
 
-        if fcf_yield >= self.params.fcf_yield_attractive:
-            score = 80.0 + min((fcf_yield - self.params.fcf_yield_attractive) * 2, 20.0)
+        moderate, attractive = self.params.fcf_yield_moderate, self.params.fcf_yield_attractive
+        score = _piecewise(
+            fcf_yield,
+            [
+                (FCF_YIELD_FLOOR, 10.0),
+                (0.0, 25.0),
+                (moderate, 50.0),
+                (attractive, 80.0),
+                (attractive + 10.0, 100.0),
+            ],
+        )
+        if fcf_yield >= attractive:
             label = "Attractive"
             strengths.append(f"FCF yield {fcf_yield:.1f}%  -  strong cash generation")
-        elif fcf_yield >= self.params.fcf_yield_moderate:
-            score = (
-                50.0
-                + (
-                    (fcf_yield - self.params.fcf_yield_moderate)
-                    / (self.params.fcf_yield_attractive - self.params.fcf_yield_moderate)
-                )
-                * 30.0
-            )
+        elif fcf_yield >= moderate:
             label = "Moderate"
         elif fcf_yield >= 0:
-            score = 25.0 + (fcf_yield / self.params.fcf_yield_moderate) * 25.0
             label = "Low"
         else:
-            score = 10.0
             label = "Negative (cash burn)"
             concerns.append("Negative FCF yield  -  company burning cash")
 
@@ -1630,30 +1513,4 @@ class ValuationScorer:
             weight=0.15,
             raw_value=raw_value,
             label=label,
-        )
-
-    def _build_result(
-        self,
-        dimension: str,
-        sub_scores: List[SubScore],
-        strengths: List[str],
-        concerns: List[str],
-    ) -> DimensionResult:
-        available = [s for s in sub_scores if s.available]
-        total_available_weight = sum(s.weight for s in available)
-
-        if total_available_weight > 0:
-            score = sum(s.score * (s.weight / total_available_weight) for s in available)
-        else:
-            score = 50.0
-
-        data_coverage = len(available) / len(sub_scores) if sub_scores else 0.0
-
-        return DimensionResult(
-            dimension=dimension,
-            score=_clamp(score),
-            sub_scores=sub_scores,
-            data_coverage=data_coverage,
-            strengths=strengths,
-            concerns=concerns,
         )

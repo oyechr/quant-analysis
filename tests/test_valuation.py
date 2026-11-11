@@ -260,3 +260,32 @@ def test_growth_periods_are_the_span_not_the_values_found():
         {this_year - 3: (4, 1.0), this_year - 1: (4, 1.21)}
     )
     assert analyzer._estimate_dividend_growth_rate() == pytest.approx(10.0)
+
+
+def test_a_missing_surprise_is_left_out_of_the_beat_rate():
+    # It used to count as a 0% surprise: neither a beat nor a miss, but in
+    # the denominator, so two beats of three known read as a 50% beat rate.
+    # A missing quarter's EPS also left TTM EPS one quarter short
+    history = pd.DataFrame(
+        {
+            "quarter": ["2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31"],
+            "epsActual": [1.0, None, 1.2, 1.3],
+            "epsEstimate": [0.9, 1.0, 1.1, 1.4],
+            "surprisePercent": [0.11, None, 0.09, -0.07],
+        }
+    )
+    analyzer = ValuationAnalyzer("T", {}, earnings_data={"earnings_history": history})
+    earnings = analyzer.analyze_earnings()
+    stats = earnings["surprise_stats"]
+    assert stats["beat_rate"] == pytest.approx(200 / 3)
+    assert stats["positive_surprises"] == 2 and stats["negative_surprises"] == 1
+    missing = earnings["recent_surprises"][1]
+    assert missing["eps_actual"] is None and missing["surprise_pct"] is None
+    assert earnings["current_eps"] is None
+
+    # The table shows N/A, not $0.0000 and +0.0%
+    history["epsActual"] = [1.0, 1.1, 1.2, 1.3]
+    history["epsEstimate"] = [0.9, None, 1.1, 1.4]
+    analyzer = ValuationAnalyzer("T", {}, earnings_data={"earnings_history": history})
+    assert analyzer.analyze_earnings()["current_eps"] == pytest.approx(4.6)
+    assert "| 2025-06-30 | $1.1000 | N/A | N/A |" in analyzer.format_markdown()

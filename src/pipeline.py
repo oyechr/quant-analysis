@@ -20,7 +20,7 @@ from .analysis import FundamentalAnalyzer, TechnicalAnalyzer, ValuationAnalyzer
 from .data_fetcher import DataFetcher
 from .scoring import ScoringConfig, StockScorer
 from .scoring.scorer import ScoringResult
-from .utils.financial import trading_dates
+from .utils.financial import finite_float, trading_dates
 from .utils.fx import (
     adjust_info_ratios,
     conversion_rate,
@@ -399,8 +399,8 @@ def pead_history(earnings: Optional[Dict[str, pd.DataFrame]]) -> List[Dict[str, 
     if dates is not None and not dates.empty:
         frame = dates.reset_index() if "Earnings Date" not in dates.columns else dates
         for record in frame.to_dict("records"):
-            actual = _number(record.get("Reported EPS"))
-            estimate = _number(record.get("EPS Estimate"))
+            actual = finite_float(record.get("Reported EPS"))
+            estimate = finite_float(record.get("EPS Estimate"))
             if actual is None or estimate is None or record.get("Earnings Date") is None:
                 continue
             rows.append(
@@ -424,14 +424,6 @@ def pead_history(earnings: Optional[Dict[str, pd.DataFrame]]) -> List[Dict[str, 
         {str(k): (None if isinstance(v, float) and pd.isna(v) else v) for k, v in r.items()}
         for r in frame.to_dict("records")
     ]
-
-
-def _number(value: Any) -> Optional[float]:
-    try:
-        result = float(value)
-    except TypeError, ValueError:
-        return None
-    return None if pd.isna(result) else result
 
 
 def _dividends_series(div_data: Optional[Dict[str, pd.DataFrame]]) -> Optional[pd.Series]:

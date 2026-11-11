@@ -21,8 +21,9 @@ from src.scoring import (
     ValuationScorer,
 )
 from src.scoring.config import DimensionWeight
-from src.scoring.dimensions import DimensionResult, SubScore, _clamp, _linear_scale, _safe_float
+from src.scoring.dimensions import DimensionResult, SubScore, _clamp, _piecewise
 from src.scoring.scorer import ScoringResult
+from src.utils.financial import finite_float
 
 # ============================================================
 # Test Fixtures
@@ -48,29 +49,29 @@ def _load_analysis_json(sample_data_dir: Path, ticker: str, analysis_type: str) 
 class TestUtilityFunctions:
     """Tests for helper functions in dimensions module"""
 
-    def test_safe_float_with_number(self):
-        assert _safe_float(42.5) == 42.5
+    def test_finite_float_with_number(self):
+        assert finite_float(42.5) == 42.5
 
-    def test_safe_float_with_int(self):
-        assert _safe_float(7) == 7.0
+    def test_finite_float_with_int(self):
+        assert finite_float(7) == 7.0
 
-    def test_safe_float_with_none(self):
-        assert _safe_float(None) is None
+    def test_finite_float_with_none(self):
+        assert finite_float(None) is None
 
-    def test_safe_float_with_none_and_default(self):
-        assert _safe_float(None, 50.0) == 50.0
+    def test_finite_float_with_none_and_default(self):
+        assert finite_float(None, 50.0) == 50.0
 
-    def test_safe_float_with_nan(self):
-        assert _safe_float(float("nan")) is None
+    def test_finite_float_with_nan(self):
+        assert finite_float(float("nan")) is None
 
-    def test_safe_float_with_inf(self):
-        assert _safe_float(float("inf")) is None
+    def test_finite_float_with_inf(self):
+        assert finite_float(float("inf")) is None
 
-    def test_safe_float_with_string(self):
-        assert _safe_float("not a number") is None
+    def test_finite_float_with_string(self):
+        assert finite_float("not a number") is None
 
-    def test_safe_float_with_numeric_string(self):
-        assert _safe_float("42.5") == 42.5
+    def test_finite_float_with_numeric_string(self):
+        assert finite_float("42.5") == 42.5
 
     def test_clamp_within_range(self):
         assert _clamp(50.0) == 50.0
@@ -85,25 +86,26 @@ class TestUtilityFunctions:
         assert _clamp(0.0) == 0.0
         assert _clamp(100.0) == 100.0
 
-    def test_linear_scale_midpoint(self):
-        result = _linear_scale(50.0, 0.0, 100.0)
-        assert result == 50.0
+    @pytest.mark.parametrize(
+        ("x", "expected"),
+        [
+            (-50.0, 10.0),  # flat before the first point
+            (0.0, 10.0),
+            (5.0, 30.0),  # halfway along the first segment
+            (10.0, 50.0),
+            (15.0, 45.0),  # a falling segment
+            (20.0, 40.0),
+            (99.0, 40.0),  # flat after the last point
+        ],
+    )
+    def test_piecewise(self, x, expected):
+        assert _piecewise(x, [(0.0, 10.0), (10.0, 50.0), (20.0, 40.0)]) == pytest.approx(expected)
 
-    def test_linear_scale_at_worst(self):
-        result = _linear_scale(0.0, 0.0, 100.0)
-        assert result == 0.0
-
-    def test_linear_scale_at_best(self):
-        result = _linear_scale(100.0, 0.0, 100.0)
-        assert result == 100.0
-
-    def test_linear_scale_inverted(self):
-        result = _linear_scale(25.0, 0.0, 100.0, invert=True)
-        assert result == 75.0
-
-    def test_linear_scale_clamped(self):
-        result = _linear_scale(150.0, 0.0, 100.0)
-        assert result == 100.0
+    def test_piecewise_has_no_jumps(self):
+        """Either side of a point the score differs by almost nothing."""
+        points = [(0.0, 35.0), (25.0, 60.0), (40.0, 85.0)]
+        for x, _ in points:
+            assert abs(_piecewise(x + 1e-9, points) - _piecewise(x - 1e-9, points)) < 1e-6
 
 
 # ============================================================
@@ -1117,3 +1119,111 @@ def test_a_dimension_scorer_error_is_recorded(monkeypatch):
     assert result.errors == {"risk": "KeyError: 'sharpe_ratio'"}
     assert result.to_dict()["errors"] == result.errors
     assert "errors" not in StockScorer().score(_trade_report("Technology")).to_dict()
+
+
+# ============================================================
+# Review batch C, L rows
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    ("raw", "stored", "signal"),
+    [(64.96, 65.0, "Buy"), (64.5, 64.5, "Hold"), (64.4, 64.4, "Hold"), (34.6, 34.6, "Sell")],
+)
+def test_signal_comes_from_the_score_as_shown(monkeypatch, raw, stored, signal):
+    # 64.96 used to read "Hold 65": the signal came from the unrounded score.
+    # Both round half to even, so 64.5 shows "64" and is Hold
+    scorer = StockScorer()
+    monkeypatch.setattr(scorer, "_calculate_composite", lambda dimensions: raw)
+    result = scorer.score(_trade_report("Technology"))
+    assert result.composite_score == stored
+    assert result.signal == signal
+    assert f"{result.composite_score:.0f}" == f"{round(result.composite_score)}"
+
+
+def _sub(scorer_method, value, *extra):
+    return scorer_method(value, *extra, [], []).score
+
+
+@pytest.mark.parametrize(
+    ("name", "score_at", "thresholds"),
+    [
+        ("ADX", lambda x: _sub(TechnicalScorer()._score_adx, x), (25.0, 40.0)),
+        (
+            "VaR",
+            lambda x: _sub(RiskScorer()._score_var, -x),
+            (0.02, 0.03, 0.05),
+        ),
+        ("FCF yield", lambda x: _sub(ValuationScorer()._score_fcf_yield, x), (0.0, 3.0, 5.0)),
+        (
+            "Beneish",
+            lambda x: _sub(
+                FundamentalScorer()._score_beneish, {"m_score": x, "components_available": 8}
+            ),
+            (-2.22, -1.78),
+        ),
+        (
+            "gross margin",
+            lambda x: _sub(FundamentalScorer()._score_profitability, x, None),
+            (0.0, 25.0, 40.0),
+        ),
+        (
+            "operating margin",
+            lambda x: _sub(FundamentalScorer()._score_profitability, None, x),
+            (0.0, 10.0, 20.0),
+        ),
+    ],
+)
+def test_former_step_scores_have_no_jumps(name, score_at, thresholds):
+    # These were step functions: crossing a threshold moved the sub-score by
+    # 10-35 points (ADX 60 -> 70 at 25, VaR 85 -> 65 past 2%, FCF yield 25 -> 10 below 0)
+    for t in thresholds:
+        assert abs(score_at(t + 1e-6) - score_at(t - 1e-6)) < 0.01, (name, t)
+
+
+def test_former_step_scores_keep_their_order():
+    adx = TechnicalScorer()._score_adx
+    assert _sub(adx, 10.0) < _sub(adx, 25.0) == 60.0 < _sub(adx, 32.5) < _sub(adx, 40.0) == 85.0
+    var = RiskScorer()._score_var
+    assert _sub(var, -0.01) == 85.0 > _sub(var, -0.025) > _sub(var, -0.04) > _sub(var, -0.2) == 20.0
+    fcf = ValuationScorer()._score_fcf_yield
+    assert (_sub(fcf, -20.0), _sub(fcf, -2.5), _sub(fcf, 0.0)) == pytest.approx((10.0, 17.5, 25.0))
+    beneish = FundamentalScorer()._score_beneish
+    m = lambda x: _sub(beneish, {"m_score": x, "components_available": 8})  # noqa: E731
+    assert (m(-3.0), m(-2.0), m(-1.0)) == pytest.approx((80.0, 47.5, 15.0))
+    margins = FundamentalScorer()._score_profitability
+    assert _sub(margins, 39.0, None) == pytest.approx(83.33, abs=0.01)  # was 60 below 40%
+    assert _sub(margins, -30.0, None) == 10.0
+
+
+# ============================================================
+# Support and resistance
+# ============================================================
+
+
+def test_support_resistance_keeps_the_strongest_levels():
+    # Three touches near 110 and one at 105: with room for one level, the
+    # strongest is kept (it used to be the nearest, whatever its strength)
+    import pandas as pd
+
+    from src.scoring.trade_levels import calculate_support_resistance
+
+    highs = [100, 100, 110, 100, 100, 105, 100, 100, 110, 100, 100, 110.5, 100, 100, 100]
+    closes = [h - 1 for h in highs[:-1]] + [100.0]
+    data = pd.DataFrame({"High": highs, "Low": [h - 2 for h in highs], "Close": closes})
+    _, resistance = calculate_support_resistance(data, window=2, num_levels=1)
+    assert resistance == [pytest.approx((110 + 110 + 110.5) / 3)]
+    _, both = calculate_support_resistance(data, window=2, num_levels=2)
+    assert both == [105.0, pytest.approx(110.1667, abs=1e-3)]  # closest first
+
+
+def test_bear_target_fallback_takes_the_furthest_level():
+    # Nothing 2% below the price: like the bullish side (the highest), the
+    # furthest candidate, not whichever was listed last
+    from src.scoring.trade_levels import calculate_trade_levels
+
+    result = calculate_trade_levels(
+        current_price=100.0, atr=2.0, support_levels=[98.5], fair_value=99.0, bb_lower=99.5
+    )
+    assert result is not None and result.bearish is not None
+    assert (result.bearish.target, result.bearish.target_basis) == (98.5, "support")

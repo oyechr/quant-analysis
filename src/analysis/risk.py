@@ -11,7 +11,6 @@ Calculates risk and performance metrics for stock analysis:
 """
 
 import logging
-import math
 from statistics import NormalDist
 from typing import Any, Dict, List, Optional
 
@@ -28,6 +27,7 @@ from ..utils.financial import (
     calculate_kelly_criterion,
     convert_annual_to_daily_rate,
     downside_deviation,
+    finite_float,
     to_float,
     validate_price_data,
 )
@@ -41,12 +41,6 @@ from ..utils.report import (
 from ..utils.serialization import format_date
 
 logger = logging.getLogger(__name__)
-
-
-def _finite(value: Any) -> Optional[float]:
-    """A ratio as a float, or None when it's undefined (NaN or infinite)."""
-    result = to_float(value)
-    return result if math.isfinite(result) else None
 
 
 class RiskMetrics:
@@ -211,7 +205,7 @@ class RiskMetrics:
             # Sharpe ratio (annualized)
             sharpe = (excess_returns.mean() / excess_returns.std()) * np.sqrt(TRADING_DAYS_PER_YEAR)
 
-            return _finite(sharpe)
+            return finite_float(sharpe)
 
         except Exception as e:
             logger.error(f"Error calculating Sharpe ratio: {e}")
@@ -256,7 +250,7 @@ class RiskMetrics:
             # Sortino ratio (annualized)
             sortino = (excess_returns.mean() / downside_std) * np.sqrt(TRADING_DAYS_PER_YEAR)
 
-            return _finite(sortino)
+            return finite_float(sortino)
 
         except Exception as e:
             logger.error(f"Error calculating Sortino ratio: {e}")
@@ -489,7 +483,7 @@ class RiskMetrics:
                 TRADING_DAYS_PER_YEAR
             )
 
-            return _finite(information_ratio)
+            return finite_float(information_ratio)
 
         except Exception as e:
             logger.error(f"Error calculating Information Ratio: {e}")
@@ -526,7 +520,7 @@ class RiskMetrics:
 
             calmar = annualized_return / max_drawdown
 
-            return _finite(calmar)
+            return finite_float(calmar)
 
         except Exception as e:
             logger.error(f"Error calculating Calmar Ratio: {e}")
@@ -663,13 +657,12 @@ class RiskMetrics:
             p95 = float(np.percentile(daily_returns, 95))
             p99 = float(np.percentile(daily_returns, 99))
 
-            # Expected percentiles under normal distribution
-            from scipy.stats import norm  # type: ignore[import-not-found]
-
-            normal_p1 = mean + norm.ppf(0.01) * std
-            normal_p5 = mean + norm.ppf(0.05) * std
-            normal_p95 = mean + norm.ppf(0.95) * std
-            normal_p99 = mean + norm.ppf(0.99) * std
+            # Expected percentiles under a normal distribution with the same mean and std
+            normal = NormalDist(mean, std)
+            normal_p1 = normal.inv_cdf(0.01)
+            normal_p5 = normal.inv_cdf(0.05)
+            normal_p95 = normal.inv_cdf(0.95)
+            normal_p99 = normal.inv_cdf(0.99)
 
             tail_risk_ratio = abs(p1) / abs(normal_p1) if normal_p1 != 0 else 1.0
 
@@ -700,49 +693,17 @@ class RiskMetrics:
                 "tail_risk_ratio": tail_risk_ratio,
                 "percentiles": {
                     "p1_actual": p1,
-                    "p1_normal": float(normal_p1),
+                    "p1_normal": normal_p1,
                     "p5_actual": p5,
-                    "p5_normal": float(normal_p5),
+                    "p5_normal": normal_p5,
                     "p95_actual": p95,
-                    "p95_normal": float(normal_p95),
+                    "p95_normal": normal_p95,
                     "p99_actual": p99,
-                    "p99_normal": float(normal_p99),
+                    "p99_normal": normal_p99,
                 },
                 "sample_size": n,
             }
 
-        except ImportError:
-            # scipy not available - compute without normal comparison
-            daily_returns = price_data["Close"].pct_change().dropna()
-            skewness = to_float(daily_returns.skew())
-            kurtosis = to_float(daily_returns.kurtosis())
-            n = len(daily_returns)
-            jb_stat = (n / 6.0) * (skewness**2 + (kurtosis**2) / 4.0)
-
-            skew_interpretation = (
-                "negative (more crash risk)"
-                if skewness < -0.5
-                else "positive (more upside potential)"
-                if skewness > 0.5
-                else "approximately symmetric"
-            )
-            kurtosis_interpretation = (
-                "fat tails (more extreme events than normal)"
-                if kurtosis > 1.0
-                else "thin tails (fewer extremes)"
-                if kurtosis < -0.5
-                else "approximately normal tails"
-            )
-
-            return {
-                "skewness": skewness,
-                "skew_interpretation": skew_interpretation,
-                "excess_kurtosis": kurtosis,
-                "kurtosis_interpretation": kurtosis_interpretation,
-                "jarque_bera_statistic": jb_stat,
-                "is_normally_distributed": jb_stat < 5.99,
-                "sample_size": n,
-            }
         except Exception as e:
             logger.error(f"Error calculating distribution stats: {e}")
             return {}
@@ -752,12 +713,14 @@ class RiskMetrics:
         Detect current market regime using volatility and trend signals
 
         Classifies into 4 regimes:
-        - Bull: Low volatility + Uptrend (SMA200 rising, price above)
+        - Bull: Low volatility + Uptrend (price above a rising SMA 50)
         - Recovery: High volatility + Uptrend (volatile but trending up)
         - Distribution: Low volatility + Downtrend (quiet decline)
         - Bear: High volatility + Downtrend (panic selling)
 
-        Uses 60-day rolling volatility percentile and 200-day MA slope.
+        High volatility: the current 20-day volatility is above the 60th
+        percentile of its values over the last year. The trend is the price
+        against the SMA 50, and the change across the SMA 50's last 20 values.
 
         Returns:
             Dictionary with regime classification and supporting metrics
@@ -777,9 +740,9 @@ class RiskMetrics:
             rolling_vol = daily_returns.rolling(window=20).std() * np.sqrt(TRADING_DAYS_PER_YEAR)
             current_vol = to_float(rolling_vol.iloc[-1])
 
-            # Volatility percentile (where does current vol rank in last 252 days?)
-            lookback = min(252, len(rolling_vol))
-            vol_window = rolling_vol.iloc[-lookback:]
+            # Volatility percentile (where does current vol rank in last 252 days?),
+            # over the days that have a 20-day volatility
+            vol_window = rolling_vol.dropna().iloc[-252:]
             vol_percentile = float((vol_window < current_vol).sum() / len(vol_window) * 100)
 
             # Trend: price vs SMA50 and slope of SMA50
@@ -787,7 +750,7 @@ class RiskMetrics:
             sma = prices.rolling(window=sma_period).mean()
             price_above_sma = float(prices.iloc[-1]) > float(sma.iloc[-1])
 
-            # SMA slope (annualized % change over last 20 days)
+            # SMA slope: change across its last 20 values (not annualized)
             if len(sma.dropna()) >= 20:
                 sma_slope = (float(sma.iloc[-1]) - float(sma.iloc[-20])) / float(sma.iloc[-20])
             else:

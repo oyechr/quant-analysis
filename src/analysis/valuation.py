@@ -11,7 +11,13 @@ import pandas as pd
 
 from ..config import get_config
 from ..utils.dataframe_utils import normalize_datetime_index, safe_get_dataframe_value
-from ..utils.financial import calculate_cagr, free_cash_flow, operating_cash_flow, to_float
+from ..utils.financial import (
+    calculate_cagr,
+    finite_float,
+    free_cash_flow,
+    operating_cash_flow,
+    to_float,
+)
 from ..utils.fx import market_cap_in_listing_units
 
 logger = logging.getLogger(__name__)
@@ -976,10 +982,10 @@ class ValuationAnalyzer:
             if earnings_history is not None and not earnings_history.empty:
                 # Sum last 4 quarters for TTM EPS
                 recent_eps = earnings_history.tail(4)
-                if len(recent_eps) == 4:
-                    ttm_eps = sum(
-                        to_float(row.get("epsActual", 0)) for _, row in recent_eps.iterrows()
-                    )
+                quarters = [finite_float(row.get("epsActual")) for _, row in recent_eps.iterrows()]
+                # A missing quarter isn't a zero one: no TTM EPS
+                if len(quarters) == 4 and all(q is not None for q in quarters):
+                    ttm_eps = sum(q for q in quarters if q is not None)
                     if ttm_eps > 0:
                         result["current_eps"] = ttm_eps
 
@@ -992,17 +998,26 @@ class ValuationAnalyzer:
                 # Extract recent surprises
                 recent = earnings_history.tail(4)
                 for _, row in recent.iterrows():
+                    # Yahoo's surprisePercent is a fraction (0.05 = 5%)
+                    surprise_fraction = finite_float(row.get("surprisePercent"))
                     surprise = {
                         "quarter": str(row.get("quarter", "")),
-                        "eps_actual": to_float(row.get("epsActual")),
-                        "eps_estimate": to_float(row.get("epsEstimate")),
-                        "surprise_pct": to_float(row.get("surprisePercent", 0)) * 100,
+                        "eps_actual": finite_float(row.get("epsActual")),
+                        "eps_estimate": finite_float(row.get("epsEstimate")),
+                        "surprise_pct": (
+                            surprise_fraction * 100 if surprise_fraction is not None else None
+                        ),
                     }
                     result["recent_surprises"].append(surprise)
 
-                # Surprise statistics
-                if len(result["recent_surprises"]) > 0:
-                    surprises = [s["surprise_pct"] for s in result["recent_surprises"]]
+                # Surprise statistics, over the quarters with a known surprise (a
+                # missing one counted as 0 would read as a miss in the beat rate)
+                surprises = [
+                    s["surprise_pct"]
+                    for s in result["recent_surprises"]
+                    if s["surprise_pct"] is not None
+                ]
+                if surprises:
                     result["surprise_stats"] = {
                         "avg_surprise_pct": np.mean(surprises),
                         "positive_surprises": sum(1 for s in surprises if s > 0),
@@ -1030,7 +1045,7 @@ class ValuationAnalyzer:
                         # Rows are newest-first, so the next date is the earliest upcoming one
                         pos = int(upcoming.to_numpy().argmin())
                         result["next_earnings_date"] = str(upcoming.iloc[pos].date())
-                        result["next_earnings_estimate"] = to_float(
+                        result["next_earnings_estimate"] = finite_float(
                             earnings_dates.loc[upcoming.index[pos]].get("EPS Estimate")
                         )
                 except Exception as e:
@@ -1361,13 +1376,12 @@ class ValuationAnalyzer:
                 md.append("|---------|--------|----------|------------|")
                 for surprise in surprises[:4]:  # Last 4 quarters
                     quarter = surprise.get("quarter", "N/A")
-                    actual = surprise.get("eps_actual", 0) or surprise.get("actual", 0)
-                    estimate = surprise.get("eps_estimate", 0) or surprise.get("estimate", 0)
-                    surprise_pct = surprise.get("surprise_pct", 0)  # Already in % form
-                    surprise_dir = "+" if surprise_pct >= 0 else ""
+                    actual = surprise.get("eps_actual")
+                    estimate = surprise.get("eps_estimate")
+                    surprise_pct = surprise.get("surprise_pct")  # Already in % form
                     md.append(
-                        f"| {quarter} | {symbol}{actual:.4f} | {symbol}{estimate:.4f} | "
-                        f"{surprise_dir}{surprise_pct:.1f}% |"
+                        f"| {quarter} | {_money(symbol, actual)} | {_money(symbol, estimate)} | "
+                        f"{'N/A' if surprise_pct is None else f'{surprise_pct:+.1f}%'} |"
                     )
                 md.append("")
         else:
@@ -1375,3 +1389,7 @@ class ValuationAnalyzer:
             md.append("")
 
         return md
+
+
+def _money(symbol: str, value: Optional[float]) -> str:
+    return "N/A" if value is None else f"{symbol}{value:.4f}"

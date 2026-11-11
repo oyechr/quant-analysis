@@ -28,6 +28,13 @@ logger = logging.getLogger(__name__)
 
 EARNINGS_SOON_DAYS = 14
 
+# The verdict's peer view: average cheapness rank (0-100, higher = cheaper)
+PEER_CHEAP = 65.0
+PEER_EXPENSIVE = 35.0
+# ... and momentum view, from the relative strength rating (0-100)
+RS_STRONG = 70
+RS_WEAK = 30
+
 
 @dataclass
 class VetResult:
@@ -85,6 +92,11 @@ class VetResult:
         }
         data["verdict"] = summarize_verdict(data)
         return data
+
+
+def _days_until(date: str, today: Optional[datetime] = None) -> int:
+    """Whole days from today (local date) to a YYYY-MM-DD date."""
+    return (pd.Timestamp(date) - pd.Timestamp(today or datetime.now()).normalize()).days
 
 
 def vet_ticker(
@@ -147,7 +159,9 @@ def vet_ticker(
     except Exception as e:
         logger.warning(f"Signal flip search failed for {ticker}: {e}")
     result.next_earnings = next_earnings_date(report)
-    result.next_steps = next_steps(result, peers_given=bool(peers))
+    result.next_steps = next_steps(
+        result, peers_given=bool(peers), min_peers=config.valuation.min_peers
+    )
     return result
 
 
@@ -162,7 +176,7 @@ _BUY_SIGNALS = ("Buy", "Strong Buy")
 _SELL_SIGNALS = ("Sell", "Strong Sell")
 
 
-def summarize_verdict(data: Dict[str, Any]) -> Dict[str, Any]:
+def summarize_verdict(data: Dict[str, Any], today: Optional[datetime] = None) -> Dict[str, Any]:
     """
     The bottom line of a vet, from `VetResult.to_dict()` output.
 
@@ -212,7 +226,7 @@ def summarize_verdict(data: Dict[str, Any]) -> Dict[str, Any]:
     if funds:
         reasons.append(funds)
     if data.get("next_earnings"):
-        days = (pd.Timestamp(data["next_earnings"]) - pd.Timestamp.now().normalize()).days
+        days = _days_until(data["next_earnings"], today)
         if 0 <= days <= EARNINGS_SOON_DAYS:
             reasons.append(f"earnings in {days}d")
 
@@ -237,9 +251,9 @@ def _peer_view(peers: Dict[str, Any]) -> Optional[str]:
     if not peers.get("peers") or not ranks:
         return None
     average = sum(ranks) / len(ranks)
-    if average >= 65:
+    if average >= PEER_CHEAP:
         view = "cheap"
-    elif average <= 35:
+    elif average <= PEER_EXPENSIVE:
         view = "expensive"
     else:
         view = "in line"
@@ -250,9 +264,9 @@ def _momentum_view(rs: Dict[str, Any]) -> Optional[str]:
     rating = rs.get("rs_rating")
     if rating is None:
         return None
-    if rating >= 70:
+    if rating >= RS_STRONG:
         return f"strong momentum (RS {rating})"
-    if rating <= 30:
+    if rating <= RS_WEAK:
         return f"weak momentum (RS {rating})"
     return None
 
@@ -293,8 +307,17 @@ def next_earnings_date(report: Dict[str, Any], today: Optional[datetime] = None)
     return str(min(upcoming).date()) if upcoming else None
 
 
-def next_steps(result: VetResult, peers_given: bool) -> List[str]:
-    """Concrete follow-ups based on what the vet found (and didn't)."""
+def next_steps(
+    result: VetResult,
+    peers_given: bool,
+    min_peers: int = 4,
+    today: Optional[datetime] = None,
+) -> List[str]:
+    """
+    Concrete follow-ups based on what the vet found (and didn't). `min_peers`
+    is the scorer's (`ValuationScoringParams.min_peers`): with fewer, P/E is
+    scored on absolute cut-offs, not against the peers.
+    """
     t = result.ticker
     steps: List[str] = []
 
@@ -303,7 +326,7 @@ def next_steps(result: VetResult, peers_given: bool) -> List[str]:
         steps.append(f"Resolve the {len(high)} high-severity red flag(s) before going further")
 
     if result.next_earnings:
-        days = (pd.Timestamp(result.next_earnings) - pd.Timestamp.now().normalize()).days
+        days = _days_until(result.next_earnings, today)
         if 0 <= days <= EARNINGS_SOON_DAYS:
             steps.append(
                 f"Earnings on {result.next_earnings} ({days}d): consider waiting for results"
@@ -314,7 +337,7 @@ def next_steps(result: VetResult, peers_given: bool) -> List[str]:
         steps.append(
             "No similar-size peers in Yahoo's industry or sector lists: pass --peers T1,T2,..."
         )
-    elif not peers_given and len(peers.peers) < 4:
+    elif not peers_given and len(peers.peers) < min_peers:
         steps.append(
             f"Only {len(peers.peers)} similar-size peer(s) found; "
             "add --peers for a firmer comparison"

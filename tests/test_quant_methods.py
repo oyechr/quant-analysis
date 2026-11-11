@@ -495,6 +495,19 @@ class TestGrowthRates:
         assert growth["earnings"]["1y"] < 0
         assert growth["revenue"]["3y_cagr"] == pytest.approx(8.0)
 
+    def test_longest_cagr_spans_four_years(self, default_config):
+        # Column 4 is four years back; it was labelled 5y and compounded over five
+        from conftest import make_statements
+
+        from src.analysis.fundamental import FundamentalAnalyzer
+
+        statements = make_statements(years=5)
+        analyzer = FundamentalAnalyzer({}, {"income_stmt_annual": statements["income_stmt"]})
+        growth = analyzer.calculate_growth_rates()
+        assert growth["revenue"]["4y_cagr"] == pytest.approx(8.0)
+        assert growth["earnings"]["4y_cagr"] == pytest.approx(8.0)
+        assert "5y_cagr" not in growth["revenue"]
+
 
 class TestPiotroski:
     def _score(self, shares=(2.5e9, 2.5e9), lt_debt=None):
@@ -666,3 +679,55 @@ def test_dcf_and_fcf_yield_read_the_same_fcf(default_config):
     )
     assert fcf_metrics["fcf"] == 100.0
     assert valuation._dcf_inputs()["fcf_current"] == 100.0
+
+
+@pytest.mark.parametrize(
+    ("fraction", "pct"), [(0.05, 5.0), (-0.3, -30.0), (15.0, 1500.0), (None, None)]
+)
+def test_pead_surprise_is_always_a_fraction(fraction, pct):
+    # The unit used to be guessed from the size: a 1500% surprise (a tiny
+    # estimate) read as 15%
+    history = [
+        {
+            "quarter": "2025-06-30",
+            "epsActual": 0.32,
+            "epsEstimate": 0.02,
+            "epsDifference": 0.30,
+            "surprisePercent": fraction,
+        },
+        {"quarter": "2025-03-31", "epsActual": 1.0, "epsEstimate": 0.9, "epsDifference": 0.1},
+    ]
+    result = calculate_pead_signal(history)
+    assert result is not None
+    assert result["latest_surprise_pct"] == (pytest.approx(pct) if pct is not None else None)
+
+
+def test_distribution_stats_compare_tails_with_a_normal():
+    # scipy isn't installed, so the comparison with a normal never ran
+    from statistics import NormalDist
+
+    from src.analysis.risk import RiskMetrics
+
+    rng = np.random.default_rng(3)
+    returns = rng.standard_t(df=3, size=500) * 0.01
+    prices = pd.DataFrame({"Close": 100 * np.cumprod(1 + returns)})
+    stats = RiskMetrics().calculate_distribution_stats(prices)
+
+    daily = prices["Close"].pct_change().dropna()
+    expected_p1 = NormalDist(float(daily.mean()), float(daily.std())).inv_cdf(0.01)
+    assert stats["percentiles"]["p1_normal"] == pytest.approx(expected_p1)
+    assert stats["tail_risk_ratio"] == pytest.approx(
+        abs(stats["percentiles"]["p1_actual"]) / abs(expected_p1)
+    )
+
+
+def test_regime_volatility_percentile_skips_the_warm_up():
+    # 100 closes give 99 returns and 80 20-day volatilities. Volatility rising
+    # to its highest today is above 79 of the 80; counting the 19 empty
+    # warm-up days put it at the 80th percentile
+    from src.analysis.risk import RiskMetrics
+
+    returns = np.array([0.001 * (i % 2 * 2 - 1) * (1 + i / 10) for i in range(99)])
+    prices = pd.DataFrame({"Close": 100 * np.cumprod(np.concatenate([[1.0], 1 + returns]))})
+    regime = RiskMetrics().calculate_regime(prices)
+    assert regime["volatility_percentile"] == pytest.approx(79 / 80 * 100)

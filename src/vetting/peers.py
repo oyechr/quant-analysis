@@ -22,6 +22,7 @@ from statistics import median
 from typing import Any, Callable, Dict, List, Optional
 
 from ..utils.concurrency import run_concurrently
+from ..utils.financial import finite_float
 from ..utils.fx import major_currency, usd_per_unit
 
 logger = logging.getLogger(__name__)
@@ -122,12 +123,12 @@ def metric_value(info: Dict[str, Any], key: str) -> Optional[float]:
     if key in _STATEMENT_RATIOS and _mixed_currency(info, key):
         return None
     if key == "fcf_yield":
-        fcf = _num(info.get("free_cashflow"))
-        mcap = _num(info.get("market_cap"))
+        fcf = finite_float(info.get("free_cashflow"))
+        mcap = finite_float(info.get("market_cap"))
         if fcf is None or not mcap or mcap <= 0:
             return None
         return fcf / mcap * 100
-    value = _num(info.get(key))
+    value = finite_float(info.get(key))
     return value if value is not None and value > 0 else None
 
 
@@ -273,7 +274,7 @@ def _similar_size(
 
 
 def _usd_market_cap(info: Dict[str, Any], fx_lookup: Optional[FxLookup]) -> Optional[float]:
-    cap = _num(info.get("market_cap"))
+    cap = finite_float(info.get("market_cap"))
     if cap is None or cap <= 0:
         return None
     # Yahoo's market cap is in the major currency even for a minor-unit
@@ -315,14 +316,6 @@ def _drop_same_company(
 def _clean(value: Any) -> str:
     text = str(value or "").strip().lower()
     return "" if text in ("", "n/a", "none", "unknown") else text
-
-
-def _num(value: Any) -> Optional[float]:
-    try:
-        result = float(value)
-    except TypeError, ValueError:
-        return None
-    return None if math.isnan(result) or math.isinf(result) else result
 
 
 def _round(value: Optional[float], digits: int = 2) -> Optional[float]:

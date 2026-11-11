@@ -43,7 +43,7 @@ from ..pipeline import AnalysisOptions
 from ..scoring import ScoringConfig
 from ..tracking.history import Row, history_row
 from ..utils.concurrency import DEFAULT_WORKERS, run_concurrently
-from ..utils.financial import to_float
+from ..utils.financial import finite_float, to_float
 from ..utils.fx import conversion_rate
 from ..vetting.vet import LOOK_DEEPER, vet_ticker
 from .exposure import (
@@ -390,7 +390,7 @@ def apply_vet(review: HoldingReview, data: Dict[str, Any], info: Dict[str, Any])
     review.sector = "Fund" if review.is_fund else _clean(info.get("sector"))
     review.country = _clean(info.get("country"))
     review.characteristics = characteristics(info)
-    review.price = _num((data.get("header") or {}).get("price"))
+    review.price = finite_float((data.get("header") or {}).get("price"))
     review.listing_currency = info.get("currency") or review.holding.currency
 
 
@@ -404,10 +404,10 @@ def is_fund(info: Dict[str, Any], name: str = "") -> bool:
 
 def characteristics(info: Dict[str, Any]) -> Dict[str, Optional[float]]:
     """Earnings yield (1 / P/E, forward if trailing is missing) and ROE from Yahoo info."""
-    pe = _num(info.get("pe_ratio")) or _num(info.get("forward_pe"))
+    pe = finite_float(info.get("pe_ratio")) or finite_float(info.get("forward_pe"))
     return {
         "earnings_yield": 1.0 / pe if pe and pe > 0 else None,
-        "roe": _num(info.get("roe")),
+        "roe": finite_float(info.get("roe")),
     }
 
 
@@ -694,14 +694,6 @@ def sort_reviews(reviews: List[HoldingReview]) -> List[HoldingReview]:
 def _clean(value: Any) -> Optional[str]:
     text = str(value or "").strip()
     return None if not text or text == "N/A" else text
-
-
-def _num(value: Any) -> Optional[float]:
-    try:
-        result = float(value)
-    except TypeError, ValueError:
-        return None
-    return result if math.isfinite(result) else None
 
 
 def _round(value: Optional[float], digits: int) -> Optional[float]:

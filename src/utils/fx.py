@@ -18,6 +18,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from .financial import finite_float
+
 # Listing currencies quoted in minor units: code -> (major currency, units per major)
 MINOR_UNITS: Dict[str, Tuple[str, float]] = {
     "GBp": ("GBP", 100.0),
@@ -122,14 +124,14 @@ def adjust_info_ratios(
     converted: List[str] = []
     units = major_currency(str(info.get("currency") or ""))[1]
     rate = rate / units
-    price_to_sales = _num(info.get("price_to_sales"))
+    price_to_sales = finite_float(info.get("price_to_sales"))
     if price_to_sales is not None:
         out["price_to_sales"] = price_to_sales / rate
         converted.append("price_to_sales")
 
-    market_cap = _num(info.get("market_cap"))
-    enterprise_value = _num(info.get("enterprise_value"))
-    ev_to_ebitda = _num(info.get("ev_to_ebitda"))
+    market_cap = finite_float(info.get("market_cap"))
+    enterprise_value = finite_float(info.get("enterprise_value"))
+    ev_to_ebitda = finite_float(info.get("ev_to_ebitda"))
     if market_cap and enterprise_value and ev_to_ebitda:
         ebitda = enterprise_value / ev_to_ebitda  # statement currency
         net_debt = enterprise_value - market_cap  # statement currency
@@ -152,7 +154,7 @@ def market_cap_in_listing_units(info: Dict[str, Any]) -> Optional[float]:
     gives it in the major currency even for a minor-unit listing (BARC.L: GBP,
     while its price and converted statements are in pence).
     """
-    cap = _num(info.get("market_cap"))
+    cap = finite_float(info.get("market_cap"))
     if cap is None:
         return None
     return cap * major_currency(str(info.get("currency") or ""))[1]
@@ -173,14 +175,6 @@ def normalize_info(
         return info
     result = conversion_rate(str(statements), str(listing), fx_lookup)
     return adjust_info_ratios(info, result[0]) if result else info
-
-
-def _num(value: Any) -> Optional[float]:
-    try:
-        result = float(value)
-    except TypeError, ValueError:
-        return None
-    return result if math.isfinite(result) else None
 
 
 def convert_statements(

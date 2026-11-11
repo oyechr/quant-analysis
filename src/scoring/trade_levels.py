@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from ..utils.financial import finite_float
 from .dimensions import is_financial
 
 logger = logging.getLogger(__name__)
@@ -255,19 +256,6 @@ class TradeLevelsResult:
         return f"{sym}{scenario.entry_low:.2f} ({scenario.entry_basis})"
 
 
-def _safe_float(value: Any, default: Optional[float] = None) -> Optional[float]:
-    """Safely convert a value to float"""
-    if value is None:
-        return default
-    try:
-        result = float(value)
-        if math.isnan(result) or math.isinf(result):
-            return default
-        return result
-    except TypeError, ValueError:
-        return default
-
-
 def calculate_support_resistance(
     price_data: pd.DataFrame,
     window: int = 20,
@@ -277,7 +265,8 @@ def calculate_support_resistance(
     Calculate support and resistance levels from price data using pivot point clustering.
 
     Identifies local minima (support) and maxima (resistance) then clusters nearby
-    levels together, weighting by recency and touch count.
+    levels together. The `num_levels` strongest clusters on each side of the
+    price (by touch count and recency) are kept, then ordered by proximity.
 
     Args:
         price_data: DataFrame with High, Low, Close columns
@@ -348,23 +337,19 @@ def calculate_support_resistance(
             score = touch_count * 0.6 + recency_score * 0.4
             scored.append((avg_price, score))
 
-        # Sort by score (highest first) and return prices
+        # Strongest first
         scored.sort(key=lambda x: x[1], reverse=True)
         return [price for price, _ in scored]
 
-    all_resistance = cluster_levels(resistance_candidates)
-    all_support = cluster_levels(support_candidates)
-
-    # Filter: resistance must be above current price, support below
+    # Resistance must be above the current price and support below. Keep the
+    # strongest levels, then order them closest first
     resistance_levels = sorted(
-        [r for r in all_resistance if r > current_price * 1.005],
-        key=lambda x: x,  # Closest first
-    )[:num_levels]
-
+        [r for r in cluster_levels(resistance_candidates) if r > current_price * 1.005][:num_levels]
+    )
     support_levels = sorted(
-        [s for s in all_support if s < current_price * 0.995],
-        key=lambda x: -x,  # Closest first (highest support first)
-    )[:num_levels]
+        [s for s in cluster_levels(support_candidates) if s < current_price * 0.995][:num_levels],
+        reverse=True,
+    )
 
     return support_levels, resistance_levels
 
@@ -558,9 +543,9 @@ def calculate_trade_levels(
                 bearish.target = target_price
                 bearish.target_basis = target_basis
                 break
-        if bearish.target is None and bear_target_candidates:
-            bearish.target = bear_target_candidates[-1][0]
-            bearish.target_basis = bear_target_candidates[-1][1]
+        if bearish.target is None:
+            # None 2% below: the furthest, as the bullish side takes the highest
+            bearish.target, bearish.target_basis = min(bear_target_candidates)
 
     # Stop-loss: above nearest resistance by ATR
     bear_entry_ref = bearish.entry_high or current_price
@@ -609,26 +594,26 @@ def compute_trade_levels_from_report(
     # Extract current price
     info = report_data.get("info") or {}
     # Normalized info (data_fetcher) has current_price; raw Yahoo info currentPrice
-    current_price = _safe_float(info.get("current_price"))
+    current_price = finite_float(info.get("current_price"))
     if current_price is None:
-        current_price = _safe_float(info.get("currentPrice"))
+        current_price = finite_float(info.get("currentPrice"))
     currency = info.get("currency", "USD")
 
     # Fallback: get from technical analysis
     tech_data = report_data.get("technical_analysis", {})
     if current_price is None:
         latest_values = tech_data.get("latest_values", {})
-        current_price = _safe_float(latest_values.get("close_price"))
+        current_price = finite_float(latest_values.get("close_price"))
 
     # Fallback: get from price statistics
     if current_price is None:
         stats = tech_data.get("statistics", {})
-        current_price = _safe_float(stats.get("price", {}).get("current"))
+        current_price = finite_float(stats.get("price", {}).get("current"))
 
     # Fallback: get from support_resistance section (uses last valid close)
     if current_price is None:
         sr_data = tech_data.get("support_resistance", {})
-        current_price = _safe_float(sr_data.get("current_price"))
+        current_price = finite_float(sr_data.get("current_price"))
 
     if current_price is None:
         logger.warning("Cannot compute trade levels: no current price available")
@@ -636,11 +621,11 @@ def compute_trade_levels_from_report(
 
     # Extract technical indicators
     indicators = tech_data.get("latest_values", {}).get("indicators", {})
-    atr = _safe_float(indicators.get("ATR"))
-    bb_lower = _safe_float(indicators.get("BB_lower"))
-    bb_upper = _safe_float(indicators.get("BB_upper"))
-    sma_50 = _safe_float(indicators.get("SMA_50"))
-    sma_200 = _safe_float(indicators.get("SMA_200"))
+    atr = finite_float(indicators.get("ATR"))
+    bb_lower = finite_float(indicators.get("BB_lower"))
+    bb_upper = finite_float(indicators.get("BB_upper"))
+    sma_50 = finite_float(indicators.get("SMA_50"))
+    sma_200 = finite_float(indicators.get("SMA_200"))
 
     # Extract fair value from valuation
     fair_value = None
@@ -652,7 +637,7 @@ def compute_trade_levels_from_report(
     if val_data:
         # Try DCF first
         dcf = val_data.get("dcf_valuation", {})
-        dcf_val = None if financial else _safe_float(dcf.get("intrinsic_value_per_share"))
+        dcf_val = None if financial else finite_float(dcf.get("intrinsic_value_per_share"))
         if dcf_val and dcf_val > 0:
             fair_value = dcf_val
             fair_value_source = "DCF"
@@ -660,7 +645,7 @@ def compute_trade_levels_from_report(
         # Try DDM if no DCF
         if fair_value is None:
             ddm = val_data.get("ddm_valuation", {})
-            ddm_val = _safe_float(ddm.get("intrinsic_value_per_share"))
+            ddm_val = finite_float(ddm.get("intrinsic_value_per_share"))
             if ddm_val and ddm_val > 0:
                 fair_value = ddm_val
                 fair_value_source = "DDM"
@@ -668,7 +653,7 @@ def compute_trade_levels_from_report(
         # Try Monte Carlo median
         if fair_value is None and not financial:
             mc = val_data.get("monte_carlo_valuation", {})
-            mc_val = _safe_float(mc.get("intrinsic_value_median"))
+            mc_val = finite_float(mc.get("intrinsic_value_median"))
             if mc_val and mc_val > 0:
                 fair_value = mc_val
                 fair_value_source = "Monte Carlo"
@@ -680,15 +665,15 @@ def compute_trade_levels_from_report(
     # First: use pivot-based S/R from technical analysis if available
     sr_data = tech_data.get("support_resistance", {})
     if sr_data:
-        pivot_supports = [_safe_float(s) for s in sr_data.get("support_levels", [])]
-        pivot_resistances = [_safe_float(r) for r in sr_data.get("resistance_levels", [])]
+        pivot_supports = [finite_float(s) for s in sr_data.get("support_levels", [])]
+        pivot_resistances = [finite_float(r) for r in sr_data.get("resistance_levels", [])]
         support_levels.extend([s for s in pivot_supports if s is not None])
         resistance_levels.extend([r for r in pivot_resistances if r is not None])
 
     # Supplement with MAs, Bollinger bands, and period extremes
     price_stats = tech_data.get("statistics", {}).get("price", {})
-    period_high = _safe_float(price_stats.get("high"))
-    period_low = _safe_float(price_stats.get("low"))
+    period_high = finite_float(price_stats.get("high"))
+    period_low = finite_float(price_stats.get("low"))
 
     if sma_200 is not None and sma_200 < current_price:
         support_levels.append(sma_200)

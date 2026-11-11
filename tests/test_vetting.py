@@ -998,6 +998,56 @@ class TestVerdictSummary:
     def test_expensive_vs_peers(self):
         assert "expensive vs 4 peers" in _vet_data(cheapness=(10, 20))["reasons"]
 
+    @pytest.mark.parametrize(
+        ("earnings", "reason"),
+        [
+            ("2026-03-10", "earnings in 0d"),
+            ("2026-03-24", "earnings in 14d"),
+            ("2026-03-25", None),  # past EARNINGS_SOON_DAYS
+            ("2026-03-09", None),  # already reported
+        ],
+    )
+    def test_earnings_soon_is_a_reason(self, earnings, reason):
+        from datetime import datetime
+
+        from src.vetting.vet import summarize_verdict
+
+        data = {"header": {"signal": "Hold", "score": 55.0}, "next_earnings": earnings}
+        reasons = summarize_verdict(data, today=datetime(2026, 3, 10, 15, 30))["reasons"]
+        earnings_reasons = [r for r in reasons if r.startswith("earnings in")]
+        assert earnings_reasons == ([reason] if reason else [])
+
+
+def _next_steps(peers, min_peers=4, earnings=None):
+    from datetime import datetime
+
+    from src.pipeline import AnalysisBundle
+    from src.vetting.peers import PeerValuation
+    from src.vetting.vet import VetResult, next_steps
+
+    result = VetResult(
+        ticker="ACME",
+        bundle=AnalysisBundle(ticker="ACME", report={}),
+        preset="default",
+        peers=PeerValuation(ticker="ACME", peers=peers, basis="yahoo_industry"),
+        next_earnings=earnings,
+    )
+    return next_steps(result, peers_given=False, min_peers=min_peers, today=datetime(2026, 3, 10))
+
+
+def test_next_steps_flag_too_few_peers_by_the_scorers_minimum():
+    # The hint used a hard-coded 4; the scorer's min_peers decides whether
+    # P/E is judged against peers at all
+    few = "Only 4 similar-size peer(s) found; add --peers for a firmer comparison"
+    assert few not in _next_steps(["A", "B", "C", "D"])
+    assert few in _next_steps(["A", "B", "C", "D"], min_peers=6)
+
+
+def test_next_steps_mention_earnings_soon():
+    steps = _next_steps(["A"], earnings="2026-03-17")
+    assert "Earnings on 2026-03-17 (7d): consider waiting for results" in steps
+    assert not any(s.startswith("Earnings on") for s in _next_steps(["A"], earnings="2026-04-30"))
+
 
 def test_brief_render_is_verdict_and_next_steps(vet_market):
     _, tmp_path = vet_market

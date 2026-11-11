@@ -14,6 +14,7 @@ from ..utils.financial import (
     OCF_ROWS,
     calculate_cagr,
     calculate_growth_rate,
+    finite_float,
     free_cash_flow,
     operating_cash_flow,
     safe_divide,
@@ -117,7 +118,9 @@ class FundamentalAnalyzer:
 
     def calculate_growth_rates(self) -> Dict[str, Any]:
         """
-        Calculate revenue, earnings, and FCF growth rates for 1Y, 3Y, 5Y
+        Calculate revenue, earnings, and FCF growth rates: 1Y, plus 3Y and
+        4Y CAGRs. Column n is n years back; the 4Y CAGR needs a fifth annual
+        column, which Yahoo only sometimes has.
 
         Returns:
             Dictionary with growth metrics
@@ -129,21 +132,21 @@ class FundamentalAnalyzer:
             revenue_current = self._get_value(self.income_stmt_a, "Total Revenue", 0)
             revenue_1y = self._get_value(self.income_stmt_a, "Total Revenue", 1)
             revenue_3y = self._get_value(self.income_stmt_a, "Total Revenue", 3)
-            revenue_5y = self._get_value(self.income_stmt_a, "Total Revenue", 4)
+            revenue_4y = self._get_value(self.income_stmt_a, "Total Revenue", 4)
 
             growth["revenue"]["1y"] = self._calculate_growth_rate(revenue_current, revenue_1y)
             growth["revenue"]["3y_cagr"] = self._calculate_cagr(revenue_current, revenue_3y, 3)
-            growth["revenue"]["5y_cagr"] = self._calculate_cagr(revenue_current, revenue_5y, 5)
+            growth["revenue"]["4y_cagr"] = self._calculate_cagr(revenue_current, revenue_4y, 4)
 
             # Earnings growth (Net Income)
             earnings_current = self._get_value(self.income_stmt_a, "Net Income", 0)
             earnings_1y = self._get_value(self.income_stmt_a, "Net Income", 1)
             earnings_3y = self._get_value(self.income_stmt_a, "Net Income", 3)
-            earnings_5y = self._get_value(self.income_stmt_a, "Net Income", 4)
+            earnings_4y = self._get_value(self.income_stmt_a, "Net Income", 4)
 
             growth["earnings"]["1y"] = self._calculate_growth_rate(earnings_current, earnings_1y)
             growth["earnings"]["3y_cagr"] = self._calculate_cagr(earnings_current, earnings_3y, 3)
-            growth["earnings"]["5y_cagr"] = self._calculate_cagr(earnings_current, earnings_5y, 5)
+            growth["earnings"]["4y_cagr"] = self._calculate_cagr(earnings_current, earnings_4y, 4)
 
         if self.cash_flow_a is not None and not self.cash_flow_a.empty:
             fcf_current = free_cash_flow(self.cash_flow_a, 0)
@@ -1011,21 +1014,21 @@ class FundamentalAnalyzer:
         growth = results["growth_rates"]
 
         if any(growth.values()):
-            md.append("| Metric | 1 Year | 3 Year CAGR | 5 Year CAGR |")
+            md.append("| Metric | 1 Year | 3 Year CAGR | 4 Year CAGR |")
             md.append("|--------|--------|--------------|--------------|")
 
             revenue = growth.get("revenue", {})
             md.append(
                 f"| Revenue | {self._format_pct(revenue.get('1y'))} | "
                 f"{self._format_pct(revenue.get('3y_cagr'))} | "
-                f"{self._format_pct(revenue.get('5y_cagr'))} |"
+                f"{self._format_pct(revenue.get('4y_cagr'))} |"
             )
 
             earnings = growth.get("earnings", {})
             md.append(
                 f"| Earnings | {self._format_pct(earnings.get('1y'))} | "
                 f"{self._format_pct(earnings.get('3y_cagr'))} | "
-                f"{self._format_pct(earnings.get('5y_cagr'))} |"
+                f"{self._format_pct(earnings.get('4y_cagr'))} |"
             )
 
             fcf = growth.get("fcf", {})
@@ -1359,7 +1362,9 @@ def calculate_pead_signal(
     # Most recent earnings
     latest = valid[0]  # Assuming sorted most-recent-first
     latest_surprise = latest["epsDifference"]
-    latest_surprise_pct = latest.get("surprisePercent", 0)
+    # A fraction (0.05 = 5%), as Yahoo and the pipeline give it
+    surprise_fraction = finite_float(latest.get("surprisePercent"))
+    latest_surprise_pct = surprise_fraction * 100 if surprise_fraction is not None else None
 
     # SUE (Standardized Unexpected Earnings)
     sue = None
@@ -1447,9 +1452,7 @@ def calculate_pead_signal(
         "sue": sue,
         "signal": signal,
         "interpretation": interpretation,
-        "latest_surprise_pct": latest_surprise_pct * 100
-        if latest_surprise_pct and abs(latest_surprise_pct) < 10
-        else latest_surprise_pct,
+        "latest_surprise_pct": latest_surprise_pct,
         "latest_eps_actual": latest.get("epsActual"),
         "latest_eps_estimate": latest.get("epsEstimate"),
         "earnings_date": latest.get("quarter"),

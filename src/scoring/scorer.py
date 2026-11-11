@@ -405,15 +405,17 @@ class StockScorer:
         # placeholder 50; keep it for display but out of the composite
         dimensions = [(name, result) for name, result in dimensions if result.data_coverage > 0]
 
-        # Calculate composite score with weight normalization
-        composite_score = self._calculate_composite(dimensions)
+        # Calculate composite score with weight normalization, at the precision
+        # it's stored at (history, JSON)
+        composite_score = round(self._calculate_composite(dimensions), 1)
 
         # Calculate confidence based on data coverage
         confidence_score = self._calculate_confidence(dimensions)
         confidence_label = self._confidence_label(confidence_score)
 
-        # Get signal
-        signal = self.config.get_signal(composite_score)
+        # The signal from the score as it's shown (whole points), so 64.96
+        # reads "Buy 65", not "Hold 65"
+        signal = self.config.get_signal(round(composite_score))
 
         return ScoringResult(
             ticker=ticker,

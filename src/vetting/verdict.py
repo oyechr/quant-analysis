@@ -8,11 +8,11 @@ What Would Change the Verdict
 """
 
 import copy
-import math
 from typing import Any, Callable, Dict, List, Optional
 
 from ..scoring import ScoringConfig, StockScorer
 from ..scoring.dimensions import is_financial
+from ..utils.financial import finite_float
 
 SIGNAL_BANDS: List[str] = ["Strong Sell", "Sell", "Hold", "Buy", "Strong Buy"]
 
@@ -55,8 +55,8 @@ def fair_value_range(report: Dict[str, Any]) -> Dict[str, Any]:
     intervals = mc.get("confidence_intervals") or {}
     if intervals and not mc.get("error") and not financial:
         result["monte_carlo"] = {
-            **{k: _num(v) for k, v in intervals.items()},
-            "probability_undervalued": _num(mc.get("probability_undervalued")),
+            **{k: finite_float(v) for k, v in intervals.items()},
+            "probability_undervalued": finite_float(mc.get("probability_undervalued")),
         }
 
     analysts = analyst_targets(info)
@@ -67,7 +67,7 @@ def fair_value_range(report: Dict[str, Any]) -> Dict[str, Any]:
         if financial and name == "dcf":
             continue
         model = valuation.get(key) or {}
-        value = _num(model.get("intrinsic_value_per_share"))
+        value = finite_float(model.get("intrinsic_value_per_share"))
         if value is not None and not model.get("error"):
             result[name] = value
 
@@ -75,10 +75,10 @@ def fair_value_range(report: Dict[str, Any]) -> Dict[str, Any]:
     if not financial and not dcf.get("error") and dcf.get("growth_rate_used") is not None:
         # The reverse DCF reads better than a bare value: "the price implies X% growth"
         result["dcf_assumptions"] = {
-            "growth_start": _num(dcf.get("growth_rate_used")),
-            "implied_growth": _num(dcf.get("implied_growth_pct")),
-            "terminal_growth": _num(dcf.get("terminal_growth_rate")),
-            "wacc": _num(dcf.get("wacc_used")),
+            "growth_start": finite_float(dcf.get("growth_rate_used")),
+            "implied_growth": finite_float(dcf.get("implied_growth_pct")),
+            "terminal_growth": finite_float(dcf.get("terminal_growth_rate")),
+            "wacc": finite_float(dcf.get("wacc_used")),
             "years": dcf.get("projection_years"),
         }
 
@@ -98,16 +98,16 @@ def fair_value_range(report: Dict[str, Any]) -> Dict[str, Any]:
 
 def analyst_targets(info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Yahoo's analyst price-target consensus (listing currency), if any."""
-    mean = _num(info.get("target_mean_price"))
+    mean = finite_float(info.get("target_mean_price"))
     if mean is None or mean <= 0:
         return None
     return {
         "mean": mean,
-        "median": _num(info.get("target_median_price")),
-        "low": _num(info.get("target_low_price")),
-        "high": _num(info.get("target_high_price")),
+        "median": finite_float(info.get("target_median_price")),
+        "low": finite_float(info.get("target_low_price")),
+        "high": finite_float(info.get("target_high_price")),
         "count": info.get("analyst_count"),
-        "recommendation_mean": _num(info.get("recommendation_mean")),
+        "recommendation_mean": finite_float(info.get("recommendation_mean")),
         "recommendation": info.get("recommendation_key"),
     }
 
@@ -122,14 +122,14 @@ def reprice_report(report: Dict[str, Any], factor: float) -> Dict[str, Any]:
     repriced = dict(report)
     info = dict(report.get("info") or {})
     for key in _PRICE_MULTIPLES:
-        value = _num(info.get(key))
+        value = finite_float(info.get(key))
         if value is not None:
             info[key] = value * factor
     repriced["info"] = info
 
     valuation = copy.deepcopy(report.get("valuation_analysis") or {})
     dcf = valuation.get("dcf_valuation") or {}
-    premium = _num(dcf.get("discount_premium_pct"))
+    premium = finite_float(dcf.get("discount_premium_pct"))
     if premium is not None:
         dcf["discount_premium_pct"] = ((1 + premium / 100) * factor - 1) * 100
     repriced["valuation_analysis"] = valuation
@@ -137,7 +137,7 @@ def reprice_report(report: Dict[str, Any], factor: float) -> Dict[str, Any]:
     # FCF yield lives in the fundamental section; copy only the path we change
     fundamental = report.get("fundamental_analysis") or {}
     analysis = fundamental.get("analysis") or {}
-    fcf_yield = _num((analysis.get("fcf_metrics") or {}).get("fcf_yield"))
+    fcf_yield = finite_float((analysis.get("fcf_metrics") or {}).get("fcf_yield"))
     if fcf_yield is not None:
         fcf_metrics = {**analysis["fcf_metrics"], "fcf_yield": fcf_yield / factor}
         repriced["fundamental_analysis"] = {
@@ -225,7 +225,7 @@ def current_price(report: Dict[str, Any]) -> Optional[float]:
         ((report.get("technical_analysis") or {}).get("latest_values") or {}).get("close_price"),
         ((report.get("price_data") or {}).get("latest") or {}).get("close"),
     ):
-        price = _num(value)
+        price = finite_float(value)
         if price and price > 0:
             return price
     return None
@@ -242,11 +242,3 @@ def _currency_note(report: Dict[str, Any]) -> Optional[str]:
     if rate is not None:
         return f"Statements converted {statements} -> {listing} at {rate:.4g}"
     return f"Caution: statements in {statements}, price in {listing}, not converted"
-
-
-def _num(value: Any) -> Optional[float]:
-    try:
-        result = float(value)
-    except TypeError, ValueError:
-        return None
-    return None if math.isnan(result) or math.isinf(result) else result

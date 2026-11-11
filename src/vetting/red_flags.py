@@ -10,7 +10,6 @@ Each rule is a small function that returns zero or more RedFlags, so rules can
 be tested one at a time with synthetic reports.
 """
 
-import math
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -21,6 +20,7 @@ from ..scoring.dimensions import (
     applicable_quality_models,
     beneish_is_partial,
 )
+from ..utils.financial import finite_float
 
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
@@ -67,7 +67,7 @@ def check_beneish(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
     if "beneish_m" not in applicable_quality_models(report.get("info")):
         return []
     beneish = _quality(report).get("beneish_m") or {}
-    m_score = _num(beneish.get("m_score"))
+    m_score = finite_float(beneish.get("m_score"))
     if m_score is None or m_score <= BENEISH_THRESHOLD:
         return []
     components = beneish.get("components_available")
@@ -87,7 +87,7 @@ def check_beneish(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
 
 def check_altman(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
     quality = _quality(report)
-    z = _num(quality.get("altman_z"))
+    z = finite_float(quality.get("altman_z"))
     model = quality.get("altman_model") or "Z"
     distress, _ = altman_zones(model)
     if (
@@ -160,13 +160,13 @@ def check_dilution(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
 def check_dividend_coverage(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
     info = report.get("info") or {}
     dividend = (report.get("valuation_analysis") or {}).get("dividend_analysis") or {}
-    pays = dividend.get("pays_dividends") or (_num(info.get("dividend_yield")) or 0) > 0
+    pays = dividend.get("pays_dividends") or (finite_float(info.get("dividend_yield")) or 0) > 0
     if not pays:
         return []
 
     problems = []
-    payout = _num(info.get("payout_ratio"))  # Yahoo: decimal (1.2 = 120%)
-    payout_pct = _num(dividend.get("payout_ratio"))  # valuation: percent
+    payout = finite_float(info.get("payout_ratio"))  # Yahoo: decimal (1.2 = 120%)
+    payout_pct = finite_float(dividend.get("payout_ratio"))  # valuation: percent
     if payout is None and payout_pct is not None:
         payout = payout_pct / 100
     if payout is not None and payout > 1.0:
@@ -397,12 +397,4 @@ def _is_financial(report: Dict[str, Any]) -> bool:
 
 
 def _first(values: List[Optional[float]]) -> Optional[float]:
-    return _num(values[0]) if values else None
-
-
-def _num(value: Any) -> Optional[float]:
-    try:
-        result = float(value)
-    except TypeError, ValueError:
-        return None
-    return None if math.isnan(result) or math.isinf(result) else result
+    return finite_float(values[0]) if values else None
