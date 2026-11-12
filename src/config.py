@@ -5,9 +5,10 @@ Centralized configuration for analysis parameters
 
 import json
 import logging
+import os
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,19 @@ DEFAULT_CACHE_TTL_HOURS: Dict[str, float] = {
 
 # A placeholder: SEC asks for a real name and contact (see Edgar13FSource)
 DEFAULT_EDGAR_USER_AGENT = "PersonalResearch research@example.com"
+
+CONFIG_FILE = "config.json"
+# The checkout this package runs from (the folder holding src/)
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Keys config.json can leave out: the provider's usual environment variable
+# fills them in (config.json wins when both are set)
+ENV_KEYS: Dict[str, Tuple[str, ...]] = {
+    "llm_anthropic_api_key": ("ANTHROPIC_API_KEY",),
+    "llm_openai_api_key": ("OPENAI_API_KEY",),
+    "llm_google_api_key": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    "openfigi_api_key": ("OPENFIGI_API_KEY",),
+}
 
 
 @dataclass
@@ -82,9 +96,10 @@ class AnalysisConfig:
 
     # ==================== LLM Integration ====================
     llm_model: str = "gemini-3.8-flash"  # free tier with llm_google_api_key
-    llm_anthropic_api_key: Optional[str] = None
-    llm_openai_api_key: Optional[str] = None
-    llm_google_api_key: Optional[str] = None  # Google AI Studio key (Gemini)
+    # repr=False keeps keys out of logs and tracebacks that print the config
+    llm_anthropic_api_key: Optional[str] = field(default=None, repr=False)
+    llm_openai_api_key: Optional[str] = field(default=None, repr=False)
+    llm_google_api_key: Optional[str] = field(default=None, repr=False)  # AI Studio (Gemini)
 
     # ==================== Discovery / EDGAR ====================
     edgar_user_agent: str = DEFAULT_EDGAR_USER_AGENT
@@ -93,10 +108,10 @@ class AnalysisConfig:
     openfigi_api_key: Optional[str] = field(default=None, repr=False)
 
     # Validation sets
-    valid_periods: Optional[set] = None
-    valid_intervals: Optional[set] = None
+    valid_periods: Optional[Set[str]] = None
+    valid_intervals: Optional[Set[str]] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize default values for mutable fields"""
         if self.sma_periods is None:
             self.sma_periods = [20, 50, 200]
@@ -173,7 +188,7 @@ class AnalysisConfig:
             logger.info("Using default configuration")
             return cls()
 
-    def save_to_file(self, path: Path):
+    def save_to_file(self, path: Path) -> None:
         """
         Save configuration to JSON file
 
@@ -227,13 +242,40 @@ def get_config() -> AnalysisConfig:
     """
     global _default_config
     if _default_config is None:
-        # Try to load from default location
-        config_path = Path("config.json")
-        _default_config = AnalysisConfig.load_from_file(config_path)
+        config = AnalysisConfig.load_from_file(config_path())
+        _default_config = with_env_keys(config, os.environ)
     return _default_config
 
 
-def set_config(config: AnalysisConfig):
+def config_path() -> Path:
+    """Where config.json is read from.
+
+    $QUANT_CONFIG if set, else ./config.json, else the one in the checkout
+    (so running from a subfolder doesn't silently drop the keys and TTLs).
+    """
+    override = os.environ.get("QUANT_CONFIG")
+    if override:
+        return Path(override)
+    local = Path(CONFIG_FILE)
+    if local.exists():
+        return local
+    return REPO_ROOT / CONFIG_FILE
+
+
+def with_env_keys(config: AnalysisConfig, env: Mapping[str, str]) -> AnalysisConfig:
+    """Fill keys config.json left out from their environment variables."""
+    for name, variables in ENV_KEYS.items():
+        if getattr(config, name):
+            continue
+        for var in variables:
+            if env.get(var):
+                setattr(config, name, env[var])
+                logger.info(f"{name} taken from ${var}")
+                break
+    return config
+
+
+def set_config(config: AnalysisConfig) -> None:
     """
     Set the global configuration instance
 

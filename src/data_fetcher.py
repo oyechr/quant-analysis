@@ -14,7 +14,7 @@ import pandas as pd
 import yfinance as yf
 
 from .config import get_config
-from .utils.files import atomic_write, atomic_write_text
+from .utils.files import atomic_write, atomic_write_text, ticker_dir
 from .utils.financial import trading_dates
 from .utils.serialization import dataframe_to_json_dict, dataframe_to_records, series_to_dataframe
 
@@ -506,7 +506,10 @@ class DataFetcher:
         Cached in <cache_dir>/_peer_groups/cache/<kind>-<key>.json for the
         "industry" TTL; falls back to an expired cache, then to [], on failure.
         """
-        cache_file = self._get_cache_file_path("_peer_groups", f"{kind}-{key}.json")
+        # Not a ticker, so not through ticker_dir (no symbol starts with "_")
+        cache_dir = self.cache_dir / "_peer_groups" / "cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / f"{kind}-{key}.json"
         if use_cache and self._is_fresh(cache_file, "industry"):
             cached = self._load_json_cache(cache_file, ignore_ttl=True)
             if isinstance(cached, dict):
@@ -760,7 +763,7 @@ class DataFetcher:
         Returns:
             Path object for the cache file
         """
-        cache_dir = self.cache_dir / ticker / "cache"
+        cache_dir = ticker_dir(self.cache_dir, ticker) / "cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir / filename
 
@@ -961,7 +964,7 @@ class DataFetcher:
     ) -> Path:
         """Generate cache filename based on parameters (for CSV price data)"""
         # Create cache subdirectory
-        cache_dir = self.cache_dir / ticker / "cache"
+        cache_dir = ticker_dir(self.cache_dir, ticker) / "cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         if start and end:
@@ -979,16 +982,16 @@ class DataFetcher:
         """
         if ticker:
             ticker = ticker.upper()
-            ticker_dir = self.cache_dir / ticker
-            if ticker_dir.exists():
+            ticker_path = ticker_dir(self.cache_dir, ticker)
+            if ticker_path.exists():
                 import shutil
 
-                shutil.rmtree(ticker_dir)
-                logger.info(f"Deleted cache directory: {ticker_dir}")
+                shutil.rmtree(ticker_path)
+                logger.info(f"Deleted cache directory: {ticker_path}")
         else:
             import shutil
 
-            for ticker_dir in self.cache_dir.iterdir():
-                if ticker_dir.is_dir():
-                    shutil.rmtree(ticker_dir)
+            for folder in self.cache_dir.iterdir():
+                if folder.is_dir():
+                    shutil.rmtree(folder)
             logger.info("Cleared all cache directories")

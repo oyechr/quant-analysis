@@ -4,7 +4,9 @@ cache expiry, per-run fetch de-duplication, home-market benchmarks,
 cross-timezone return alignment, and freshness warnings.
 """
 
+import logging
 import os
+import threading
 import time
 
 import pandas as pd
@@ -100,6 +102,19 @@ class TestAnalyzeTicker:
 
         assert "technical_analysis" in bundle.errors
         assert bundle.report["technical_analysis"] is None
+
+    @pytest.mark.parametrize("level, traceback", [(logging.WARNING, False), (logging.DEBUG, True)])
+    def test_step_errors_log_the_traceback_only_when_verbose(
+        self, fake_market, tmp_path, caplog, level, traceback
+    ):
+        fake_market.price_overrides["NOPE"] = pd.DataFrame()
+        caplog.set_level(level, logger="src.pipeline")
+
+        analyze_ticker("NOPE", DataFetcher(cache_dir=str(tmp_path)))
+
+        records = [r for r in caplog.records if "Error processing technical_analysis" in r.message]
+        assert records
+        assert bool(records[0].exc_info) is traceback
 
 
 # ============================================================
@@ -429,3 +444,26 @@ def test_none_from_yfinance_is_an_empty_resource(fake_market, tmp_path):
     fake_market.attribute_overrides["NEW"] = {"earnings_dates": None}
     earnings = DataFetcher(cache_dir=str(tmp_path)).fetch_earnings("NEW", use_cache=False)
     assert earnings["earnings_dates"].empty
+
+
+@pytest.mark.parametrize("stop", ["interrupt", "close"])
+def test_run_concurrently_drops_queued_items_when_stopped(stop):
+    """Ctrl-C (or a caller that stops early) used to wait for every queued ticker."""
+    started = []
+    lock = threading.Lock()
+
+    def _slow(x: int) -> int:
+        with lock:
+            started.append(x)
+        time.sleep(0.05)
+        return x
+
+    results = run_concurrently(_slow, range(40), workers=2)
+    next(results)
+    if stop == "interrupt":
+        with pytest.raises(KeyboardInterrupt):
+            results.throw(KeyboardInterrupt)
+    else:
+        results.close()
+    time.sleep(0.2)
+    assert len(started) < 12

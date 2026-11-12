@@ -179,7 +179,11 @@ def analyze_ticker(
         try:
             return fn()
         except Exception as e:
-            logger.error(f"Error processing {name} for {ticker}: {e}")
+            # The traceback only under -v: the message is enough day to day
+            logger.error(
+                f"Error processing {name} for {ticker}: {e}",
+                exc_info=logger.isEnabledFor(logging.DEBUG),
+            )
             bundle.errors[name] = str(e)
             report[name] = None
             return None

@@ -10,10 +10,35 @@ scheduled run next to a manual one) never share a temp file.
 """
 
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable, Union
+
+# A Yahoo symbol: letters and digits, plus . - = ^ & (EQNR.OL, BRK-B,
+# EURUSD=X, ^GSPC, M&M.NS). Nothing that can leave or name a folder.
+_SYMBOL = re.compile(r"^[A-Z0-9^][A-Z0-9.\-=^&]{0,19}$", re.IGNORECASE)
+
+# Windows device names, reserved with or without an extension (CON.DE is
+# Continental on Xetra)
+_RESERVED = {"CON", "PRN", "AUX", "NUL"} | {f"{p}{i}" for p in ("COM", "LPT") for i in range(10)}
+
+
+def ticker_dir(base: Union[str, Path], ticker: str) -> Path:
+    """The folder for one ticker's cache and reports: `base / TICKER`.
+
+    Raises ValueError for anything that isn't a ticker symbol, so a symbol
+    from a file or the command line can't point outside `base`. A Windows
+    device name gets a leading underscore (`_CON.DE`), which no symbol has.
+    """
+    name = ticker.upper()
+    if not _SYMBOL.match(name) or ".." in name or name.endswith("."):
+        raise ValueError(f"Not a valid ticker symbol: {ticker!r}")
+    if name.split(".")[0] in _RESERVED:
+        name = f"_{name}"
+    return Path(base) / name
+
 
 # Windows refuses a replace while another process has the target open (a
 # reader, an antivirus scan); a short retry rides that out

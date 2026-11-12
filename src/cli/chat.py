@@ -2,11 +2,11 @@
 
 import logging
 from datetime import date
-from pathlib import Path
 
 import click
 
 from ..reporting import ReportGenerator
+from ..utils.files import ticker_dir
 
 CHAT_HISTORY_ROWS = 12  # score history rows given to `quant chat`
 
@@ -60,7 +60,8 @@ def chat(ctx, ticker, model, no_intro, debug_context):
     output_dir = ctx.obj["output_dir"]
     period = ctx.obj["period"]
     use_cache = ctx.obj["use_cache"]
-    json_path = Path(output_dir) / ticker / "reports" / "full_report.json"
+    reports_dir = ticker_dir(output_dir, ticker) / "reports"
+    json_path = reports_dir / "full_report.json"
 
     def _read_report():
         try:
@@ -90,7 +91,7 @@ def chat(ctx, ticker, model, no_intro, debug_context):
 
         # Peers come from the last `quant vet --save`, so chat startup stays offline
         peers = None
-        vet_path = Path(output_dir) / ticker / "reports" / "vet.json"
+        vet_path = reports_dir / "vet.json"
         if vet_path.exists():
             try:
                 peers = _json.loads(vet_path.read_text(encoding="utf-8")).get("peer_valuation")

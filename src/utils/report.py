@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from .files import ticker_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -182,7 +184,7 @@ def save_analysis_report(
         content_generator: Function that generates report content
         file_extension: File extension ("md" or "json")
     """
-    reports_dir = output_dir / ticker / "reports"
+    reports_dir = ticker_dir(output_dir, ticker) / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     output_file = reports_dir / f"{report_type}.{file_extension}"
 

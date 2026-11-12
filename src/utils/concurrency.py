@@ -39,7 +39,8 @@ def run_concurrently(
                 yield item, None, e
         return
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
         futures = {pool.submit(fn, item): item for item in items}
         for future in as_completed(futures):
             item = futures[future]
@@ -47,3 +48,9 @@ def run_concurrently(
                 yield item, future.result(), None
             except Exception as e:
                 yield item, None, e
+    except BaseException:
+        # Ctrl-C, or the caller stopped early: drop the queued items instead
+        # of fetching every one of them first. Running calls finish on their own.
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    pool.shutdown()

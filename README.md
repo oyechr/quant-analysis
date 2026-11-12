@@ -232,7 +232,7 @@ quant --no-cache chat TSLA            # fresh data first
 
 - **Context:** the model also sees the last 12 rows of the ticker's score history. It sees peer valuation if `quant vet TICKER --save` has been run.
 - **In-session commands:** `/refresh` re-fetches the data and rebuilds the report, `/clear` resets the conversation, `/help`, and `/quit`.
-- **Setup:** it needs an Anthropic or OpenAI key in `config.json` (see [Your files](#your-files)). `--debug-context` prints what the model is sent.
+- **Setup:** it needs a key in `config.json` or the environment: a free Google AI Studio key for the default Gemini model, or an Anthropic or OpenAI key (see [Your files](#your-files)). `--debug-context` prints what the model is sent.
 
 ### Your portfolio
 
@@ -502,7 +502,7 @@ Many companies report in one currency and trade in another; most Oslo energy nam
 | `portfolio/review.*`, `rebalance.*` | Saved with `--save` | No |
 | `data/` | The cache, reports, score history, screens and backtests | No |
 
-**`config.json`** (all keys optional):
+**`config.json`** (all keys optional). It's read from the current folder, or else from the checkout's root, so running `quant` from a subfolder keeps your settings. `QUANT_CONFIG=path/to/file.json` points elsewhere. (`data/` and `portfolio/` are still relative to the current folder: run from the repo root.)
 
 ```json
 {
@@ -528,6 +528,7 @@ Many companies report in one currency and trade in another; most Oslo energy nam
   - Paid options: `claude-haiku-5-5` is cheap (well under a cent per brief), `claude-opus-5-5` the most thorough. The Anthropic API is billed separately from a Claude subscription.
   - GitHub Models, the old free default (`llm_github_token`), was [retired by GitHub](https://github.blog/changelog/2026-07-30-github-models-is-now-retired/) on 30 July 2026. A config.json that still has the key gets an "unknown config key" warning; delete the line.
   - A failed turn (rate limit, overload, network) prints the error and the chat goes on with its history; a reply that was cut off or declined says so.
+- **Keys from the environment:** a key left out of `config.json` is taken from the provider's usual variable: `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENFIGI_API_KEY`. `config.json` wins when both are set. Keys never show when the config is printed or logged.
 
 **`portfolio/targets.toml`:**
 

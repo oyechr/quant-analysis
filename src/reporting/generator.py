@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisBundle, AnalysisOptions, analyze_ticker
 from ..scoring import ScoringConfig
-from ..utils.files import atomic_write_text
+from ..utils.files import atomic_write_text, ticker_dir
 from ..utils.toon_serializer import report_to_toon
 from .markdown import render_report_markdown
 
@@ -124,7 +124,7 @@ class ReportGenerator:
 
     def _get_reports_dir(self, ticker: str) -> Path:
         """Get (and create) reports directory for a ticker"""
-        reports_dir = self.output_dir / ticker / "reports"
+        reports_dir = ticker_dir(self.output_dir, ticker) / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         return reports_dir
 
@@ -171,7 +171,7 @@ class ReportGenerator:
 
     def _save_toon_report(self, ticker: str, data: Dict[str, Any]):
         """Save report as TOON (Token-Oriented Object Notation) for LLM consumption"""
-        reports_dir = self.output_dir / ticker / "reports"
+        reports_dir = ticker_dir(self.output_dir, ticker) / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         output_file = reports_dir / "full_report.toon"
 
@@ -203,7 +203,7 @@ class ReportGenerator:
         scoring_result=None,
     ):
         """Save report.md (see markdown.render_report_markdown) and the per-analysis files."""
-        reports_dir = self.output_dir / ticker / "reports"
+        reports_dir = ticker_dir(self.output_dir, ticker) / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         output_file = reports_dir / "report.md"
 

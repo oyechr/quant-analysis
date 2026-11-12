@@ -1,7 +1,6 @@
 """Single-ticker and multi-ticker analysis: report, score, vet, compare, watch."""
 
 import time
-from pathlib import Path
 
 import click
 
@@ -22,7 +21,7 @@ from ..pipeline import AnalysisOptions
 from ..reporting import ReportGenerator
 from ..scoring import format_score_table
 from ..utils.concurrency import run_concurrently
-from ..utils.files import atomic_write_text
+from ..utils.files import atomic_write_text, ticker_dir
 from .common import (
     FINITE_FLOAT,
     POSITIVE_INT,
@@ -88,7 +87,7 @@ def report(
     if not has_score(bundle.report, bundle.scoring):
         raise click.ClickException(f"No data for {ticker}. Check the symbol (e.g. EQNR.OL).")
 
-    reports_dir = Path(output_dir) / ticker / "reports"
+    reports_dir = ticker_dir(output_dir, ticker) / "reports"
     echo_status(f"\nReport generated for {ticker}")
     if output_format in ("json", "all"):
         echo_status(f"  - JSON: {reports_dir / 'full_report.json'}")
@@ -225,7 +224,7 @@ def vet(ctx, ticker, peers, config_name, brief, as_json, save):
         click.echo(render_text(data, brief=brief))
 
     if save:
-        reports_dir = Path(output_dir) / ticker / "reports"
+        reports_dir = ticker_dir(output_dir, ticker) / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         atomic_write_text((reports_dir / "vet.json"), to_json(data))
         atomic_write_text((reports_dir / "vet.md"), render_markdown(data))
