@@ -1,19 +1,22 @@
 """
 LLM integration for `quant chat`: a conversation about one ticker's report.
 
-The provider follows the model name: claude-* goes to Anthropic, and every
-other name (gpt-4.1, o4-mini, ...) goes to OpenAI.
+The provider follows the model name: claude-* goes to Anthropic, gemini-* and
+gemma-* go to Google (its OpenAI-compatible endpoint), and every other name
+(gpt-4.1, o4-mini, ...) goes to OpenAI.
 
 Configure in config.json:
     {
-        "llm_model": "claude-haiku-5-5",
+        "llm_model": "gemini-3.8-flash",
+        "llm_google_api_key": "...",
         "llm_anthropic_api_key": "sk-ant-...",
         "llm_openai_api_key": "sk-..."
     }
 
-The default model is claude-haiku-5-5, the cheap option (well under a cent per
-brief); claude-opus-5-5 gives richer analysis at about 40x the price. GitHub
-Models, the old free default, was retired by GitHub on 2026-07-30.
+The default is gemini-3.8-flash, free with a Google AI Studio key (rate-limited
+per Google Cloud project: about 20 requests a day on the Flash models, more on
+Flash-Lite). claude-haiku-5-5 is the cheap paid option; claude-opus-5-5 the most
+thorough. GitHub Models, the old free default, was retired on 2026-07-30.
 
 Every provider error reaches the caller as a ValueError with a readable
 message, so a failed turn never ends the chat session.
@@ -40,8 +43,13 @@ class LLMConfigError(ValueError):
 
 
 def _infer_provider(model: str) -> str:
-    """Anthropic for claude-* models; every other name is OpenAI-compatible."""
-    return "anthropic" if model.lower().startswith("claude") else "openai"
+    """anthropic for claude-*, google for gemini-*/gemma-*, else openai."""
+    name = model.lower()
+    if name.startswith("claude"):
+        return "anthropic"
+    if name.startswith(("gemini", "gemma")):
+        return "google"
+    return "openai"
 
 
 def _fmt(value: Any, pct: bool = False, decimals: int = 1) -> str:
@@ -344,6 +352,10 @@ ANTHROPIC_MAX_TOKENS = 16000
 # OpenAI: room for a reasoning model's hidden reasoning plus the reply.
 OPENAI_MAX_TOKENS = 16000
 
+# Google's OpenAI-compatible endpoint (beta). Its docs don't list either token
+# limit parameter, so none is sent and the model's own output cap applies.
+GOOGLE_OPENAI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
 
 # ---------------------------------------------------------------------------
 # Output helpers
@@ -418,12 +430,22 @@ def chat_turn(
             )
         return _chat_anthropic(system, messages, resolved_model, key)
 
+    if provider == "google":
+        key = config.llm_google_api_key
+        if not key:
+            raise LLMConfigError(
+                f"Google API key not configured for {resolved_model}.\n"
+                "Add 'llm_google_api_key' to config.json "
+                "(free at https://aistudio.google.com/apikey)."
+            )
+        return _chat_openai(system, messages, resolved_model, key, provider="google")
+
     key = openai_api_key or config.llm_openai_api_key
     if not key:
         raise LLMConfigError(
             f"OpenAI API key not configured for {resolved_model}.\n"
-            "Add 'llm_openai_api_key' to config.json, or set llm_model to a claude-* model "
-            "with 'llm_anthropic_api_key'."
+            "Add 'llm_openai_api_key' to config.json, or pick a gemini-* model "
+            "with 'llm_google_api_key' (free)."
         )
     return _chat_openai(system, messages, resolved_model, key)
 
@@ -493,7 +515,15 @@ def _chat_anthropic(system: str, messages: List[Dict[str, str]], model: str, api
     return "".join(tokens)
 
 
-def _chat_openai(system: str, messages: List[Dict[str, str]], model: str, api_key: str) -> str:
+def _chat_openai(
+    system: str,
+    messages: List[Dict[str, str]],
+    model: str,
+    api_key: str,
+    provider: str = "openai",
+) -> str:
+    """One streamed turn through the OpenAI SDK: OpenAI itself, or Google's
+    OpenAI-compatible endpoint when provider is "google"."""
     try:
         import openai
     except ImportError as e:
@@ -501,7 +531,13 @@ def _chat_openai(system: str, messages: List[Dict[str, str]], model: str, api_ke
 
     from openai.types.chat import ChatCompletionMessageParam
 
-    client = openai.OpenAI(api_key=api_key)
+    google = provider == "google"
+    label, key_name = (
+        ("Google", "llm_google_api_key") if google else ("OpenAI", "llm_openai_api_key")
+    )
+    client = openai.OpenAI(api_key=api_key, base_url=GOOGLE_OPENAI_URL if google else None)
+    # max_tokens is rejected by OpenAI's reasoning models (o-series, gpt-5)
+    limit: Dict[str, Any] = {} if google else {"max_completion_tokens": OPENAI_MAX_TOKENS}
     full_messages = cast(
         List[ChatCompletionMessageParam],
         [{"role": "system", "content": system}, *messages],
@@ -516,8 +552,7 @@ def _chat_openai(system: str, messages: List[Dict[str, str]], model: str, api_ke
             model=model,
             messages=full_messages,
             stream=True,
-            # max_tokens is rejected by reasoning models (o-series, gpt-5)
-            max_completion_tokens=OPENAI_MAX_TOKENS,
+            **limit,
         )
         for chunk in stream:
             chunks += 1
@@ -531,18 +566,34 @@ def _chat_openai(system: str, messages: List[Dict[str, str]], model: str, api_ke
             refusal += getattr(choice.delta, "refusal", None) or ""
             if choice.finish_reason:
                 finish_reason = choice.finish_reason
-    except openai.AuthenticationError as e:
-        raise ValueError(
-            "OpenAI authentication failed - check llm_openai_api_key in config.json."
-        ) from e
+    except (openai.AuthenticationError, openai.PermissionDeniedError) as e:
+        raise ValueError(f"{label} rejected the API key - check {key_name} in config.json.") from e
     except openai.RateLimitError as e:
+        if google:
+            raise ValueError(
+                f"Google's free-tier limit for {model} is used up (counted per project, "
+                "about 20 requests a day on Flash). Try a Flash-Lite model with --model, "
+                "or wait for the daily reset."
+            ) from e
         raise ValueError(
             "OpenAI quota exceeded. Add billing credits at https://platform.openai.com/billing"
         ) from e
     except openai.NotFoundError as e:
-        raise ValueError(f"Unknown model '{model}' - check llm_model or --model. ({e})") from e
+        raise ValueError(
+            f"{label} has no model '{model}' - check llm_model in config.json or --model."
+        ) from e
+    except openai.InternalServerError as e:
+        # The SDK has already retried twice; 503 is the usual "high demand" reply.
+        raise ValueError(
+            f"{label}'s {model} is overloaded or failing right now (HTTP {e.status_code}; "
+            "usually brief). Ask again in a minute, or try another model with --model."
+        ) from e
+    except openai.APITimeoutError as e:
+        raise ValueError(f"{label} did not answer in time. Ask again.") from e
+    except openai.APIConnectionError as e:
+        raise ValueError(f"Could not reach {label} - check the network.") from e
     except openai.APIError as e:
-        raise ValueError(f"API error: {e}") from e
+        raise ValueError(f"{label} API error: {e}") from e
 
     if refusal:
         _emit(f"\n  [Note: the model declined: {refusal}]")

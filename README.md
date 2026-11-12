@@ -512,8 +512,8 @@ Many companies report in one currency and trade in another; most Oslo energy nam
     "cache_ttl_hours": {"fundamentals": 336, "prices": 6},
     "edgar_user_agent": "PersonalResearch you@email.com",
     "openfigi_api_key": "...",
-    "llm_model": "claude-haiku-5-5",
-    "llm_anthropic_api_key": "sk-ant-..."
+    "llm_model": "gemini-3.8-flash",
+    "llm_google_api_key": "..."
 }
 ```
 
@@ -523,8 +523,9 @@ Many companies report in one currency and trade in another; most Oslo energy nam
   - `benchmark_by_suffix` overrides the built-in exchange-to-index map.
 - **Cache:** `cache_ttl_hours` sets the maximum age per resource (`prices`, `info`, `earnings`, `analyst_ratings`, `dividends`, `fundamentals`, `holders`, `universe`, `industry`). `0` means never expire.
 - **Chat:**
-  - `llm_model` picks the model: `claude-*` uses Anthropic, and any other name (`gpt-4.1`, `o4-mini`, ...) uses OpenAI. The default is `claude-haiku-5-5`, the cheap option; `claude-opus-5-5` is the most thorough.
-  - The key comes from `llm_anthropic_api_key` or `llm_openai_api_key`.
+  - `llm_model` picks the model, and the name picks the provider: `gemini-*` and `gemma-*` use Google, `claude-*` uses Anthropic, and any other name (`gpt-4.1`, `o4-mini`, ...) uses OpenAI. The key comes from `llm_google_api_key`, `llm_anthropic_api_key` or `llm_openai_api_key`.
+  - The default is `gemini-3.8-flash`, free with a [Google AI Studio key](https://aistudio.google.com/apikey). The free tier is counted per Google Cloud project and is small, about 20 requests a day on Flash. The opening brief takes one request and each question one more. Flash-Lite models allow more (`--model`). Google may use free-tier prompts to improve its products; chat sends one ticker's report and score history, not your holdings.
+  - Paid options: `claude-haiku-5-5` is cheap (well under a cent per brief), `claude-opus-5-5` the most thorough. The Anthropic API is billed separately from a Claude subscription.
   - GitHub Models, the old free default (`llm_github_token`), was [retired by GitHub](https://github.blog/changelog/2026-07-30-github-models-is-now-retired/) on 30 July 2026. A config.json that still has the key gets an "unknown config key" warning; delete the line.
   - A failed turn (rate limit, overload, network) prints the error and the chat goes on with its history; a reply that was cut off or declined says so.
 

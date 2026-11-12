@@ -81,9 +81,10 @@ class AnalysisConfig:
     cache_ttl_hours: Dict[str, float] = field(default_factory=lambda: dict(DEFAULT_CACHE_TTL_HOURS))
 
     # ==================== LLM Integration ====================
-    llm_model: str = "claude-haiku-5-5"
+    llm_model: str = "gemini-3.8-flash"  # free tier with llm_google_api_key
     llm_anthropic_api_key: Optional[str] = None
     llm_openai_api_key: Optional[str] = None
+    llm_google_api_key: Optional[str] = None  # Google AI Studio key (Gemini)
 
     # ==================== Discovery / EDGAR ====================
     edgar_user_agent: str = DEFAULT_EDGAR_USER_AGENT

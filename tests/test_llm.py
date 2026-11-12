@@ -4,7 +4,7 @@ The provider SDKs are replaced by fakes; the errors are the SDKs' own classes.
 """
 
 from types import SimpleNamespace
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Type
 
 import anthropic
 import httpx2
@@ -69,7 +69,7 @@ def _fake_openai(
     chunks: List[SimpleNamespace],
     error: Optional[Exception] = None,
 ) -> Dict[str, Any]:
-    """Record the create() kwargs."""
+    """Record the client's base_url and the create() kwargs."""
     seen: Dict[str, Any] = {}
 
     def _create(**kwargs: Any) -> Iterator[SimpleNamespace]:
@@ -78,7 +78,8 @@ def _fake_openai(
             raise error
         return iter(chunks)
 
-    def _client(api_key: str) -> SimpleNamespace:
+    def _client(api_key: str, base_url: Optional[str] = None) -> SimpleNamespace:
+        seen["base_url"] = base_url
         return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=_create)))
 
     monkeypatch.setattr(openai, "OpenAI", _client)
@@ -88,7 +89,9 @@ def _fake_openai(
 _A_REQUEST = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
 
 
-def _anthropic_status(cls: Any, status: int, body: Any = None) -> Exception:
+def _anthropic_status(
+    cls: Type[anthropic.APIStatusError], status: int, body: Any = None
+) -> Exception:
     return cls("error", response=httpx2.Response(status, request=_A_REQUEST), body=body)
 
 
@@ -102,25 +105,90 @@ def _anthropic_status(cls: Any, status: int, body: Any = None) -> Exception:
     [
         ("claude-haiku-5-5", "anthropic"),
         ("Claude-Opus-5-5", "anthropic"),
+        ("gemini-3.8-flash", "google"),
+        ("Gemma-3-27b-it", "google"),
         ("gpt-4.1", "openai"),
         ("o4-mini", "openai"),
         ("Meta-Llama-3.3-70B", "openai"),
     ],
 )
-def test_only_claude_models_go_to_anthropic(model: str, provider: str) -> None:
+def test_provider_follows_the_model_name(model: str, provider: str) -> None:
     assert llm._infer_provider(model) == provider
 
 
-def test_non_claude_model_without_openai_key_is_a_config_error() -> None:
+def test_other_model_without_openai_key_is_a_config_error() -> None:
     """A non-Claude name used to go to Anthropic and ask for an Anthropic key."""
     with pytest.raises(llm.LLMConfigError, match="llm_openai_api_key"):
         llm.chat_turn("ctx", MESSAGES, model="Meta-Llama-3.3-70B")
 
 
-def test_default_model_is_claude_haiku() -> None:
-    """The old default, gpt-4.1 through GitHub Models, was retired on 2026-07-30."""
-    with pytest.raises(llm.LLMConfigError, match="llm_anthropic_api_key"):
+def test_default_model_is_free_gemini() -> None:
+    """GitHub Models (the old free default) was retired; Gemini's free tier replaces it."""
+    with pytest.raises(llm.LLMConfigError, match="llm_google_api_key"):
         llm.chat_turn("ctx", MESSAGES)
+
+
+def test_gemini_goes_to_googles_endpoint_without_a_token_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Google's compatibility layer documents neither max_tokens nor max_completion_tokens."""
+    seen = _fake_openai(monkeypatch, [_chunk("Hi.", "stop")])
+    reply = llm._chat_openai("sys", MESSAGES, "gemini-3.8-flash", "k", provider="google")
+    assert reply == "Hi."
+    assert seen["base_url"] == llm.GOOGLE_OPENAI_URL
+    assert "max_tokens" not in seen["create"]
+    assert "max_completion_tokens" not in seen["create"]
+
+
+def test_openai_uses_its_own_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = _fake_openai(monkeypatch, [_chunk("Hi.", "stop")])
+    llm._chat_openai("sys", MESSAGES, "gpt-4.1", api_key="k")
+    assert seen["base_url"] is None
+
+
+def test_google_free_tier_limit_is_explained(monkeypatch: pytest.MonkeyPatch) -> None:
+    response = httpx2.Response(
+        429, request=httpx2.Request("POST", "https://generativelanguage.googleapis.com")
+    )
+    error = openai.RateLimitError("quota", response=response, body=None)
+    _fake_openai(monkeypatch, [], error=error)
+    with pytest.raises(ValueError, match="free-tier limit.*Flash-Lite"):
+        llm._chat_openai("sys", MESSAGES, "gemini-3.8-flash", "k", provider="google")
+
+
+_G_REQUEST = httpx2.Request("POST", "https://generativelanguage.googleapis.com")
+
+
+@pytest.mark.parametrize(
+    "error, message",
+    [
+        (
+            openai.InternalServerError(
+                "high demand", response=httpx2.Response(503, request=_G_REQUEST), body=None
+            ),
+            r"gemini-3.8-flash is overloaded.*HTTP 503.*--model",
+        ),
+        (openai.APITimeoutError(request=_G_REQUEST), "in time"),
+        (openai.APIConnectionError(request=_G_REQUEST), "Could not reach Google"),
+    ],
+)
+def test_google_transient_errors_are_readable(
+    monkeypatch: pytest.MonkeyPatch, error: Exception, message: str
+) -> None:
+    """Live 2026-11-12: a 503 'high demand' reply printed as raw JSON."""
+    _fake_openai(monkeypatch, [], error=error)
+    with pytest.raises(ValueError, match=message):
+        llm._chat_openai("sys", MESSAGES, "gemini-3.8-flash", "k", provider="google")
+
+
+def test_google_key_error_names_the_google_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    response = httpx2.Response(
+        403, request=httpx2.Request("POST", "https://generativelanguage.googleapis.com")
+    )
+    error = openai.PermissionDeniedError("denied", response=response, body=None)
+    _fake_openai(monkeypatch, [], error=error)
+    with pytest.raises(ValueError, match="Google rejected the API key.*llm_google_api_key"):
+        llm._chat_openai("sys", MESSAGES, "gemini-3.8-flash", "k", provider="google")
 
 
 def test_claude_without_key_is_a_config_error() -> None:

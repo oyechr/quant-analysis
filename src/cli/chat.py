@@ -44,8 +44,9 @@ def chat(ctx, ticker, model, no_intro, debug_context):
       /help      Show available commands
       /quit      Exit the session
 
-    Configure API keys in config.json:
-        { "llm_anthropic_api_key": "sk-ant-...", "llm_model": "claude-haiku-5-5" }
+    Configure API keys in config.json (the default model is free with a
+    Google AI Studio key):
+        { "llm_google_api_key": "...", "llm_model": "gemini-3.8-flash" }
 
     Example: quant chat EQNR
     Example: quant chat AAPL --model claude-opus-5-5 --no-intro
