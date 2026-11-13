@@ -279,12 +279,12 @@ def test_anthropic_refusal_is_noted_and_returns_the_text(
 def _write_report(tmp_path: Any) -> None:
     import json
 
-    from tests.test_cli import _mock_report_data
+    from tests.helpers import mock_report_data
 
     report_dir = tmp_path / "AAPL" / "reports"
     report_dir.mkdir(parents=True)
     (report_dir / "full_report.json").write_text(
-        json.dumps(_mock_report_data("AAPL")), encoding="utf-8"
+        json.dumps(mock_report_data("AAPL")), encoding="utf-8"
     )
 
 

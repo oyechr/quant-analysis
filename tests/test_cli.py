@@ -3,19 +3,15 @@ Tests for the CLI interface.
 Uses Click's CliRunner for integration testing with mocked data fetching.
 """
 
-import sys
-from datetime import datetime
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.cli import cli
 from src.pipeline import AnalysisBundle
 from src.scoring import ScoringConfig
 from src.scoring.scorer import ScoringResult
+from tests.helpers import mock_report_data
 
 
 def _mock_scoring_result(ticker: str = "AAPL") -> ScoringResult:
@@ -34,26 +30,11 @@ def _mock_scoring_result(ticker: str = "AAPL") -> ScoringResult:
     )
 
 
-def _mock_report_data(ticker: str = "AAPL") -> dict:
-    """Create minimal report data for testing."""
-    return {
-        "ticker": ticker,
-        "generated_at": datetime.now().isoformat(),
-        "info": {"trailingPE": 28.5, "marketCap": 3000000000000},
-        "scoring": {"composite_score": 72.5},
-        "price_data": {"latest": {"close": 180.0}},
-        "technical_analysis": {},
-        "fundamental_analysis": {},
-        "risk_analysis": {},
-        "valuation_analysis": {},
-    }
-
-
 def _mock_bundle(ticker: str = "AAPL") -> AnalysisBundle:
     """Create a minimal AnalysisBundle as returned by ReportGenerator.generate()."""
     return AnalysisBundle(
         ticker=ticker,
-        report=_mock_report_data(ticker),
+        report=mock_report_data(ticker),
         scoring=_mock_scoring_result(ticker),
     )
 
@@ -270,7 +251,7 @@ class TestChatCommand:
         report_path = report_dir / "full_report.json"
         import json
 
-        report_path.write_text(json.dumps(_mock_report_data("AAPL")), encoding="utf-8")
+        report_path.write_text(json.dumps(mock_report_data("AAPL")), encoding="utf-8")
 
         runner = CliRunner()
         result = runner.invoke(
@@ -292,7 +273,7 @@ class TestChatCommand:
     def test_chat_generates_report_when_missing(self, mock_gen_cls, tmp_path):
         """chat auto-generates a report if none exists, then starts the session."""
         mock_gen = MagicMock()
-        mock_gen.generate_full_report.return_value = _mock_report_data("MSFT")
+        mock_gen.generate_full_report.return_value = mock_report_data("MSFT")
         mock_gen_cls.return_value = mock_gen
 
         # Patch chat_turn so we never hit the LLM; simulate user typing /quit
@@ -319,7 +300,7 @@ class TestChatCommand:
         import json
 
         (report_dir / "full_report.json").write_text(
-            json.dumps(_mock_report_data("AAPL")), encoding="utf-8"
+            json.dumps(mock_report_data("AAPL")), encoding="utf-8"
         )
 
         with patch("src.llm.chat_turn", return_value="Brief."):
@@ -340,7 +321,7 @@ class TestChatCommand:
         report_dir.mkdir(parents=True)
         import json
 
-        stale = _mock_report_data("AAPL") | {"generated_at": "2026-01-02T10:00:00"}
+        stale = mock_report_data("AAPL") | {"generated_at": "2026-01-02T10:00:00"}
         (report_dir / "full_report.json").write_text(json.dumps(stale), encoding="utf-8")
 
         result = CliRunner().invoke(
@@ -358,7 +339,7 @@ class TestChatCommand:
         import json
 
         (report_dir / "full_report.json").write_text(
-            json.dumps(_mock_report_data("AAPL")), encoding="utf-8"
+            json.dumps(mock_report_data("AAPL")), encoding="utf-8"
         )
 
         call_messages = []
@@ -390,7 +371,7 @@ class TestChatCommand:
         import json
 
         (report_dir / "full_report.json").write_text(
-            json.dumps(_mock_report_data("AAPL")), encoding="utf-8"
+            json.dumps(mock_report_data("AAPL")), encoding="utf-8"
         )
 
         call_messages = []

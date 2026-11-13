@@ -36,7 +36,7 @@ from src.tracking import (
 )
 from src.tracking.journal import period_return
 from src.utils import notify
-from tests.test_tracking import _flag, _report, _scoring
+from tests.helpers import make_flag, make_report, make_scoring
 
 DAY1 = date(2026, 10, 20)
 DAY2 = date(2026, 10, 22)
@@ -44,8 +44,8 @@ DAY2 = date(2026, 10, 22)
 
 def _row(day=DAY2, ticker="AAPL", score=60.0, signal="Hold", price=100.0, flags=()):
     return history_row(
-        _report(price, "USD"),
-        _scoring(ticker=ticker, score=score, signal=signal),
+        make_report(price, "USD"),
+        make_scoring(ticker=ticker, score=score, signal=signal),
         "test",
         red_flags=list(flags),
         today=day,
@@ -75,7 +75,11 @@ class TestJournalFile:
         )
         decision.take_snapshot(
             _row(
-                DAY1, flags=[_flag("Altman Z-Score in distress zone", "high"), _flag("Stale data")]
+                DAY1,
+                flags=[
+                    make_flag("Altman Z-Score in distress zone", "high"),
+                    make_flag("Stale data"),
+                ],
             )
         )
         save_journal([decision], path)
@@ -154,15 +158,15 @@ class TestCheckThesis:
 
     def test_broken(self):
         decision = _buy(stop=95, min_score=55)
-        decision.take_snapshot(_row(DAY1, flags=[_flag("Share count dilution", "high")]))
+        decision.take_snapshot(_row(DAY1, flags=[make_flag("Share count dilution", "high")]))
         current = _row(
             score=40,
             signal="Sell",
             price=90,
             flags=[
-                _flag("Share count dilution", "high"),
-                _flag("Altman Z-Score in distress zone", "high"),
-                _flag("Stale data"),
+                make_flag("Share count dilution", "high"),
+                make_flag("Altman Z-Score in distress zone", "high"),
+                make_flag("Stale data"),
             ],
         )
 
@@ -248,11 +252,11 @@ class TestCheckThesis:
 
     def test_flag_known_at_the_decision_from_an_old_row(self):
         # Rows before 2026-11 have no high_flags, but their flags list the titles
-        old = _row(DAY1, flags=[_flag("Share count dilution", "high")])
+        old = _row(DAY1, flags=[make_flag("Share count dilution", "high")])
         old["high_flags"] = None
         decision = _buy()
         decision.take_snapshot(old)
-        now = _row(flags=[_flag("Share count dilution", "high")])
+        now = _row(flags=[make_flag("Share count dilution", "high")])
         assert check_thesis(decision, now, DAY2) == ([], [])
 
     def test_return_needs_same_currency(self):

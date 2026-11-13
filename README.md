@@ -581,8 +581,8 @@ Report files come as JSON, Markdown and [TOON](https://github.com/toon-format/sp
 ## Development
 
 ```bash
-pip install -e ".[all,dev]"
-ruff check src tests && ruff format --check src tests && mypy src --ignore-missing-imports && pytest tests -q
+pip install -e ".[all,dev]" -c constraints.txt
+ruff check src tests && ruff format --check src tests && mypy src --ignore-missing-imports && pytest -q
 ```
 
-These are the same checks CI runs. The tests run offline against a fake Yahoo market. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the code layout and the Python API, and [docs/ROADMAP.md](docs/ROADMAP.md) for the plan and the design notes behind each phase.
+These are the same checks CI runs, on Ubuntu and Windows, with the versions pinned in `constraints.txt`. The tests run offline against a fake Yahoo market. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the code layout and the Python API, and [docs/ROADMAP.md](docs/ROADMAP.md) for the plan and the design notes behind each phase.

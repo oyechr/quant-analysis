@@ -264,6 +264,10 @@ class TestFetch:
 
     def test_default_user_agent_warns(self, caplog):
         source = Edgar13FSource(filers=[], cache_dir="data")
+        # Offline, so the default filers fail fast instead of reaching the socket guard
+        edgar = FakeEdgar([])
+        edgar.offline = True
+        source._get = edgar.get  # type: ignore[method-assign]
         with caplog.at_level(logging.WARNING):
             source.fetch_portfolios()
         assert "edgar_user_agent" in caplog.text

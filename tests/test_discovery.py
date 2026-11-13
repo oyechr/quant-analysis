@@ -8,13 +8,9 @@ Tests the cross-portfolio analyzer patterns:
 - Contrarian signals
 """
 
-import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.discovery.analyzer import PortfolioAnalyzer
 from src.discovery.models import (

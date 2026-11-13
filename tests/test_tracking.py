@@ -12,8 +12,6 @@ from click.testing import CliRunner
 
 from src.cli import cli
 from src.pipeline import AnalysisOptions
-from src.scoring.dimensions import DimensionResult
-from src.scoring.scorer import ScoringResult
 from src.screening import resolve_universe
 from src.tracking import (
     TickerChange,
@@ -29,31 +27,10 @@ from src.tracking import (
     render_text,
     track_changes,
 )
-from src.vetting.red_flags import RedFlag
+from tests.helpers import make_flag, make_report, make_scoring
 
 DAY1 = date(2026, 10, 20)
 DAY2 = date(2026, 10, 22)
-
-
-def _scoring(ticker="AAPL", score=60.0, signal="Hold", valuation=50.0, preset="default"):
-    return ScoringResult(
-        ticker=ticker,
-        composite_score=score,
-        signal=signal,
-        confidence="Medium",
-        confidence_score=0.7,
-        technical=DimensionResult("technical", 55.0),
-        valuation=DimensionResult("valuation", valuation),
-        config_name=preset,
-    )
-
-
-def _report(price=100.0, currency="USD"):
-    return {"info": {"current_price": price, "currency": currency}}
-
-
-def _flag(title, severity="medium"):
-    return RedFlag(severity=severity, title=title, detail="", rule="test")
 
 
 def _row(day=DAY1, **kwargs):
@@ -61,8 +38,8 @@ def _row(day=DAY1, **kwargs):
         k: kwargs.pop(k) for k in ("ticker", "score", "signal", "valuation") if k in kwargs
     }
     return history_row(
-        _report(**kwargs),
-        _scoring(**scoring_args),
+        make_report(**kwargs),
+        make_scoring(**scoring_args),
         "test",
         red_flags=[],
         today=day,
@@ -151,12 +128,12 @@ class TestWatchlist:
 class TestHistory:
     def test_row_from_report_and_score(self):
         flags = [
-            _flag("Altman Z-Score in distress zone", "high"),
-            _flag("Stale data"),
-            _flag("Stale data"),
+            make_flag("Altman Z-Score in distress zone", "high"),
+            make_flag("Stale data"),
+            make_flag("Stale data"),
         ]
 
-        row = history_row(_report(123.456), _scoring(), "vet", red_flags=flags, today=DAY1)
+        row = history_row(make_report(123.456), make_scoring(), "vet", red_flags=flags, today=DAY1)
 
         assert row is not None
         assert row["date"] == "2026-10-20" and row["source"] == "vet"
@@ -166,14 +143,15 @@ class TestHistory:
         assert flag_titles(row) == ["Altman Z-Score in distress zone", "Stale data"]
 
     def test_no_score_no_row(self):
-        assert history_row(_report(), None, "score") is None
-        assert history_row({"info": {}}, _scoring(), "score") is None  # unknown symbol
+        assert history_row(make_report(), None, "score") is None
+        assert history_row({"info": {}}, make_scoring(), "score") is None  # unknown symbol
 
     def test_one_row_per_ticker_preset_and_day(self, tmp_path):
         record_scores([_row(DAY1, score=50), _row(DAY1, ticker="MSFT")], str(tmp_path))
         record_scores([_row(DAY1, score=55), _row(DAY2, score=60)], str(tmp_path))
         record_scores(
-            [history_row(_report(), _scoring(preset="value"), "test", [], DAY2)], str(tmp_path)
+            [history_row(make_report(), make_scoring(preset="value"), "test", [], DAY2)],
+            str(tmp_path),
         )
 
         aapl = load_history(str(tmp_path), "aapl")
@@ -200,7 +178,11 @@ class TestHistory:
 
     def test_values_survive_the_csv(self, tmp_path):
         row = history_row(
-            _report(99.5, "NOK"), _scoring(), "x", [_flag("Weak interest coverage")], DAY1
+            make_report(99.5, "NOK"),
+            make_scoring(),
+            "x",
+            [make_flag("Weak interest coverage")],
+            DAY1,
         )
         record_scores([row], str(tmp_path))
 

@@ -4,13 +4,9 @@ Tests dimension scorers, composite scoring, configuration, and output formatting
 """
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
-
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.scoring import (
     FundamentalScorer,

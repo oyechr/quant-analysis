@@ -3,14 +3,9 @@ Tests for new quant methods: Factor Ranking, Relative Strength, PEAD, Risk Parit
 Focused on logic correctness with minimal redundancy.
 """
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.analysis.fundamental import calculate_pead_signal
 from src.analysis.technical import calculate_relative_strength
@@ -478,9 +473,8 @@ class TestGrowthRates:
         assert calculate_cagr(5.0, -10.0, 2) == 0.0
 
     def test_earnings_turning_into_a_loss_has_no_cagr(self, default_config):
-        from conftest import make_statements
-
         from src.analysis.fundamental import FundamentalAnalyzer
+        from tests.helpers import make_statements
 
         statements = make_statements()
         income = statements["income_stmt"].copy()
@@ -497,9 +491,8 @@ class TestGrowthRates:
 
     def test_longest_cagr_spans_four_years(self, default_config):
         # Column 4 is four years back; it was labelled 5y and compounded over five
-        from conftest import make_statements
-
         from src.analysis.fundamental import FundamentalAnalyzer
+        from tests.helpers import make_statements
 
         statements = make_statements(years=5)
         analyzer = FundamentalAnalyzer({}, {"income_stmt_annual": statements["income_stmt"]})
@@ -511,9 +504,8 @@ class TestGrowthRates:
 
 class TestPiotroski:
     def _score(self, shares=(2.5e9, 2.5e9), lt_debt=None):
-        from conftest import make_statements
-
         from src.analysis.fundamental import FundamentalAnalyzer
+        from tests.helpers import make_statements
 
         statements = make_statements()
         balance = statements["balance_sheet"].copy()
@@ -533,7 +525,7 @@ class TestPiotroski:
         assert self._score(shares=(2.5e9, 2.5e9)) == self._score(shares=(2.6e9, 2.5e9)) + 1
 
     def test_leverage_is_debt_over_assets(self, default_config):
-        from conftest import make_statements
+        from tests.helpers import make_statements
 
         assets_now, assets_prev = make_statements()["balance_sheet"].loc["Total Assets"].iloc[:2]
         # Assets grew 8%; debt up ~2.6% (19% of assets after 20%) is still lower leverage
@@ -572,9 +564,8 @@ class TestRiskFormulas:
 def test_piotroski_survives_zero_revenue_and_current_liabilities(default_config):
     # A pre-revenue biotech: tests 6, 8 and 9 have zero denominators. They
     # earn no point instead of crashing the whole fundamental analysis
-    from conftest import make_statements
-
     from src.analysis.fundamental import FundamentalAnalyzer
+    from tests.helpers import make_statements
 
     statements = make_statements()
     income = statements["income_stmt"].copy()

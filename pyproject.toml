@@ -1,3 +1,8 @@
+[build-system]
+# 64+ for PEP 660 editable installs (pip install -e .)
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "quant-analysis"
 version = "0.1.0"
@@ -63,8 +68,16 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.pytest.ini_options]
+minversion = "9.0"
 testpaths = ["tests"]
 python_files = "test_*.py"
+# Import `src` and `tests` from the checkout, so no test edits sys.path
+pythonpath = ["."]
+# Unknown markers and config keys are errors, an xfail that passes fails,
+# and parametrize ids must be unique
+strict = true
+# A new deprecation (pandas, numpy, yfinance) fails the run instead of scrolling past
+filterwarnings = ["error"]
 
 [tool.mypy]
 python_version = "3.14"

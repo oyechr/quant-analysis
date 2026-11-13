@@ -4,7 +4,7 @@ import runpy
 import sys
 from pathlib import Path
 
-from conftest import make_context, make_statements
+from tests.helpers import make_context, make_statements
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "python_api.py"
 

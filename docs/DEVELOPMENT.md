@@ -5,17 +5,21 @@ For working on the code. Using the tool is covered in the [README](../README.md)
 ## Setup and checks
 
 ```bash
-pip install -e ".[all,dev]"
+pip install -e ".[all,dev]" -c constraints.txt
 ```
 
-CI (`.github/workflows/ci.yml`) runs these four, and all of them block a merge:
+`constraints.txt` pins every package (dev tools included) to the versions the suite last passed with; pyproject.toml keeps loose floors. Its header says how to update it. Without `-c`, pip takes the latest releases, which is how to try an upgrade before updating the file.
+
+CI (`.github/workflows/ci.yml`) runs these four on `ubuntu-latest` and `windows-latest`, with the same constraints, and all of them block a merge:
 
 ```bash
 ruff check src tests
 ruff format --check src tests
 mypy src --ignore-missing-imports
-pytest tests -q
+pytest -q
 ```
+
+pytest's settings are in pyproject.toml: `strict` (unknown markers and config keys are errors, a passing xfail fails) and `filterwarnings = ["error"]`, so a new deprecation warning, or a `ResourceWarning` from an unclosed socket or file, fails the test that triggers it. Silence one deliberately with `@pytest.mark.filterwarnings("ignore:...")` on that test, never globally.
 
 Chain them with `&&` locally, so a failure stops the rest. `ruff check --fix` and `ruff format` fix most lint and format issues. The rules (in pyproject.toml) include bugbear and pyupgrade, so annotations use the modern forms: `list[str]`, `X | None`, `collections.abc.Callable`. mypy runs with `check_untyped_defs`, so the bodies of unannotated functions are checked too. mypy skips untyped libraries (yfinance, finta, toon, seaborn, matplotlib); `pandas-stubs` and `types-requests` come with the `dev` extra.
 
@@ -26,6 +30,7 @@ Chain them with `&&` locally, so a failure stops the rest. `ruff check --fix` an
   - The autouse `_isolated` fixture runs every test in its own `tmp_path` working directory with default settings, and blocks the network. yfinance's `Ticker`, `Industry` and `Sector` raise until `fake_market` replaces them (yfinance goes through curl_cffi, which a socket block alone misses). Commands read `portfolio/`, `watchlist.toml` and `config.json` and write `data/` in the working directory; before this, a test run from the repo once wrote into the real score history.
   - Use `tmp_path` as the cache dir.
   - `sample_data_dir` builds full reports for a few tickers once per session.
+  - Plain builders a test imports (`make_prices`, `make_statements`, `make_context`, `make_scoring`, `mock_report_data`, ...) live in `tests/helpers.py`. Fixtures stay in `conftest.py`. No test imports `conftest` or another test module, and no test edits `sys.path` (`pythonpath = ["."]` in pyproject.toml).
 - **Live checks:** run against Yahoo by hand, with the commands in the README. A refactor is checked with before/after snapshots of the help pages, the CLI output and the report files.
 - **Private data stays out of git:**
   - Never put real holdings, amounts or account numbers in committed files: code, tests, docs or CLI help.
@@ -129,7 +134,7 @@ quant-analysis/
 |   +-- daily.ps1                    # the daily `changes` run for Task Scheduler
 +-- examples/
 |   +-- python_api.py                # the Python API, end to end (see examples/README.md)
-+-- tests/                           # one test_*.py per area; conftest.py has the fake market
++-- tests/                           # one test_*.py per area; conftest.py has the fake market, helpers.py the builders
 +-- docs/
     +-- ROADMAP.md                   # phases, status, design notes
     +-- DEVELOPMENT.md               # this file

@@ -29,7 +29,7 @@ from src.backtest.engine import month_end_positions, ticker_observations
 from src.cli import cli
 from src.data_fetcher import DataFetcher
 from src.scoring import ScoringConfig
-from tests.conftest import make_prices
+from tests.helpers import make_prices
 
 TODAY = date(2026, 10, 22)
 

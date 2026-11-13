@@ -3,16 +3,12 @@ Tests for the TickerComparator and PortfolioView.
 Uses mocked report data — no network calls.
 """
 
-import sys
-from pathlib import Path
 from typing import Any, ClassVar
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.comparison.comparator import (
     PortfolioView,

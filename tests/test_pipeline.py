@@ -18,7 +18,7 @@ from src.markets import benchmark_for, benchmark_name
 from src.pipeline import AnalysisOptions, analyze_ticker
 from src.utils.concurrency import run_concurrently
 from src.utils.financial import align_daily_returns, convert_annual_to_daily_rate
-from tests.conftest import make_prices
+from tests.helpers import make_prices
 
 # ============================================================
 # Pipeline
@@ -222,7 +222,7 @@ class TestFailedRefreshKeepsCache:
     """yfinance hides most failures behind empty results instead of raising."""
 
     def test_empty_statements_keep_the_expired_cache(self, fake_market, tmp_path):
-        from tests.conftest import make_statements
+        from tests.helpers import make_statements
 
         fake_market.attribute_overrides["AAPL"] = make_statements()
         fetcher = DataFetcher(cache_dir=str(tmp_path))
@@ -245,7 +245,7 @@ class TestFailedRefreshKeepsCache:
 
     def test_an_empty_cache_is_retried_after_half_a_day(self, fake_market, tmp_path):
         # A throttled first fetch would otherwise leave no statements for a week
-        from tests.conftest import make_statements
+        from tests.helpers import make_statements
 
         fetcher = DataFetcher(cache_dir=str(tmp_path))
         assert fetcher.fetch_fundamentals("AAPL")["income_stmt_annual"].empty
