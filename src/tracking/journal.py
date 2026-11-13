@@ -287,11 +287,14 @@ def check_thesis(
         warnings.append(f"reached target {decision.target:g} (price {price:,.2f})")
     if decision.review_by is not None and decision.review_by <= today:
         warnings.append(f"review date {decision.review_by.isoformat()} reached")
-    if score is not None and decision.score is not None:
-        if decision.score - score >= THESIS_SCORE_DROP:
-            warnings.append(
-                f"score {decision.score:.0f} -> {score:.0f} since {decision.date.isoformat()}"
-            )
+    if (
+        score is not None
+        and decision.score is not None
+        and decision.score - score >= THESIS_SCORE_DROP
+    ):
+        warnings.append(
+            f"score {decision.score:.0f} -> {score:.0f} since {decision.date.isoformat()}"
+        )
     if current["date"] < (today - timedelta(days=STALE_DAYS)).isoformat():
         warnings.append(f"last scored {current['date']}")
     return broken, warnings

@@ -407,7 +407,7 @@ class TestYahooRatioCorrection:
 class TestMinorUnitListings:
     """BARC.L: price and converted statements in pence, Yahoo's market cap and ratios in GBP."""
 
-    BARC = {
+    BARC: ClassVar[dict] = {
         "currency": "GBp",
         "financial_currency": "GBP",
         "market_cap": 54.6e9,
@@ -477,7 +477,7 @@ def _sized(caps):
 
 
 class TestSizeAwarePeers:
-    TARGET = {
+    TARGET: ClassVar[dict] = {
         "name": "Apple Inc.",
         "currency": "USD",
         "market_cap": 4e12,

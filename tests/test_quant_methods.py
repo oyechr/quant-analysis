@@ -26,9 +26,9 @@ from src.utils.financial import calculate_kelly_criterion
 @pytest.fixture
 def sample_price_data():
     """Generate 252 days of synthetic price data"""
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     dates = pd.date_range("2025-06-27", periods=252, freq="B")
-    returns = np.random.normal(0.0005, 0.02, 252)
+    returns = rng.normal(0.0005, 0.02, 252)
     prices = 100.0 * np.cumprod(1 + returns)
     return pd.DataFrame({"Close": prices, "Volume": 1000000}, index=dates)
 
@@ -36,9 +36,9 @@ def sample_price_data():
 @pytest.fixture
 def sample_benchmark():
     """Benchmark (less volatile)"""
-    np.random.seed(99)
+    rng = np.random.default_rng(99)
     dates = pd.date_range("2025-06-27", periods=252, freq="B")
-    returns = np.random.normal(0.0003, 0.01, 252)
+    returns = rng.normal(0.0003, 0.01, 252)
     prices = 100.0 * np.cumprod(1 + returns)
     return pd.DataFrame({"Close": prices, "Volume": 5000000}, index=dates)
 

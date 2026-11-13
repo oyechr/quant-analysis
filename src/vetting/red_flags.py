@@ -12,6 +12,7 @@ be tested one at a time with synthetic reports.
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from itertools import pairwise
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..analysis.fundamental import altman_zones
@@ -357,7 +358,7 @@ def one_off_issuance(
     points = [(p, s) for p, s in zip(periods, shares, strict=False) if s is not None and s > 0][:4]
     changes = [
         (str(period)[:10], (newer / older - 1) * 100)
-        for (period, newer), (_, older) in zip(points, points[1:], strict=False)
+        for (period, newer), (_, older) in pairwise(points)
     ]
     if len(changes) < 2:
         return None

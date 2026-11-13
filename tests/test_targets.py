@@ -118,7 +118,7 @@ class TestTargetWeights:
     def test_sector_cap(self):
         sectors = {"E1": "Energy", "E2": "Energy", "T": "Tech", "F": "Financials"}
         targets, notes = _targets(
-            {t: 0.25 for t in sectors},
+            dict.fromkeys(sectors, 0.25),
             sectors=sectors,
             settings=_settings(max_position=1.0, max_sector=0.35),
         )
@@ -130,11 +130,11 @@ class TestTargetWeights:
     def test_funds_are_exempt_from_the_sector_cap(self):
         sectors = {"F1": "Fund", "F2": "Fund", "S": "Tech"}
         targets, _ = _targets(
-            {t: 1 / 3 for t in sectors},
+            dict.fromkeys(sectors, 1 / 3),
             sectors=sectors,
             settings=_settings(max_position=1.0, max_sector=0.35),
         )
-        assert targets == pytest.approx({t: 1 / 3 for t in sectors})
+        assert targets == pytest.approx(dict.fromkeys(sectors, 1 / 3))
 
     def test_everything_capped_leaves_weight_unallocated(self):
         targets, notes = _targets(

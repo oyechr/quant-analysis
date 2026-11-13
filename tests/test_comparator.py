@@ -199,12 +199,12 @@ class TestCorrelationMatrix:
 
         # Mock fetch_ticker to return synthetic price data
         dates = pd.date_range("2024-01-01", periods=250, freq="B")
-        np.random.seed(42)
+        rng = np.random.default_rng(42)
 
         mock_fetcher = MagicMock()
         mock_fetcher.fetch_ticker.side_effect = [
-            pd.DataFrame({"Close": np.random.randn(250).cumsum() + 100}, index=dates),
-            pd.DataFrame({"Close": np.random.randn(250).cumsum() + 200}, index=dates),
+            pd.DataFrame({"Close": rng.standard_normal(250).cumsum() + 100}, index=dates),
+            pd.DataFrame({"Close": rng.standard_normal(250).cumsum() + 200}, index=dates),
         ]
         comp.fetcher = mock_fetcher
 
@@ -316,7 +316,7 @@ class TestPortfolioView:
             PortfolioView(tickers=["AAPL", "MSFT"], weights=[0.5])
 
     def test_weights_not_summing_to_one_raises(self):
-        with pytest.raises(ValueError, match="must sum to 1.0"):
+        with pytest.raises(ValueError, match=r"must sum to 1\.0"):
             PortfolioView(tickers=["AAPL", "MSFT"], weights=[0.3, 0.3])
 
 

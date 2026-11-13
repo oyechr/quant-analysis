@@ -294,16 +294,14 @@ def calculate_support_resistance(
     # Find local maxima (resistance candidates)
     resistance_candidates = []
     for i in range(window, len(highs) - window):
-        if highs[i] == max(highs[i - window : i + window + 1]):
-            if not math.isnan(highs[i]):
-                resistance_candidates.append((float(highs[i]), i))
+        if highs[i] == max(highs[i - window : i + window + 1]) and not math.isnan(highs[i]):
+            resistance_candidates.append((float(highs[i]), i))
 
     # Find local minima (support candidates)
     support_candidates = []
     for i in range(window, len(lows) - window):
-        if lows[i] == min(lows[i - window : i + window + 1]):
-            if not math.isnan(lows[i]):
-                support_candidates.append((float(lows[i]), i))
+        if lows[i] == min(lows[i - window : i + window + 1]) and not math.isnan(lows[i]):
+            support_candidates.append((float(lows[i]), i))
 
     # Cluster nearby levels (within 2% of each other)
     def cluster_levels(

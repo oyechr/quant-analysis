@@ -67,7 +67,7 @@ def echo_status(message: str = "") -> None:
     click.echo(message, err=True)
 
 
-def echo_progress(ticker: str, error: Optional[str]) -> None:
+def echo_progress(ticker: str, error: Optional[Exception | str]) -> None:
     """One ✓/✗ line per ticker, on stderr."""
     mark = "✗" if error else "✓"
     echo_status(f"  {mark} {ticker}" + (f": {error}" if error else ""))

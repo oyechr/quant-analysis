@@ -56,7 +56,7 @@ def format_comparison_table(df: pd.DataFrame, title: str = "") -> str:
 
     # Rows
     for idx in df.index:
-        row = f"  {str(idx):<{index_width}}"
+        row = f"  {idx!s:<{index_width}}"
         for col in df.columns:
             val = _fmt_cell(df.at[idx, col])
             row += f"  {val:>{col_widths[col]}}"
@@ -282,8 +282,8 @@ def format_correlation_heatmap(
     # Rows
     # A float array, not .at: pandas-stubs types .at as any scalar (bytes too)
     values = corr_df.to_numpy(dtype=float)
-    for idx, row_values in zip(corr_df.index, values):
-        row = f"  {str(idx):>{col_width}}"
+    for idx, row_values in zip(corr_df.index, values, strict=True):
+        row = f"  {idx!s:>{col_width}}"
         for val in row_values:
             row += f"  {val:>{col_width}.3f}"
         lines.append(row)

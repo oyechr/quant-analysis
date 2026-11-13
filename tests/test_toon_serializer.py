@@ -44,7 +44,7 @@ def _values_equal(a, b, float_tolerance: float = 1e-9) -> bool:
     if isinstance(a, list):
         if len(a) != len(b):
             return False
-        return all(_values_equal(x, y, float_tolerance) for x, y in zip(a, b))
+        return all(_values_equal(x, y, float_tolerance) for x, y in zip(a, b, strict=True))
     if isinstance(a, float):
         if math.isnan(a) and math.isnan(b):
             return True
@@ -202,7 +202,7 @@ class TestFullReportToon:
         decoded = toon_decode(toon_str, DecodeOptions(strict=False))
 
         assert isinstance(decoded, dict)
-        expected_keys = {k for k in data.keys() if k not in TOON_EXCLUDED_SECTIONS}
+        expected_keys = {k for k in data if k not in TOON_EXCLUDED_SECTIONS}
         assert set(decoded.keys()) == expected_keys
         assert decoded["ticker"] == data["ticker"]
 

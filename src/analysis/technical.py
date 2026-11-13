@@ -5,7 +5,7 @@ Calculates technical indicators from price data using finta library
 
 import logging
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
 from finta import TA
@@ -67,7 +67,9 @@ class TechnicalAnalyzer:
     # ==================== Trend Indicators ====================
 
     def calculate_moving_averages(
-        self, sma_periods: List[int] = [20, 50, 200], ema_periods: List[int] = [12, 26]
+        self,
+        sma_periods: Sequence[int] = (20, 50, 200),
+        ema_periods: Sequence[int] = (12, 26),
     ) -> pd.DataFrame:
         """
         Calculate Simple and Exponential Moving Averages

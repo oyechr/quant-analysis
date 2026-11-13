@@ -6,6 +6,7 @@ Each scorer normalizes metrics to a 0-100 scale and tracks data coverage for con
 
 import logging
 from dataclasses import dataclass, field
+from itertools import pairwise
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..analysis.fundamental import altman_zones
@@ -154,7 +155,7 @@ def _piecewise(x: float, points: Sequence[Tuple[float, float]]) -> float:
     """
     if x <= points[0][0]:
         return points[0][1]
-    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+    for (x0, y0), (x1, y1) in pairwise(points):
         if x <= x1:
             return y0 + (x - x0) / (x1 - x0) * (y1 - y0) if x1 > x0 else y1
     return points[-1][1]

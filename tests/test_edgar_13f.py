@@ -87,7 +87,7 @@ class FakeEdgar:
                 "reportDate": [f[3] for f in self.filings],
             }
             return FakeResponse(json.dumps({"filings": {"recent": recent}}).encode())
-        for form, accession, _, _, table, kind in self.filings:
+        for _form, accession, _, _, table, kind in self.filings:
             base = f"{ARCHIVE}/{accession.replace('-', '')}"
             if url == f"{base}/index.json":
                 items = [{"name": "primary_doc.xml"}, {"name": "infotable.xml"}]

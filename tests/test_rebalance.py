@@ -27,7 +27,7 @@ from src.portfolio.rebalance import AF_TAX_RATE, BUY, SELL, buy_account
 from src.portfolio.review import ADD, CHECK, EXIT, HOLD, REVIEW, TRIM, AccountPosition
 from src.portfolio.targets import TickerTarget
 
-LOOSE = dict(max_position=1.0, max_sector=1.0, min_trade=0.0, max_new=3)
+LOOSE = {"max_position": 1.0, "max_sector": 1.0, "min_trade": 0.0, "max_new": 3}
 
 
 def _r(

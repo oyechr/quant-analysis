@@ -206,17 +206,17 @@ def screen(
             listed = load_watchlist(watchlist_path)
         except ValueError as e:
             raise click.ClickException(str(e)) from e
-        best = [c for c in result.scored if c.scoring][:add_top]
-        new = [c for c in best if c.ticker not in listed]  # keep existing theses
-        for c in new:
+        scored = [(c.ticker, c.scoring) for c in result.scored if c.scoring][:add_top]
+        new = [(t, s) for t, s in scored if t not in listed]  # keep existing theses
+        for ticker, scoring in new:
             thesis = (
                 f"screen {resolved.label} ({config_name}): "
-                f"{c.scoring.composite_score:.0f} {c.scoring.signal}"
+                f"{scoring.composite_score:.0f} {scoring.signal}"
             )
-            add_to_watchlist(watchlist_path, [c.ticker], thesis=thesis)
-        already = len(best) - len(new)
+            add_to_watchlist(watchlist_path, [ticker], thesis=thesis)
+        already = len(scored) - len(new)
         click.echo(
-            f"  Watchlist: added {', '.join(c.ticker for c in new) or 'nothing'}"
+            f"  Watchlist: added {', '.join(t for t, _ in new) or 'nothing'}"
             + (f" ({already} already listed)" if already else "")
         )
 
@@ -301,7 +301,7 @@ def discover(ctx, min_overlap, top, sector, enrich, list_sources):
     echo_status(f"  Loaded {len(portfolios)} portfolios")
 
     # Show action stats from filing diff
-    actions = {}
+    actions: dict[str, int] = {}
     for p in portfolios:
         for h in p.holdings:
             if h.action:

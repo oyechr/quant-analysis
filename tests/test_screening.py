@@ -3,6 +3,7 @@ Tests for universe resolution and the two-stage screener.
 """
 
 import json
+from typing import ClassVar
 
 import pandas as pd
 import pytest
@@ -242,7 +243,7 @@ def test_parse_amount_rejects_garbage():
 
 
 class TestScreenFilters:
-    INFO = {
+    INFO: ClassVar[dict] = {
         "sector": "Technology",
         "industry": "Semiconductors",
         "market_cap": 5e9,

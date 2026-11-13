@@ -52,7 +52,8 @@ def dataframe_to_records(
 
     Args:
         df: DataFrame to convert
-        preserve_index: Whether to include index as a column
+        preserve_index: Whether to include a named RangeIndex as a column (any
+            other index, such as dates, is always kept as a column)
         handle_datetimes: Whether to convert datetime columns to strings
 
     Returns:
@@ -62,7 +63,7 @@ def dataframe_to_records(
         return []
 
     # Reset index if needed to preserve it as a column
-    if preserve_index and df.index.name or not isinstance(df.index, pd.RangeIndex):
+    if (preserve_index and df.index.name) or not isinstance(df.index, pd.RangeIndex):
         df_copy = df.reset_index()
     else:
         df_copy = df.copy()

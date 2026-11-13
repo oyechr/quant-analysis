@@ -48,10 +48,14 @@ line-length = 100
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I"]
+select = ["E", "F", "W", "I", "B", "C4", "NPY", "RUF", "SIM"]
 # E: pycodestyle errors  F: pyflakes  W: pycodestyle warnings  I: isort
+# B: bugbear  C4: comprehensions  NPY: numpy  RUF: ruff  SIM: simplify
 ignore = [
     "E501",  # line too long — handled by formatter
+    "RUF001", "RUF002", "RUF003",  # ×, σ and – in text are deliberate
+    "RUF022",  # __all__ lists are grouped by topic, not sorted
+    "SIM108",  # a ternary isn't always clearer than if/else
 ]
 
 [tool.ruff.format]
@@ -67,6 +71,9 @@ python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
+check_untyped_defs = true
+strict_equality = true
+no_implicit_reexport = true
 
 # Libraries that ship no type information (no stubs exist for them)
 [[tool.mypy.overrides]]

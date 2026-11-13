@@ -4,7 +4,7 @@ The provider SDKs are replaced by fakes; the errors are the SDKs' own classes.
 """
 
 from types import SimpleNamespace
-from typing import Any, Dict, Iterator, List, Optional, Type
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Type
 
 import anthropic
 import httpx2
@@ -22,7 +22,7 @@ MESSAGES = [{"role": "user", "content": "Bear case?"}]
 
 
 class _FakeAnthropicStream:
-    def __init__(self, texts: List[str], stop_reason: str, error: Optional[Exception]):
+    def __init__(self, texts: Sequence[str], stop_reason: str, error: Optional[Exception]):
         self._texts = texts
         self._stop_reason = stop_reason
         self._error = error
@@ -45,7 +45,7 @@ class _FakeAnthropicStream:
 
 def _fake_anthropic(
     monkeypatch: pytest.MonkeyPatch,
-    texts: List[str] = ["Fine."],
+    texts: Sequence[str] = ("Fine.",),
     stop_reason: str = "end_turn",
     error: Optional[Exception] = None,
     open_error: Optional[Exception] = None,
@@ -152,7 +152,7 @@ def test_google_free_tier_limit_is_explained(monkeypatch: pytest.MonkeyPatch) ->
     )
     error = openai.RateLimitError("quota", response=response, body=None)
     _fake_openai(monkeypatch, [], error=error)
-    with pytest.raises(ValueError, match="free-tier limit.*Flash-Lite"):
+    with pytest.raises(ValueError, match=r"free-tier limit.*Flash-Lite"):
         llm._chat_openai("sys", MESSAGES, "gemini-3.8-flash", "k", provider="google")
 
 
@@ -187,7 +187,7 @@ def test_google_key_error_names_the_google_setting(monkeypatch: pytest.MonkeyPat
     )
     error = openai.PermissionDeniedError("denied", response=response, body=None)
     _fake_openai(monkeypatch, [], error=error)
-    with pytest.raises(ValueError, match="Google rejected the API key.*llm_google_api_key"):
+    with pytest.raises(ValueError, match=r"Google rejected the API key.*llm_google_api_key"):
         llm._chat_openai("sys", MESSAGES, "gemini-3.8-flash", "k", provider="google")
 
 

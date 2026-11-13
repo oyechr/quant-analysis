@@ -407,8 +407,11 @@ class TestDailyChanges:
         # Without the journal, a first run has nothing to report
         quiet = CliRunner().invoke(
             cli,
-            ["--output-dir", str(tmp_path / "fresh"), "changes", "--file", str(watchlist)]
-            + ["--portfolio", str(portfolio), "--journal", str(tmp_path / "none.toml"), "--notify"],
+            [
+                *["--output-dir", str(tmp_path / "fresh"), "changes", "--file", str(watchlist)],
+                *["--portfolio", str(portfolio), "--journal", str(tmp_path / "none.toml")],
+                "--notify",
+            ],
         )
         assert quiet.exit_code == 0, quiet.output
         assert len(sent) == 1 and "Nothing worth a notification" in quiet.output
@@ -421,8 +424,16 @@ class TestDailyChanges:
 
         out = CliRunner().invoke(
             cli,
-            ["--output-dir", str(tmp_path), "changes", "AAPL", "--journal", str(journal)]
-            + ["--save", "--notify"],
+            [
+                "--output-dir",
+                str(tmp_path),
+                "changes",
+                "AAPL",
+                "--journal",
+                str(journal),
+                "--save",
+                "--notify",
+            ],
         )
 
         assert out.exit_code == 0, out.output
@@ -433,8 +444,15 @@ class TestDailyChanges:
         # A second run the same day: still broken, but not news
         again = CliRunner().invoke(
             cli,
-            ["--output-dir", str(tmp_path), "changes", "AAPL", "--journal", str(journal)]
-            + ["--notify"],
+            [
+                "--output-dir",
+                str(tmp_path),
+                "changes",
+                "AAPL",
+                "--journal",
+                str(journal),
+                "--notify",
+            ],
         )
         assert again.exit_code == 0, again.output
         assert len(sent) == 1 and "Nothing worth a notification" in again.output

@@ -174,3 +174,44 @@ def test_cli_import(exports, tmp_path):
     assert "Test Corp" in result.output  # unmapped
     written = pd.read_csv(out)
     assert set(written["account"].astype(str)) == {"ASK", "22220000"}
+
+
+def test_cli_import_verify(exports, tmp_path, monkeypatch):
+    # --verify looks each mapped ticker up once and flags a currency mismatch;
+    # unmapped names (empty ticker) are skipped
+    ticker_map = tmp_path / "tickers.csv"
+    ticker_map.write_text(
+        "name,ticker\nExample Energy,EXE.OL\nSample Bank,SMB.OL\n", encoding="utf-8"
+    )
+    infos = {
+        "EXE.OL": {"name": "Example Energy ASA", "currency": "NOK"},
+        "SMB.OL": {"name": "Sample Bank ASA", "currency": "USD"},
+    }
+    looked_up = []
+
+    def fake_info(self, ticker, *args, **kwargs):
+        looked_up.append(ticker)
+        return infos[ticker]
+
+    monkeypatch.setattr("src.cli.portfolio.DataFetcher.get_ticker_info", fake_info)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--output-dir",
+            str(tmp_path / "data"),
+            "import-portfolio",
+            *map(str, exports),
+            "--map",
+            str(ticker_map),
+            "--out",
+            str(tmp_path / "p.csv"),
+            "--verify",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert sorted(looked_up) == ["EXE.OL", "SMB.OL"]  # SMB.OL is in two accounts
+    lines = {line.split()[0]: line for line in result.output.splitlines() if ".OL" in line}
+    assert "Example Energy ASA" in lines["EXE.OL"] and "<- check" not in lines["EXE.OL"]
+    assert "NOK/USD" in lines["SMB.OL"] and "<- check" in lines["SMB.OL"]

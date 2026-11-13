@@ -249,11 +249,13 @@ def test_stage_progress_closes_open_bars_on_error():
         def update(self, n):
             pass
 
-    with patch("src.cli.common.click.progressbar", Bar):
-        with pytest.raises(RuntimeError):
-            with stage_progress({"rank": "Ranking"}) as progress:
-                progress("rank", 1, 3)
-                raise RuntimeError("fetch failed")
+    with (
+        patch("src.cli.common.click.progressbar", Bar),
+        pytest.raises(RuntimeError),
+        stage_progress({"rank": "Ranking"}) as progress,
+    ):
+        progress("rank", 1, 3)
+        raise RuntimeError("fetch failed")
     assert closed == [True]
 
 
@@ -269,4 +271,4 @@ def test_default_paths_come_from_one_module():
 
     assert DEFAULT_WATCHLIST == paths.WATCHLIST
     assert DEFAULT_JOURNAL == paths.JOURNAL
-    assert DEFAULT_TARGETS == Path(paths.TARGETS)
+    assert Path(paths.TARGETS) == DEFAULT_TARGETS

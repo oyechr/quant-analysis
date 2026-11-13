@@ -35,7 +35,7 @@ _KNOWN_NAMES: Dict[str, str] = {
     "^NDX": "Nasdaq-100",
     "^IXIC": "Nasdaq Composite",
     "^DJI": "Dow Jones",
-    **{symbol: name for symbol, name in DEFAULT_BENCHMARKS.values()},
+    **dict(DEFAULT_BENCHMARKS.values()),
 }
 
 

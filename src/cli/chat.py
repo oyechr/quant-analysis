@@ -126,7 +126,7 @@ def chat(ctx, ticker, model, no_intro, debug_context):
         try:
             response = llm_chat_turn(context, [{"role": "user", "content": intro}], model=model)
         except (LLMConfigError, ImportError) as e:
-            raise click.ClickException(str(e))
+            raise click.ClickException(str(e)) from e
         except ValueError as e:
             # An API or network error may pass, so the session goes on
             click.echo(f"\n  Error: {e}\n  (No brief; ask a question to try again.)")

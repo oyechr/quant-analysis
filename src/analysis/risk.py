@@ -12,7 +12,7 @@ Calculates risk and performance metrics for stock analysis:
 
 import logging
 from statistics import NormalDist
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -527,7 +527,7 @@ class RiskMetrics:
             return None
 
     def calculate_rolling_ratios(
-        self, price_data: pd.DataFrame, windows: List[int] = [30, 60, 90]
+        self, price_data: pd.DataFrame, windows: Sequence[int] = (30, 60, 90)
     ) -> Dict[str, Any]:
         """
         Calculate rolling Sharpe and Sortino ratios over different windows
@@ -878,7 +878,7 @@ class RiskMetrics:
         md: List[str] = []
 
         # Market Regime (context-setting — put first)
-        if "regime" in metrics and metrics["regime"]:
+        if metrics.get("regime"):
             regime = metrics["regime"]
             regime_name = regime.get("regime", "unknown").upper()
             md.append(f"## Current Market Regime: {regime_name}")
@@ -896,7 +896,7 @@ class RiskMetrics:
         # Performance Summary
         md.append("## Performance")
         md.append("")
-        if "returns" in metrics and metrics["returns"]:
+        if metrics.get("returns"):
             returns = metrics["returns"]
             cum_ret = returns.get("cumulative_return", 0)
             ann_ret = returns.get("annualized_return", 0)
@@ -919,7 +919,7 @@ class RiskMetrics:
             "Higher volatility = bigger potential gains AND losses.*"
         )
         md.append("")
-        if "volatility" in metrics and metrics["volatility"]:
+        if metrics.get("volatility"):
             vol = metrics["volatility"]
             ann_vol = vol.get("annualized_volatility", 0)
             md.append(f"- **Annualized volatility:** {ann_vol:.0%}")
@@ -971,7 +971,7 @@ class RiskMetrics:
             "If you bought at the worst time, this is how much you would have lost.*"
         )
         md.append("")
-        if "drawdown" in metrics and metrics["drawdown"]:
+        if metrics.get("drawdown"):
             dd = metrics["drawdown"]
             max_dd = dd.get("max_drawdown", 0)
             curr_dd = dd.get("current_drawdown", 0)
@@ -991,7 +991,7 @@ class RiskMetrics:
         bench_symbol = (metrics.get("market_risk") or {}).get("benchmark", self.benchmark_ticker)
         md.append(f"## Market Risk (vs. {benchmark_name(bench_symbol)})")
         md.append("")
-        if "market_risk" in metrics and metrics["market_risk"]:
+        if metrics.get("market_risk"):
             mr = metrics["market_risk"]
             beta = mr.get("beta", 0)
             alpha = mr.get("alpha", 0)
@@ -1027,7 +1027,7 @@ class RiskMetrics:
         md.append("")
         md.append('> *VaR answers: "What\'s my worst-case loss on a bad day?"*')
         md.append("")
-        if "var_95" in metrics and metrics["var_95"]:
+        if metrics.get("var_95"):
             var95 = metrics["var_95"]
             md.append(
                 f"- **On a bad day (5% chance):** could lose **{abs(var95.get('var_historical', 0)):.1%}** or more"
@@ -1041,7 +1041,7 @@ class RiskMetrics:
             md.append("")
 
         # Distribution Stats
-        if "distribution" in metrics and metrics["distribution"]:
+        if metrics.get("distribution"):
             dist = metrics["distribution"]
             md.append("## Return Distribution Shape")
             md.append("")
@@ -1070,7 +1070,7 @@ class RiskMetrics:
             md.append("")
 
         # Kelly Criterion (Position Sizing)
-        if "kelly_criterion" in metrics and metrics["kelly_criterion"]:
+        if metrics.get("kelly_criterion"):
             kelly = metrics["kelly_criterion"]
             md.append("## Position Sizing (Kelly Criterion)")
             md.append("")

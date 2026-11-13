@@ -514,9 +514,14 @@ class FundamentalAnalyzer:
         # 5. Decreasing leverage (long-term debt / total assets, as Piotroski defines it)
         lt_debt = self._get_value(self.balance_sheet_a, "Long Term Debt", 0)
         lt_debt_prev = self._get_value(self.balance_sheet_a, "Long Term Debt", 1)
-        if lt_debt is not None and lt_debt_prev is not None and total_assets and total_assets_prev:
-            if lt_debt / total_assets < lt_debt_prev / total_assets_prev:
-                score += 1
+        if (
+            lt_debt is not None
+            and lt_debt_prev is not None
+            and total_assets
+            and total_assets_prev
+            and lt_debt / total_assets < lt_debt_prev / total_assets_prev
+        ):
+            score += 1
 
         # 6. Increasing Current Ratio
         current_assets = self._get_value(self.balance_sheet_a, "Current Assets", 0)
@@ -1415,9 +1420,9 @@ def calculate_pead_signal(
                     post_earnings_return = (price_now - price_at_earnings) / price_at_earnings
 
                     # Drift confirmed if price moved in same direction as surprise
-                    if latest_surprise > 0 and post_earnings_return > 0:
-                        drift_confirmed = True
-                    elif latest_surprise < 0 and post_earnings_return < 0:
+                    if (latest_surprise > 0 and post_earnings_return > 0) or (
+                        latest_surprise < 0 and post_earnings_return < 0
+                    ):
                         drift_confirmed = True
                     else:
                         drift_confirmed = False

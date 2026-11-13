@@ -318,7 +318,7 @@ def _growth_lines(growth: Dict[str, Any]) -> Lines:
             rows.append([label, _signed_pct(rate.get("1y")), _signed_pct(rate.get("3y_cagr"))])
     if not rows:
         return []
-    return ["### Growth", ""] + _table(["Metric", "1 Year", "3 Year (CAGR)"], rows)
+    return ["### Growth", "", *_table(["Metric", "1 Year", "3 Year (CAGR)"], rows)]
 
 
 def _margin_lines(margins: Dict[str, Any]) -> Lines:
@@ -333,7 +333,7 @@ def _margin_lines(margins: Dict[str, Any]) -> Lines:
         value = margins.get(key)
         if value is not None:
             rows.append([label, f"{value:.1f}%", _above(value, ladder, lowest).title()])
-    return ["### Profitability", ""] + _table(["Margin", "Value", "Meaning"], rows)
+    return ["### Profitability", "", *_table(["Margin", "Value", "Meaning"], rows)]
 
 
 def _quality_lines(quality: Dict[str, Any]) -> Lines:
@@ -792,7 +792,7 @@ def _table(headers: List[str], rows: List[List[Any]]) -> Lines:
         "|" + "|".join("-" * (len(h) + 2) for h in headers) + "|",
     ]
     lines += ["| " + " | ".join(_md_cell(cell) for cell in row) + " |" for row in rows]
-    return lines + [""]
+    return [*lines, ""]
 
 
 def _md_text(value: Any) -> str:

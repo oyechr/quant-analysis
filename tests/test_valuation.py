@@ -17,7 +17,7 @@ from src.vetting import fair_value_range, render_text
 
 def _statements(fcf=(100.0, 100.0, 100.0), debt=200.0, cash=50.0, interest=10.0, tax=0.25):
     years = [pd.Timestamp(f"{2025 - i}-12-31") for i in range(len(fcf))]
-    cash_flow = pd.DataFrame({d: {"Free Cash Flow": v} for d, v in zip(years, fcf)})
+    cash_flow = pd.DataFrame({d: {"Free Cash Flow": v} for d, v in zip(years, fcf, strict=True)})
     balance = pd.DataFrame(
         {
             years[0]: {
@@ -166,7 +166,7 @@ class TestDividends:
         analyzer = _analyzer(price=50.0)
         analyzer.info["payoutRatio"] = 0.0
         analyzer.dividends_data = _quarterly_dividends(
-            {year: (4, 0.5) for year in range(this_year - 17, this_year - 5)}
+            dict.fromkeys(range(this_year - 17, this_year - 5), (4, 0.5))
         )
         dividends = analyzer.analyze_dividends()
         assert dividends.get("dividend_yield") is None

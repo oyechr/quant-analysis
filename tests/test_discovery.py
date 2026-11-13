@@ -34,13 +34,13 @@ from src.discovery.sources.edgar_13f import diff_holdings
 def _make_holding(
     ticker: str,
     name: str = "",
-    sector: str = None,
-    industry: str = None,
-    value: float = None,
-    shares: float = None,
-    weight: float = None,
-    action: str = None,
-    date: datetime = None,
+    sector: str | None = None,
+    industry: str | None = None,
+    value: float | None = None,
+    shares: float | None = None,
+    weight: float | None = None,
+    action: str | None = None,
+    date: datetime | None = None,
 ) -> Holding:
     """Helper to create a Holding with defaults."""
     return Holding(
@@ -57,7 +57,7 @@ def _make_holding(
 
 
 def _make_portfolio(
-    name: str, holdings: list[Holding], filing_date: datetime = None
+    name: str, holdings: list[Holding], filing_date: datetime | None = None
 ) -> TrackedPortfolio:
     """Helper to create a TrackedPortfolio."""
     return TrackedPortfolio(

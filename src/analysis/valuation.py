@@ -632,7 +632,8 @@ class ValuationAnalyzer:
             levels = (10, 25, 50, 75, 90)
             percentiles = np.percentile(intrinsic_values, levels)
             result["confidence_intervals"] = {
-                f"ci_{level}": float(value) for level, value in zip(levels, percentiles)
+                f"ci_{level}": float(value)
+                for level, value in zip(levels, percentiles, strict=True)
             }
             result["scenarios"] = {
                 "bear_case": float(percentiles[0]),

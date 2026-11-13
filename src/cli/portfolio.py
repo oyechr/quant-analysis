@@ -89,15 +89,21 @@ def import_portfolio(ctx, exports, map_path, out_path, labels, verify):
         fetcher = DataFetcher(cache_dir=ctx.obj["output_dir"])
         width = max([6, *(len(t) for t in holdings["ticker"])])
         click.echo(f"\n  {'Ticker':<{width}} {'Nordnet name':<32} {'Yahoo name':<32} Currency")
-        for row in holdings.drop_duplicates("ticker").itertuples():
-            if not row.ticker:
+        unique = holdings.drop_duplicates("ticker")
+        for ticker, name, currency in zip(
+            unique["ticker"].astype(str),
+            unique["name"].astype(str),
+            unique["currency"].astype(str),
+            strict=True,
+        ):
+            if not ticker:
                 continue
-            info = fetcher.get_ticker_info(row.ticker)
+            info = fetcher.get_ticker_info(ticker)
             yahoo_ccy = info.get("currency") or "?"
-            same = major_currency(yahoo_ccy)[0] == major_currency(row.currency)[0]
+            same = major_currency(yahoo_ccy)[0] == major_currency(currency)[0]
             click.echo(
-                f"  {row.ticker:<{width}} {row.name[:32]:<32} {str(info.get('name') or 'NOT FOUND')[:32]:<32} "
-                f"{row.currency}/{yahoo_ccy}{'' if same else '  <- check'}"
+                f"  {ticker:<{width}} {name[:32]:<32} {str(info.get('name') or 'NOT FOUND')[:32]:<32} "
+                f"{currency}/{yahoo_ccy}{'' if same else '  <- check'}"
             )
 
 

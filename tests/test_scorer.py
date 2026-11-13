@@ -127,7 +127,7 @@ class TestScoringConfig:
         assert abs(total - 1.0) < 0.01
 
     def test_invalid_weights_raises(self):
-        with pytest.raises(ValueError, match="must sum to 1.0"):
+        with pytest.raises(ValueError, match=r"must sum to 1\.0"):
             DimensionWeight(technical=0.5, fundamental=0.5, risk=0.5, valuation=0.5)
 
     def test_signal_thresholds(self):
@@ -608,7 +608,7 @@ class TestValuationScorer:
         return {
             "dcf_valuation": {
                 "discount_premium_pct": overrides.get("dcf_premium", -20.0),
-                "error": overrides.get("dcf_error", None),
+                "error": overrides.get("dcf_error"),
             },
             "dividend_analysis": {
                 "pays_dividends": overrides.get("pays_dividends", True),

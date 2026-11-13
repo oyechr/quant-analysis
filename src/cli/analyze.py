@@ -1,6 +1,7 @@
 """Single-ticker and multi-ticker analysis: report, score, vet, compare, watch."""
 
 import time
+from typing import Dict, Optional
 
 import click
 
@@ -20,6 +21,7 @@ from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisOptions
 from ..reporting import ReportGenerator
 from ..scoring import format_score_table
+from ..scoring.scorer import ScoringResult
 from ..utils.concurrency import run_concurrently
 from ..utils.files import atomic_write_text, ticker_dir
 from .common import (
@@ -84,7 +86,8 @@ def report(
         output_format=output_format,
     )
 
-    if not has_score(bundle.report, bundle.scoring):
+    scoring = bundle.scoring
+    if scoring is None or not has_score(bundle.report, scoring):
         raise click.ClickException(f"No data for {ticker}. Check the symbol (e.g. EQNR.OL).")
 
     reports_dir = ticker_dir(output_dir, ticker) / "reports"
@@ -100,9 +103,9 @@ def report(
 
     from ..tracking import history_row
 
-    record_history(output_dir, [history_row(bundle.report, bundle.scoring, "report")])
+    record_history(output_dir, [history_row(bundle.report, scoring, "report")])
     click.echo()
-    click.echo(bundle.scoring.format_scorecard())
+    click.echo(scoring.format_scorecard())
 
     echo_status(f"\nFiles saved in: {reports_dir}")
 
@@ -133,17 +136,15 @@ def score(ctx, tickers, config_name, workers):
     tickers_list = list(dict.fromkeys(t.upper() for t in tickers))
 
     echo_status(f"  Analyzing {len(tickers_list)} ticker(s)...")
-    results = {}
+    results: Dict[str, Optional[ScoringResult]] = {}
     history = []
     for ticker, bundle, error in run_concurrently(
         lambda t: generator.generate(t, options, output_format=output_format),
         tickers_list,
         workers=workers,
     ):
-        if error is None and not has_score(bundle.report, bundle.scoring):
-            error = "no data (check the symbol)"
-        if error is not None:
-            echo_status(f"  ✗ Error for {ticker}: {error}")
+        if bundle is None or not has_score(bundle.report, bundle.scoring):
+            echo_status(f"  ✗ Error for {ticker}: {error or 'no data (check the symbol)'}")
             results[ticker] = None
             continue
         echo_freshness_warnings(ticker, bundle.report)
