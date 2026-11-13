@@ -8,13 +8,14 @@ What Would Change the Verdict
 """
 
 import copy
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ..scoring import ScoringConfig, StockScorer
 from ..scoring.dimensions import is_financial
 from ..utils.financial import finite_float
 
-SIGNAL_BANDS: List[str] = ["Strong Sell", "Sell", "Hold", "Buy", "Strong Buy"]
+SIGNAL_BANDS: list[str] = ["Strong Sell", "Sell", "Hold", "Buy", "Strong Buy"]
 
 # Search range for flip prices, as multiples of the current price
 _MIN_FACTOR = 0.2
@@ -34,12 +35,12 @@ _PRICE_MULTIPLES = (
 )
 
 
-def fair_value_range(report: Dict[str, Any]) -> Dict[str, Any]:
+def fair_value_range(report: dict[str, Any]) -> dict[str, Any]:
     """Collect model-implied values per share next to the current price."""
     info = report.get("info") or {}
     valuation = report.get("valuation_analysis") or {}
     price = current_price(report)
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "current_price": price,
         "currency": info.get("currency"),
         "currency_note": _currency_note(report),
@@ -96,7 +97,7 @@ def fair_value_range(report: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def analyst_targets(info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def analyst_targets(info: dict[str, Any]) -> dict[str, Any] | None:
     """Yahoo's analyst price-target consensus (listing currency), if any."""
     mean = finite_float(info.get("target_mean_price"))
     if mean is None or mean <= 0:
@@ -112,7 +113,7 @@ def analyst_targets(info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
-def reprice_report(report: Dict[str, Any], factor: float) -> Dict[str, Any]:
+def reprice_report(report: dict[str, Any], factor: float) -> dict[str, Any]:
     """
     A copy of the report as if the price were `factor` times today's.
 
@@ -148,8 +149,8 @@ def reprice_report(report: Dict[str, Any], factor: float) -> Dict[str, Any]:
 
 
 def signal_flip_prices(
-    report: Dict[str, Any], config: Optional[ScoringConfig] = None
-) -> Dict[str, Any]:
+    report: dict[str, Any], config: ScoringConfig | None = None
+) -> dict[str, Any]:
     """
     Price at which the composite signal moves one band up and one band down.
 
@@ -175,7 +176,7 @@ def signal_flip_prices(
         return SIGNAL_BANDS.index(result.signal)
 
     current = band(1.0)
-    flips: Dict[str, Any] = {"current_signal": SIGNAL_BANDS[current], "current_price": price}
+    flips: dict[str, Any] = {"current_signal": SIGNAL_BANDS[current], "current_price": price}
 
     if current < len(SIGNAL_BANDS) - 1:
         flips["up"] = _search(band, current + 1, price, going_up=True)
@@ -186,7 +187,7 @@ def signal_flip_prices(
 
 def _search(
     band: Callable[[float], int], target: int, price: float, going_up: bool
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Bisect for the factor where the band first reaches `target`."""
     signal = SIGNAL_BANDS[target]
     if going_up:
@@ -218,7 +219,7 @@ def _out_of_range(factor: float) -> str:
     return f"not reached by valuation alone within {(factor - 1) * 100:+.0f}%"
 
 
-def current_price(report: Dict[str, Any]) -> Optional[float]:
+def current_price(report: dict[str, Any]) -> float | None:
     info = report.get("info") or {}
     for value in (
         info.get("current_price"),
@@ -231,7 +232,7 @@ def current_price(report: Dict[str, Any]) -> Optional[float]:
     return None
 
 
-def _currency_note(report: Dict[str, Any]) -> Optional[str]:
+def _currency_note(report: dict[str, Any]) -> str | None:
     """How statement values relate to the price currency, when they differ."""
     info = report.get("info") or {}
     listing, statements = info.get("currency"), info.get("financial_currency")

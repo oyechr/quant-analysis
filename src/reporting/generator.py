@@ -7,7 +7,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..data_fetcher import DataFetcher
 from ..pipeline import AnalysisBundle, AnalysisOptions, analyze_ticker
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class ReportGenerator:
     """Generates comprehensive reports from financial data"""
 
-    def __init__(self, data_fetcher: Optional[DataFetcher] = None, output_dir: str = "data"):
+    def __init__(self, data_fetcher: DataFetcher | None = None, output_dir: str = "data"):
         """
         Initialize ReportGenerator
 
@@ -44,8 +44,8 @@ class ReportGenerator:
         include_fundamental: bool = True,
         include_risk: bool = True,
         include_valuation: bool = True,
-        scoring_config: Optional[ScoringConfig] = None,
-    ) -> Dict[str, Any]:
+        scoring_config: ScoringConfig | None = None,
+    ) -> dict[str, Any]:
         """
         Generate comprehensive report with all available data
 
@@ -84,7 +84,7 @@ class ReportGenerator:
     def generate(
         self,
         ticker: str,
-        options: Optional[AnalysisOptions] = None,
+        options: AnalysisOptions | None = None,
         output_format: str = "all",
     ) -> AnalysisBundle:
         """
@@ -132,8 +132,8 @@ class ReportGenerator:
         self,
         ticker: str,
         report_type: str,
-        json_data: Optional[Dict[str, Any]] = None,
-        markdown_lines: Optional[List[str]] = None,
+        json_data: dict[str, Any] | None = None,
+        markdown_lines: list[str] | None = None,
     ):
         """
         Save analysis as JSON and/or markdown files
@@ -162,14 +162,14 @@ class ReportGenerator:
             atomic_write_text(output_file, "\n".join(md))
             logger.info(f"{report_type.replace('_', ' ').title()} markdown saved: {output_file}")
 
-    def _save_json_report(self, ticker: str, data: Dict[str, Any]):
+    def _save_json_report(self, ticker: str, data: dict[str, Any]):
         """Save report as JSON"""
         reports_dir = self._get_reports_dir(ticker)
         output_file = reports_dir / "full_report.json"
         atomic_write_text(output_file, json.dumps(data, indent=2, default=str))
         logger.info(f"JSON report saved: {output_file}")
 
-    def _save_toon_report(self, ticker: str, data: Dict[str, Any]):
+    def _save_toon_report(self, ticker: str, data: dict[str, Any]):
         """Save report as TOON (Token-Oriented Object Notation) for LLM consumption"""
         reports_dir = ticker_dir(self.output_dir, ticker) / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
@@ -195,7 +195,7 @@ class ReportGenerator:
     def _save_markdown_report(
         self,
         ticker: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         technical_analyzer=None,
         fundamental_analyzer=None,
         risk_analyzer_tuple=None,
@@ -283,7 +283,7 @@ class ReportGenerator:
             markdown_lines=risk_analyzer.format_markdown(ticker=ticker, metrics=metrics),
         )
 
-    def _save_valuation_json(self, ticker: str, valuation_data: Dict[str, Any]):
+    def _save_valuation_json(self, ticker: str, valuation_data: dict[str, Any]):
         """Save detailed valuation analysis as separate JSON file"""
         self._save_analysis_files(ticker, "valuation_analysis", json_data=valuation_data)
 

@@ -29,8 +29,9 @@ headquarters, close to but not always the domicile).
 import logging
 import math
 import statistics
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -114,10 +115,10 @@ class Trade:
     amount: float  # base currency
     account: str
     reason: str
-    tax: Optional[float] = None  # estimated tax on an AF sale (negative: a deductible loss)
+    tax: float | None = None  # estimated tax on an AF sale (negative: a deductible loss)
     new: bool = False  # a candidate, not a holding
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ticker": self.ticker,
             "name": self.name,
@@ -134,16 +135,16 @@ class Trade:
 @dataclass
 class Proposal:
     base_currency: str
-    trades: List[Trade] = field(default_factory=list)
-    shares_after: Dict[str, float] = field(default_factory=dict)
+    trades: list[Trade] = field(default_factory=list)
+    shares_after: dict[str, float] = field(default_factory=dict)
     cash: float = 0.0  # given
     reserve: float = 0.0
     proceeds: float = 0.0
     spent: float = 0.0
-    notes: List[str] = field(default_factory=list)  # trades not made, and why
-    warnings: List[str] = field(default_factory=list)  # about the inputs (account types)
-    before: Dict[str, Any] = field(default_factory=dict)  # exposure summaries
-    after: Dict[str, Any] = field(default_factory=dict)
+    notes: list[str] = field(default_factory=list)  # trades not made, and why
+    warnings: list[str] = field(default_factory=list)  # about the inputs (account types)
+    before: dict[str, Any] = field(default_factory=dict)  # exposure summaries
+    after: dict[str, Any] = field(default_factory=dict)
 
     @property
     def cash_left(self) -> float:
@@ -154,7 +155,7 @@ class Proposal:
         """Net estimated AF tax: gains less deductible losses."""
         return sum(t.tax or 0.0 for t in self.trades)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "base_currency": self.base_currency,
             "trades": [t.to_dict() for t in self.trades],
@@ -176,8 +177,8 @@ class Proposal:
 
 
 def propose_trades(
-    holdings: List[HoldingReview],
-    candidates: List[HoldingReview],
+    holdings: list[HoldingReview],
+    candidates: list[HoldingReview],
     settings: TargetSettings,
     cash: float = 0.0,
     base_currency: str = "NOK",
@@ -194,17 +195,17 @@ def propose_trades(
     proposal = Proposal(base_currency=base_currency, cash=cash, reserve=limits.cash_reserve)
     valued = [r for r in holdings if r.value and r.price_base]
     total = sum(r.value or 0.0 for r in valued) + cash
-    amounts: Dict[str, float] = {r.holding.ticker: r.value or 0.0 for r in valued}
-    shares: Dict[str, float] = {r.holding.ticker: r.holding.shares for r in holdings}
+    amounts: dict[str, float] = {r.holding.ticker: r.value or 0.0 for r in valued}
+    shares: dict[str, float] = {r.holding.ticker: r.holding.shares for r in holdings}
     # Shares left per account, reduced by every sale (a holding can be trimmed
     # and then sold again for its sector)
-    accounts: Dict[str, List[AccountPosition]] = {
+    accounts: dict[str, list[AccountPosition]] = {
         r.holding.ticker: [replace(p) for p in r.holding.positions] for r in holdings
     }
     proposal.warnings = [
         unlabeled_account_note(a) for a in unlabeled_accounts(r.holding for r in valued)
     ]
-    sectors: Dict[str, str] = {r.holding.ticker: r.sector or "Unknown" for r in valued}
+    sectors: dict[str, str] = {r.holding.ticker: r.sector or "Unknown" for r in valued}
     if total <= 0:
         proposal.shares_after = shares
         return proposal
@@ -341,7 +342,7 @@ def propose_trades(
     return proposal
 
 
-def _not_a_buy(c: HoldingReview, held: bool) -> Optional[str]:
+def _not_a_buy(c: HoldingReview, held: bool) -> str | None:
     if held:
         return "already held"
     if c.error or not c.vet:
@@ -358,8 +359,8 @@ def _not_a_buy(c: HoldingReview, held: bool) -> Optional[str]:
 
 
 def _sell_by_account(
-    r: HoldingReview, n: float, reason: str, left: List[AccountPosition]
-) -> List[Trade]:
+    r: HoldingReview, n: float, reason: str, left: list[AccountPosition]
+) -> list[Trade]:
     """
     Split a sale over the accounts, tax-free ones first, with the tax on AF
     sales. `left` is the shares still held per account; it's reduced.
@@ -399,7 +400,7 @@ def buy_account(r: HoldingReview) -> str:
     return "ASK or AF" if r.country in EEA_COUNTRIES else "AF only (not EEA)"
 
 
-def _first(reasons: List[str]) -> str:
+def _first(reasons: list[str]) -> str:
     return reasons[0] if reasons else ""
 
 
@@ -408,14 +409,14 @@ def _first(reasons: List[str]) -> str:
 
 def rebalance_portfolio(
     review: PortfolioReview,
-    candidates: List[str],
+    candidates: list[str],
     settings: TargetSettings,
     cash: float = 0.0,
-    fetcher: Optional[DataFetcher] = None,
-    options: Optional[AnalysisOptions] = None,
+    fetcher: DataFetcher | None = None,
+    options: AnalysisOptions | None = None,
     workers: int = DEFAULT_WORKERS,
     data_dir: str = "data",
-    progress: Optional[Callable[[str, Optional[Exception]], None]] = None,
+    progress: Callable[[str, Exception | None], None] | None = None,
 ) -> Proposal:
     """Vet the candidates, propose trades, and measure the exposure after them."""
     fetcher = fetcher or DataFetcher(cache_dir=data_dir)
@@ -462,14 +463,14 @@ def rebalance_portfolio(
 
 
 def _vet_candidates(
-    tickers: List[str],
+    tickers: list[str],
     fetcher: DataFetcher,
     options: AnalysisOptions,
     workers: int,
     data_dir: str,
-    progress: Optional[Callable[[str, Optional[Exception]], None]],
-) -> List[HoldingReview]:
-    def vet(ticker: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    progress: Callable[[str, Exception | None], None] | None,
+) -> list[HoldingReview]:
+    def vet(ticker: str) -> tuple[dict[str, Any], dict[str, Any]]:
         result = vet_ticker(ticker, fetcher=fetcher, options=options, data_dir=data_dir)
         return result.to_dict(), result.report.get("info") or {}
 
@@ -488,11 +489,11 @@ def _vet_candidates(
     return reviews
 
 
-def _moves_with(closes: pd.Series, returns: pd.DataFrame) -> Optional[Tuple[str, float]]:
+def _moves_with(closes: pd.Series, returns: pd.DataFrame) -> tuple[str, float] | None:
     """The holding a candidate moves with most (weekly correlation >= the threshold)."""
     weekly = closes.resample("W-FRI").last().pct_change(fill_method=None).rename("_candidate")
     joined = pd.concat([weekly, returns], axis=1, join="inner")
-    best: Optional[Tuple[str, float]] = None
+    best: tuple[str, float] | None = None
     for ticker in returns.columns:
         pair = joined[["_candidate", ticker]].dropna()
         if len(pair) < MIN_WEEKS:
@@ -508,8 +509,8 @@ def _moves_with(closes: pd.Series, returns: pd.DataFrame) -> Optional[Tuple[str,
 
 
 def _after_trades(
-    reviews: List[HoldingReview], shares: Dict[str, float], cash: float = 0.0
-) -> List[HoldingReview]:
+    reviews: list[HoldingReview], shares: dict[str, float], cash: float = 0.0
+) -> list[HoldingReview]:
     """
     Copies of the reviews valued at the post-trade share counts. Weights are
     of the holdings plus the cash left, the basis the limits are set on.
@@ -525,7 +526,7 @@ def _after_trades(
     return after
 
 
-def _with_cash(summary: Dict[str, Any], cash_share: float) -> Dict[str, Any]:
+def _with_cash(summary: dict[str, Any], cash_share: float) -> dict[str, Any]:
     """The cash left as its own line in the sector, country and currency mix."""
     if cash_share < 0.0005:  # it would show as 0.0%
         return summary

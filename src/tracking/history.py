@@ -14,9 +14,10 @@ from every command compare like with like.
 
 import csv
 import logging
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 from ..scoring.scorer import ScoringResult
 from ..utils.files import atomic_write
@@ -47,7 +48,7 @@ DIMENSIONS = ("technical", "fundamental", "risk", "valuation")
 _NUMERIC = {"score", "price", *DIMENSIONS}
 _FLAG_SEPARATOR = " | "
 
-Row = Dict[str, Any]
+Row = dict[str, Any]
 
 
 def history_path(data_dir: str = "data") -> Path:
@@ -55,12 +56,12 @@ def history_path(data_dir: str = "data") -> Path:
 
 
 def history_row(
-    report: Dict[str, Any],
-    scoring: Optional[ScoringResult],
+    report: dict[str, Any],
+    scoring: ScoringResult | None,
     source: str,
-    red_flags: Optional[List[RedFlag]] = None,
-    today: Optional[date] = None,
-) -> Optional[Row]:
+    red_flags: list[RedFlag] | None = None,
+    today: date | None = None,
+) -> Row | None:
     """
     One history row from a report and its score. None if nothing was scored or
     there's no price: an unknown symbol still gets a meaningless score.
@@ -76,7 +77,7 @@ def history_row(
     titles = list(dict.fromkeys(f.title for f in red_flags))
     high = list(dict.fromkeys(f.title for f in red_flags if f.severity == "high"))
 
-    def _dim(name: str) -> Optional[float]:
+    def _dim(name: str) -> float | None:
         dim = getattr(scoring, name)
         return round(dim.score, 1) if dim is not None else None
 
@@ -97,7 +98,7 @@ def history_row(
     }
 
 
-def record_scores(rows: Iterable[Optional[Row]], data_dir: str = "data") -> Optional[Path]:
+def record_scores(rows: Iterable[Row | None], data_dir: str = "data") -> Path | None:
     """Append rows, replacing any row for the same date, ticker and preset."""
     new = [row for row in rows if row]
     if not new:
@@ -119,9 +120,9 @@ def record_scores(rows: Iterable[Optional[Row]], data_dir: str = "data") -> Opti
 
 def load_history(
     data_dir: str = "data",
-    ticker: Optional[str] = None,
-    preset: Optional[str] = None,
-) -> List[Row]:
+    ticker: str | None = None,
+    preset: str | None = None,
+) -> list[Row]:
     """History rows, oldest first, optionally for one ticker and/or preset."""
     path = history_path(data_dir)
     if not path.exists():
@@ -138,7 +139,7 @@ def load_history(
     ]
 
 
-def flag_titles(row: Optional[Row], column: str = "flags") -> List[str]:
+def flag_titles(row: Row | None, column: str = "flags") -> list[str]:
     """Red flag titles in a row: all of them, or the high ones with column="high_flags"."""
     if not row or not row.get(column):
         return []
@@ -149,7 +150,7 @@ def _key(row: Row) -> tuple[str, str, str]:
     return row["date"], row["ticker"], row["preset"]
 
 
-def _parse(raw: Dict[str, str], path: Path, line: int) -> Optional[Row]:
+def _parse(raw: dict[str, str], path: Path, line: int) -> Row | None:
     """
     One row from the CSV. A cell that isn't a number is read as missing, and
     a row without a date, ticker or preset is skipped: one hand-edited or

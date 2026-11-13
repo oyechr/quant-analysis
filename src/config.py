@@ -6,13 +6,13 @@ Centralized configuration for analysis parameters
 import json
 import logging
 import os
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CACHE_TTL_HOURS: Dict[str, float] = {
+DEFAULT_CACHE_TTL_HOURS: dict[str, float] = {
     "prices": 12,  # daily bars; refresh after each session
     "info": 24,  # price-dependent ratios (P/E, market cap)
     "earnings": 72,
@@ -33,7 +33,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Keys config.json can leave out: the provider's usual environment variable
 # fills them in (config.json wins when both are set)
-ENV_KEYS: Dict[str, Tuple[str, ...]] = {
+ENV_KEYS: dict[str, tuple[str, ...]] = {
     "llm_anthropic_api_key": ("ANTHROPIC_API_KEY",),
     "llm_openai_api_key": ("OPENAI_API_KEY",),
     "llm_google_api_key": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
@@ -61,11 +61,11 @@ class AnalysisConfig:
     benchmark_ticker: str = "^GSPC"  # S&P 500 index (default for US / unmapped exchanges)
     # Per-exchange benchmark overrides keyed by Yahoo suffix, e.g. {".OL": "OBX.OL"}.
     # Built-in defaults live in src/markets.py.
-    benchmark_by_suffix: Dict[str, str] = field(default_factory=dict)
+    benchmark_by_suffix: dict[str, str] = field(default_factory=dict)
 
     # ==================== Technical Analysis ====================
     # Moving averages
-    sma_periods: Optional[List[int]] = None  # Will default to [20, 50, 200]
+    sma_periods: list[int] | None = None  # Will default to [20, 50, 200]
     ema_short: int = 12
     ema_long: int = 26
 
@@ -92,24 +92,24 @@ class AnalysisConfig:
     cache_enabled: bool = True
     # Max cache age per resource, in hours. Older entries are refetched.
     # A value <= 0 disables expiry for that resource.
-    cache_ttl_hours: Dict[str, float] = field(default_factory=lambda: dict(DEFAULT_CACHE_TTL_HOURS))
+    cache_ttl_hours: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_CACHE_TTL_HOURS))
 
     # ==================== LLM Integration ====================
     llm_model: str = "gemini-3.8-flash"  # free tier with llm_google_api_key
     # repr=False keeps keys out of logs and tracebacks that print the config
-    llm_anthropic_api_key: Optional[str] = field(default=None, repr=False)
-    llm_openai_api_key: Optional[str] = field(default=None, repr=False)
-    llm_google_api_key: Optional[str] = field(default=None, repr=False)  # AI Studio (Gemini)
+    llm_anthropic_api_key: str | None = field(default=None, repr=False)
+    llm_openai_api_key: str | None = field(default=None, repr=False)
+    llm_google_api_key: str | None = field(default=None, repr=False)  # AI Studio (Gemini)
 
     # ==================== Discovery / EDGAR ====================
     edgar_user_agent: str = DEFAULT_EDGAR_USER_AGENT
     # Optional (https://www.openfigi.com/api): CUSIP -> ticker lookups run
     # 100 per request instead of 10, at 10x the rate
-    openfigi_api_key: Optional[str] = field(default=None, repr=False)
+    openfigi_api_key: str | None = field(default=None, repr=False)
 
     # Validation sets
-    valid_periods: Optional[Set[str]] = None
-    valid_intervals: Optional[Set[str]] = None
+    valid_periods: set[str] | None = None
+    valid_intervals: set[str] | None = None
 
     def __post_init__(self) -> None:
         """Initialize default values for mutable fields"""
@@ -152,7 +152,7 @@ class AnalysisConfig:
             }
 
     @classmethod
-    def load_from_file(cls, path: Path) -> "AnalysisConfig":
+    def load_from_file(cls, path: Path) -> AnalysisConfig:
         """
         Load configuration from JSON file
 
@@ -167,7 +167,7 @@ class AnalysisConfig:
             return cls()
 
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = json.load(f)
 
             # A removed or misspelled key would make cls(**data) fail and drop
@@ -230,7 +230,7 @@ class AnalysisConfig:
 
 
 # Global default configuration instance
-_default_config: Optional[AnalysisConfig] = None
+_default_config: AnalysisConfig | None = None
 
 
 def get_config() -> AnalysisConfig:

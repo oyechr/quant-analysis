@@ -7,7 +7,7 @@ Provides consistent DataFrame/Series to JSON conversion with proper handling of:
 """
 
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -46,7 +46,7 @@ def format_date(date_value: Any, format_type: str = "iso") -> str:
 
 def dataframe_to_records(
     df: pd.DataFrame, preserve_index: bool = True, handle_datetimes: bool = True
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Convert DataFrame to list of records (dicts) with proper serialization
 
@@ -77,11 +77,11 @@ def dataframe_to_records(
     df_clean = df_copy.replace({float("nan"): None})
 
     # Cast to correct type for type checker
-    records: List[Dict[str, Any]] = df_clean.to_dict("records")  # type: ignore
+    records: list[dict[str, Any]] = df_clean.to_dict("records")  # type: ignore
     return records
 
 
-def dataframe_to_json_dict(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+def dataframe_to_json_dict(df: pd.DataFrame) -> dict[str, dict[str, Any]]:
     """
     Convert DataFrame to nested dict format for JSON serialization
     Handles Timestamp column names and NaN values

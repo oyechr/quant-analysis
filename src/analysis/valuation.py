@@ -4,7 +4,7 @@ Performs intrinsic value estimation and dividend/earnings analysis
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -73,7 +73,7 @@ def implied_growth(
     years: int = PROJECTION_YEARS,
     net_debt: float = 0.0,
     bounds: tuple[float, float] = (-50.0, 100.0),
-) -> Optional[float]:
+) -> float | None:
     """
     Reverse DCF: the starting FCF growth (%) at which the DCF equity value
     equals `target_equity` (e.g. the market cap), or None if outside `bounds`.
@@ -110,11 +110,11 @@ class ValuationAnalyzer:
     def __init__(
         self,
         ticker: str,
-        ticker_info: Dict[str, Any],
-        price_data: Optional[pd.DataFrame] = None,
-        fundamentals: Optional[Dict[str, pd.DataFrame]] = None,
-        earnings_data: Optional[Dict[str, pd.DataFrame]] = None,
-        dividends_data: Optional[pd.Series] = None,
+        ticker_info: dict[str, Any],
+        price_data: pd.DataFrame | None = None,
+        fundamentals: dict[str, pd.DataFrame] | None = None,
+        earnings_data: dict[str, pd.DataFrame] | None = None,
+        dividends_data: pd.Series | None = None,
     ):
         """
         Initialize valuation analyzer
@@ -133,8 +133,8 @@ class ValuationAnalyzer:
         self.fundamentals = fundamentals or {}
         self.earnings_data = earnings_data or {}
         self.dividends_data = dividends_data
-        self._results: Optional[Dict[str, Any]] = None
-        self._dcf_inputs_cache: Optional[Dict[str, Any]] = None
+        self._results: dict[str, Any] | None = None
+        self._dcf_inputs_cache: dict[str, Any] | None = None
 
         # Extract currency (default to USD if not specified)
         self.currency = ticker_info.get("currency", "USD")
@@ -153,7 +153,7 @@ class ValuationAnalyzer:
 
     # ==================== Helper Methods ====================
 
-    def _get_info_value(self, key: str) -> Optional[float]:
+    def _get_info_value(self, key: str) -> float | None:
         """
         Get value from ticker info, trying both camelCase and snake_case keys
 
@@ -177,14 +177,14 @@ class ValuationAnalyzer:
         return value if value and value > 0 else None
 
     def _get_value(
-        self, df: Optional[pd.DataFrame], row_name: str, col_index: int = 0
-    ) -> Optional[float]:
+        self, df: pd.DataFrame | None, row_name: str, col_index: int = 0
+    ) -> float | None:
         """Safely extract value from financial statement DataFrame"""
         return safe_get_dataframe_value(df, row_name, col_index)
 
     def _calculate_cagr(
         self, ending_value: float, beginning_value: float, num_periods: int
-    ) -> Optional[float]:
+    ) -> float | None:
         """Compound annual growth in %, or None when undefined (a non-positive end)"""
         if ending_value <= 0 or beginning_value <= 0 or num_periods <= 0:
             return None
@@ -275,11 +275,11 @@ class ValuationAnalyzer:
 
     def calculate_dcf_valuation(
         self,
-        growth_rate: Optional[float] = None,
+        growth_rate: float | None = None,
         terminal_growth_rate: float = TERMINAL_GROWTH,
-        wacc: Optional[float] = None,
+        wacc: float | None = None,
         projection_years: int = PROJECTION_YEARS,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Two-stage DCF: FCF growth fades linearly from a starting rate to the
         terminal rate over `projection_years`, then a Gordon terminal value.
@@ -295,7 +295,7 @@ class ValuationAnalyzer:
             Dictionary with DCF valuation results, including the starting growth
             the current price implies (`implied_growth_pct`, a reverse DCF)
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "intrinsic_value_per_share": None,
             "current_price": self.current_price,
             "currency": self.currency,
@@ -382,7 +382,7 @@ class ValuationAnalyzer:
 
         return result
 
-    def _dcf_inputs(self) -> Dict[str, Any]:
+    def _dcf_inputs(self) -> dict[str, Any]:
         """
         Inputs shared by the DCF and Monte Carlo models (memoized).
 
@@ -391,7 +391,7 @@ class ValuationAnalyzer:
         """
         if self._dcf_inputs_cache is not None:
             return self._dcf_inputs_cache
-        inputs: Dict[str, Any]
+        inputs: dict[str, Any]
         fcf = free_cash_flow(self.fundamentals.get("cash_flow_annual"), 0)
         shares = self._shares_outstanding()
         if fcf is None:
@@ -421,7 +421,7 @@ class ValuationAnalyzer:
         self._dcf_inputs_cache = inputs
         return inputs
 
-    def _shares_outstanding(self) -> Optional[float]:
+    def _shares_outstanding(self) -> float | None:
         shares = self._get_info_value("sharesOutstanding") or self._get_info_value(
             "impliedSharesOutstanding"
         )
@@ -432,7 +432,7 @@ class ValuationAnalyzer:
             return market_cap / self.current_price
         return None
 
-    def _latest_balance_value(self, *rows: str) -> Optional[float]:
+    def _latest_balance_value(self, *rows: str) -> float | None:
         """First of `rows` found in the latest balance sheet (quarterly, then annual)."""
         for name in ("balance_sheet_quarterly", "balance_sheet_annual"):
             sheet = self.fundamentals.get(name)
@@ -452,7 +452,7 @@ class ValuationAnalyzer:
             return 0.0, "unavailable"
         return (debt or 0.0) - (cash or 0.0), "balance_sheet"
 
-    def _estimate_fcf_growth_rate(self) -> Optional[float]:
+    def _estimate_fcf_growth_rate(self) -> float | None:
         """Historical FCF growth (CAGR over the last 3 annual values), unclamped"""
         try:
             cash_flow_a = self.fundamentals.get("cash_flow_annual")
@@ -476,7 +476,7 @@ class ValuationAnalyzer:
 
         return None
 
-    def _cost_of_equity(self) -> tuple[float, Dict[str, Any]]:
+    def _cost_of_equity(self) -> tuple[float, dict[str, Any]]:
         """
         CAPM cost of equity (%): risk-free rate + adjusted beta x equity risk premium.
 
@@ -493,7 +493,7 @@ class ValuationAnalyzer:
         else:
             beta = 1.0
         cost = risk_free + beta * premium
-        details: Dict[str, Any] = {
+        details: dict[str, Any] = {
             "risk_free_rate": risk_free,
             "equity_risk_premium": premium,
             "beta_raw": raw_beta,
@@ -502,7 +502,7 @@ class ValuationAnalyzer:
         }
         return cost, details
 
-    def _estimate_wacc_details(self) -> tuple[float, Dict[str, Any]]:
+    def _estimate_wacc_details(self) -> tuple[float, dict[str, Any]]:
         """
         WACC (%) = E/V x cost of equity + D/V x cost of debt x (1 - tax).
 
@@ -535,14 +535,14 @@ class ValuationAnalyzer:
     def calculate_monte_carlo_valuation(
         self,
         n_simulations: int = 10000,
-        growth_rate_mean: Optional[float] = None,
-        growth_rate_std: Optional[float] = None,
-        wacc_mean: Optional[float] = None,
+        growth_rate_mean: float | None = None,
+        growth_rate_std: float | None = None,
+        wacc_mean: float | None = None,
         wacc_std: float = 1.5,
         terminal_growth_mean: float = TERMINAL_GROWTH,
         terminal_growth_std: float = 0.5,
         projection_years: int = PROJECTION_YEARS,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Monte Carlo DCF Valuation - probabilistic intrinsic value estimation
 
@@ -564,7 +564,7 @@ class ValuationAnalyzer:
         Returns:
             Dictionary with probability distribution of intrinsic values
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "current_price": self.current_price,
             "currency": self.currency,
             "n_simulations": n_simulations,
@@ -650,8 +650,8 @@ class ValuationAnalyzer:
     # ==================== Dividend Discount Model ====================
 
     def calculate_ddm_valuation(
-        self, growth_rate: Optional[float] = None, required_return: Optional[float] = None
-    ) -> Dict[str, Any]:
+        self, growth_rate: float | None = None, required_return: float | None = None
+    ) -> dict[str, Any]:
         """
         Calculate DDM (Dividend Discount Model) intrinsic value using Gordon Growth Model
 
@@ -767,7 +767,7 @@ class ValuationAnalyzer:
         years = pd.DatetimeIndex(annual.index).year
         return annual[(annual > 0) & (years < pd.Timestamp.now().year)]
 
-    def _estimate_dividend_growth_rate(self) -> Optional[float]:
+    def _estimate_dividend_growth_rate(self) -> float | None:
         """Dividend CAGR over the last (up to) 5 complete years"""
         try:
             recent = self._complete_year_dividends().tail(5)
@@ -781,7 +781,7 @@ class ValuationAnalyzer:
             logger.warning(f"Could not estimate dividend growth rate: {e}")
         return None
 
-    def _latest_dividend_change(self) -> Optional[float]:
+    def _latest_dividend_change(self) -> float | None:
         """% change of the last complete year's dividends over the year before"""
         annual = self._complete_year_dividends()
         if len(annual) < 2:
@@ -790,14 +790,14 @@ class ValuationAnalyzer:
 
     # ==================== Dividend Analysis ====================
 
-    def analyze_dividends(self) -> Dict[str, Any]:
+    def analyze_dividends(self) -> dict[str, Any]:
         """
         Comprehensive dividend analysis
 
         Returns:
             Dictionary with dividend metrics and sustainability analysis
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "pays_dividends": False,
             "dividend_yield": None,
             "annual_dividend": None,
@@ -911,7 +911,7 @@ class ValuationAnalyzer:
 
         return result
 
-    def _calculate_dividend_sustainability_score(self, dividend_data: Dict[str, Any]) -> int:
+    def _calculate_dividend_sustainability_score(self, dividend_data: dict[str, Any]) -> int:
         """Calculate 0-100 sustainability score based on dividend metrics"""
         score = 0
 
@@ -929,7 +929,7 @@ class ValuationAnalyzer:
 
         # Growth rate component (30 points). A cut in the latest complete year
         # outweighs a long-run rise (EQNR: +40%/yr since 2021, then -40% in 2025).
-        rates: List[float] = [
+        rates: list[float] = [
             dividend_data[key]
             for key in ("dividend_growth_rate", "dividend_growth_1y")
             if dividend_data.get(key) is not None
@@ -958,14 +958,14 @@ class ValuationAnalyzer:
 
     # ==================== Earnings Analysis ====================
 
-    def analyze_earnings(self) -> Dict[str, Any]:
+    def analyze_earnings(self) -> dict[str, Any]:
         """
         Comprehensive earnings analysis
 
         Returns:
             Dictionary with EPS trends, surprises, and quality metrics
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "current_eps": None,
             "forward_eps": None,
             "eps_growth_1y": None,
@@ -1092,13 +1092,13 @@ class ValuationAnalyzer:
 
         return result
 
-    def _assess_earnings_quality(self) -> Dict[str, Any]:
+    def _assess_earnings_quality(self) -> dict[str, Any]:
         """
         Assess earnings quality based on cash flow vs net income
 
         High-quality earnings are backed by cash flow
         """
-        quality: Dict[str, Any] = {"assessment": None, "score": None, "metrics": {}}
+        quality: dict[str, Any] = {"assessment": None, "score": None, "metrics": {}}
 
         try:
             income_stmt = self.fundamentals.get("income_stmt_annual")
@@ -1145,7 +1145,7 @@ class ValuationAnalyzer:
 
     # ==================== Comprehensive Analysis ====================
 
-    def analyze(self) -> Dict[str, Any]:
+    def analyze(self) -> dict[str, Any]:
         """
         Run comprehensive valuation analysis
 
@@ -1166,7 +1166,7 @@ class ValuationAnalyzer:
             }
         return self._results
 
-    def format_markdown(self) -> List[str]:
+    def format_markdown(self) -> list[str]:
         """
         Format valuation analysis as markdown report
 
@@ -1393,5 +1393,5 @@ class ValuationAnalyzer:
         return md
 
 
-def _money(symbol: str, value: Optional[float]) -> str:
+def _money(symbol: str, value: float | None) -> str:
     return "N/A" if value is None else f"{symbol}{value:.4f}"

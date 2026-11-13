@@ -6,7 +6,7 @@ then formats them for the terminal or as Markdown.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from ..markets import benchmark_name
 from ..utils.report import get_currency_symbol
@@ -41,21 +41,21 @@ _ACTION_LABEL = {
 
 @dataclass
 class Table:
-    headers: List[str]
-    rows: List[List[str]]
+    headers: list[str]
+    rows: list[list[str]]
     align: str = ""  # per column: "l" or "r"; default left for the first, right for the rest
 
 
-Block = Union[str, Table]
+Block = str | Table
 
 
 @dataclass
 class Section:
     title: str
-    blocks: List[Block] = field(default_factory=list)
+    blocks: list[Block] = field(default_factory=list)
 
 
-def build_sections(data: Dict[str, Any], brief: bool = False) -> List[Section]:
+def build_sections(data: dict[str, Any], brief: bool = False) -> list[Section]:
     header = data.get("header") or {}
     sym = get_currency_symbol(header.get("currency") or "USD")
     steps = Section("NEXT STEPS", [f"-> {s}" for s in data.get("next_steps") or []])
@@ -73,17 +73,17 @@ def build_sections(data: Dict[str, Any], brief: bool = False) -> List[Section]:
     ]
 
 
-def render_text(data: Dict[str, Any], brief: bool = False) -> str:
+def render_text(data: dict[str, Any], brief: bool = False) -> str:
     return sections_to_text(build_sections(data, brief))
 
 
-def render_markdown(data: Dict[str, Any]) -> str:
+def render_markdown(data: dict[str, Any]) -> str:
     return sections_to_markdown(build_sections(data))
 
 
-def sections_to_text(sections: List[Section]) -> str:
+def sections_to_text(sections: list[Section]) -> str:
     """Terminal layout: the first section is the boxed title, the rest are ruled."""
-    out: List[str] = []
+    out: list[str] = []
     for i, section in enumerate(sections):
         if i == 0:
             out += ["=" * WIDTH, f"  {section.title}", "=" * WIDTH]
@@ -98,8 +98,8 @@ def sections_to_text(sections: List[Section]) -> str:
     return "\n".join(out)
 
 
-def sections_to_markdown(sections: List[Section]) -> str:
-    out: List[str] = []
+def sections_to_markdown(sections: list[Section]) -> str:
+    out: list[str] = []
     for i, section in enumerate(sections):
         out += [f"# {section.title}" if i == 0 else f"## {section.title.title()}", ""]
         for block in section.blocks:
@@ -117,7 +117,7 @@ def sections_to_markdown(sections: List[Section]) -> str:
 # ==================== Sections ====================
 
 
-def _header_section(data: Dict[str, Any], header: Dict[str, Any], sym: str) -> Section:
+def _header_section(data: dict[str, Any], header: dict[str, Any], sym: str) -> Section:
     title = f"VET: {data.get('ticker')}"
     if header.get("name"):
         title += f"  {header['name']}"
@@ -125,7 +125,7 @@ def _header_section(data: Dict[str, Any], header: Dict[str, Any], sym: str) -> S
     dim_text = "  ".join(
         f"{_DIM_ABBR.get(k, k.title())} {v:.0f}" for k, v in dims.items() if v is not None
     )
-    blocks: List[Block] = [*_verdict_lines(data.get("verdict") or {}, sym), ""]
+    blocks: list[Block] = [*_verdict_lines(data.get("verdict") or {}, sym), ""]
     blocks += [
         f"{header.get('sector') or 'N/A'} / {header.get('industry') or 'N/A'}",
         f"Price: {_money(header.get('price'), sym)}   Preset: {data.get('preset')}",
@@ -141,7 +141,7 @@ def _header_section(data: Dict[str, Any], header: Dict[str, Any], sym: str) -> S
     return Section(title, blocks)
 
 
-def _verdict_lines(verdict: Dict[str, Any], sym: str) -> List[str]:
+def _verdict_lines(verdict: dict[str, Any], sym: str) -> list[str]:
     if not verdict:
         return []
     lines = [f"VERDICT: {verdict['call'].upper()}"]
@@ -157,7 +157,7 @@ def _verdict_lines(verdict: Dict[str, Any], sym: str) -> List[str]:
     return lines
 
 
-def _red_flags_section(data: Dict[str, Any]) -> Section:
+def _red_flags_section(data: dict[str, Any]) -> Section:
     flags = data.get("red_flags") or []
     if not flags:
         return Section("RED FLAGS", ["None found"])
@@ -170,7 +170,7 @@ def _red_flags_section(data: Dict[str, Any]) -> Section:
     )
 
 
-def _peers_section(data: Dict[str, Any]) -> Section:
+def _peers_section(data: dict[str, Any]) -> Section:
     peers = data.get("peer_valuation") or {}
     if not peers or not peers.get("peers"):
         missing = peers.get("missing") if peers else None
@@ -182,7 +182,7 @@ def _peers_section(data: Dict[str, Any]) -> Section:
     basis = _BASIS_LABEL.get(peers.get("basis") or "", peers.get("basis"))
     group = f" in {peers['group']}" if peers.get("group") else ""
     names = ", ".join(peers["peers"][:8]) + (" ..." if len(peers["peers"]) > 8 else "")
-    blocks: List[Block] = [f"{len(peers['peers'])} peers ({basis}{group}): {names}"]
+    blocks: list[Block] = [f"{len(peers['peers'])} peers ({basis}{group}): {names}"]
     if peers.get("missing"):
         blocks.append(f"No data for: {', '.join(peers['missing'])}")
 
@@ -204,9 +204,9 @@ def _peers_section(data: Dict[str, Any]) -> Section:
     return Section("PEER VALUATION", blocks)
 
 
-def _signals_section(data: Dict[str, Any]) -> Section:
+def _signals_section(data: dict[str, Any]) -> Section:
     signals = data.get("signals") or {}
-    blocks: List[Block] = []
+    blocks: list[Block] = []
     rs = signals.get("relative_strength")
     if rs:
         bench = benchmark_name(rs.get("benchmark")) if rs.get("benchmark") else "no benchmark"
@@ -236,7 +236,7 @@ def _signals_section(data: Dict[str, Any]) -> Section:
     return Section("SIGNALS", blocks or ["No signal data"])
 
 
-def _funds_section(data: Dict[str, Any]) -> Section:
+def _funds_section(data: dict[str, Any]) -> Section:
     funds = data.get("fund_activity") or {}
     if not funds.get("cache_found"):
         return Section(
@@ -258,7 +258,7 @@ def _funds_section(data: Dict[str, Any]) -> Section:
         ]
         for p in positions
     ]
-    blocks: List[Block] = [
+    blocks: list[Block] = [
         f"{len(positions)} of {funds.get('funds_checked', 0)} tracked funds",
         Table(["Fund", "Latest action", "Shares", "As of"], rows, "llrl"),
     ]
@@ -269,11 +269,11 @@ def _funds_section(data: Dict[str, Any]) -> Section:
     return Section("FUND ACTIVITY (13F)", blocks)
 
 
-def _verdict_section(data: Dict[str, Any], sym: str) -> Section:
+def _verdict_section(data: dict[str, Any], sym: str) -> Section:
     fv = data.get("fair_value") or {}
     price = fv.get("current_price")
     upside = fv.get("upside_pct") or {}
-    blocks: List[Block] = []
+    blocks: list[Block] = []
 
     rows = []
     analysts = fv.get("analysts") or {}
@@ -377,8 +377,8 @@ def _verdict_section(data: Dict[str, Any], sym: str) -> Section:
     return Section("WHAT WOULD CHANGE THE VERDICT", blocks)
 
 
-def _strengths_section(data: Dict[str, Any]) -> Section:
-    blocks: List[Block] = [f"+ {s}" for s in (data.get("strengths") or [])[:5]]
+def _strengths_section(data: dict[str, Any]) -> Section:
+    blocks: list[Block] = [f"+ {s}" for s in (data.get("strengths") or [])[:5]]
     blocks += [f"- {c}" for c in (data.get("concerns") or [])[:5]]
     return Section("STRENGTHS / CONCERNS", blocks or ["None noted"])
 
@@ -386,12 +386,12 @@ def _strengths_section(data: Dict[str, Any]) -> Section:
 # ==================== Formatting ====================
 
 
-def _text_table(table: Table) -> List[str]:
+def _text_table(table: Table) -> list[str]:
     cols = len(table.headers)
     widths = [max(len(str(row[i])) for row in [table.headers, *table.rows]) for i in range(cols)]
     align = table.align or ("l" + "r" * (cols - 1))
 
-    def fmt(row: List[str]) -> str:
+    def fmt(row: list[str]) -> str:
         cells = [
             str(cell).ljust(widths[i]) if align[i] == "l" else str(cell).rjust(widths[i])
             for i, cell in enumerate(row)
@@ -401,7 +401,7 @@ def _text_table(table: Table) -> List[str]:
     return [fmt(table.headers), "  ".join("-" * w for w in widths)] + [fmt(r) for r in table.rows]
 
 
-def _markdown_table(table: Table) -> List[str]:
+def _markdown_table(table: Table) -> list[str]:
     align = table.align or ("l" + "r" * (len(table.headers) - 1))
     sep = ["---:" if a == "r" else "---" for a in align]
     lines = [
@@ -412,7 +412,7 @@ def _markdown_table(table: Table) -> List[str]:
     return lines
 
 
-def _cheapness_label(cheapness: Optional[float]) -> str:
+def _cheapness_label(cheapness: float | None) -> str:
     if cheapness is None:
         return ""
     if cheapness >= 75:

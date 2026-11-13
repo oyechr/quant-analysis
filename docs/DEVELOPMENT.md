@@ -17,7 +17,7 @@ mypy src --ignore-missing-imports
 pytest tests -q
 ```
 
-Chain them with `&&` locally, so a failure stops the rest. `ruff check --fix` and `ruff format` fix most lint and format issues. mypy skips untyped libraries (yfinance, finta, toon, seaborn, matplotlib); `pandas-stubs` and `types-requests` come with the `dev` extra.
+Chain them with `&&` locally, so a failure stops the rest. `ruff check --fix` and `ruff format` fix most lint and format issues. The rules (in pyproject.toml) include bugbear and pyupgrade, so annotations use the modern forms: `list[str]`, `X | None`, `collections.abc.Callable`. mypy runs with `check_untyped_defs`, so the bodies of unannotated functions are checked too. mypy skips untyped libraries (yfinance, finta, toon, seaborn, matplotlib); `pandas-stubs` and `types-requests` come with the `dev` extra.
 
 ## Conventions
 

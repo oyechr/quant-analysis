@@ -4,8 +4,9 @@ import json
 import logging
 import math
 import sys
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Iterator, Optional
+from typing import Any
 
 import click
 
@@ -41,7 +42,7 @@ class FiniteFloat(click.ParamType):
 
     name = "float"
 
-    def __init__(self, min: Optional[float] = None) -> None:
+    def __init__(self, min: float | None = None) -> None:
         self.min = min
 
     def convert(self, value, param, ctx):
@@ -67,7 +68,7 @@ def echo_status(message: str = "") -> None:
     click.echo(message, err=True)
 
 
-def echo_progress(ticker: str, error: Optional[Exception | str]) -> None:
+def echo_progress(ticker: str, error: Exception | str | None) -> None:
     """One ✓/✗ line per ticker, on stderr."""
     mark = "✗" if error else "✓"
     echo_status(f"  {mark} {ticker}" + (f": {error}" if error else ""))
@@ -80,13 +81,13 @@ def echo_banner(title: str) -> None:
 
 
 @contextmanager
-def stage_progress(labels: Dict[str, str]) -> Iterator[Callable[[str, int, int], None]]:
+def stage_progress(labels: dict[str, str]) -> Iterator[Callable[[str, int, int], None]]:
     """
     A progress callback (stage, done, total) drawing one bar per stage on
     stderr. Each bar closes when its stage completes, and on the way out if
     the run fails first.
     """
-    bars: Dict[str, Any] = {}
+    bars: dict[str, Any] = {}
 
     def update(stage: str, done: int, total: int) -> None:
         if stage not in bars:
@@ -105,7 +106,7 @@ def stage_progress(labels: Dict[str, str]) -> Iterator[Callable[[str, int, int],
             bar.__exit__(None, None, None)
 
 
-def has_score(report: Dict[str, Any], scoring: Any) -> bool:
+def has_score(report: dict[str, Any], scoring: Any) -> bool:
     """
     A usable score: something was scored and there's a price. An unknown
     symbol still gets a meaningless 50/100 Hold at 0% confidence.

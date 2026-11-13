@@ -13,8 +13,9 @@ import os
 import re
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Union
+from typing import Any
 
 # A Yahoo symbol: letters and digits, plus . - = ^ & (EQNR.OL, BRK-B,
 # EURUSD=X, ^GSPC, M&M.NS). Nothing that can leave or name a folder.
@@ -25,7 +26,7 @@ _SYMBOL = re.compile(r"^[A-Z0-9^][A-Z0-9.\-=^&]{0,19}$", re.IGNORECASE)
 _RESERVED = {"CON", "PRN", "AUX", "NUL"} | {f"{p}{i}" for p in ("COM", "LPT") for i in range(10)}
 
 
-def ticker_dir(base: Union[str, Path], ticker: str) -> Path:
+def ticker_dir(base: str | Path, ticker: str) -> Path:
     """The folder for one ticker's cache and reports: `base / TICKER`.
 
     Raises ValueError for anything that isn't a ticker symbol, so a symbol
@@ -46,7 +47,7 @@ _REPLACE_ATTEMPTS = 5
 _REPLACE_WAIT_SECONDS = 0.1
 
 
-def atomic_write(path: Union[str, Path], write: Callable[[Path], Any]) -> None:
+def atomic_write(path: str | Path, write: Callable[[Path], Any]) -> None:
     """Call `write(tmp_path)` to fill a temp file, then move it onto `path`."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -67,6 +68,6 @@ def atomic_write(path: Union[str, Path], write: Callable[[Path], Any]) -> None:
         tmp.unlink(missing_ok=True)
 
 
-def atomic_write_text(path: Union[str, Path], text: str, encoding: str = "utf-8") -> None:
+def atomic_write_text(path: str | Path, text: str, encoding: str = "utf-8") -> None:
     """Write text to `path` atomically (see `atomic_write`)."""
     atomic_write(path, lambda tmp: tmp.write_text(text, encoding=encoding))

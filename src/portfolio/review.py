@@ -31,9 +31,10 @@ outside an ASK. The portfolio-level exposure (risk, beta, factor tilts) is in
 
 import logging
 import math
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -88,7 +89,7 @@ ACCOUNT_TYPES = (*TAXABLE_ACCOUNTS, *TAX_FREE_ACCOUNTS)
 class AccountPosition:
     account: str
     shares: float
-    cost_basis: Optional[float]  # average cost per share, in the holding's currency
+    cost_basis: float | None  # average cost per share, in the holding's currency
 
 
 @dataclass
@@ -98,49 +99,49 @@ class Holding:
     ticker: str
     name: str
     shares: float
-    cost_basis: Optional[float]  # average cost per share, in `currency`
+    cost_basis: float | None  # average cost per share, in `currency`
     currency: str
-    accounts: List[str] = field(default_factory=list)
-    positions: List[AccountPosition] = field(default_factory=list)  # per account
+    accounts: list[str] = field(default_factory=list)
+    positions: list[AccountPosition] = field(default_factory=list)  # per account
 
 
 @dataclass
 class HoldingReview:
     holding: Holding
     action: str = CHECK
-    reasons: List[str] = field(default_factory=list)
-    vet: Dict[str, Any] = field(default_factory=dict)  # VetResult.to_dict()
+    reasons: list[str] = field(default_factory=list)
+    vet: dict[str, Any] = field(default_factory=dict)  # VetResult.to_dict()
     is_fund: bool = False
-    sector: Optional[str] = None
-    country: Optional[str] = None
+    sector: str | None = None
+    country: str | None = None
     # earnings_yield, roe (from Yahoo info) for the factor tilts
-    characteristics: Dict[str, Optional[float]] = field(default_factory=dict)
-    beta: Optional[float] = None  # vs the world benchmark, in the base currency
-    risk_share: Optional[float] = None  # share of portfolio risk (see exposure.py)
-    price: Optional[float] = None  # listing currency
-    listing_currency: Optional[str] = None
-    price_base: Optional[float] = None  # one share in the base currency
-    cost_price: Optional[float] = None  # one share in the cost currency
-    value: Optional[float] = None  # base currency
-    weight: Optional[float] = None
-    target_weight: Optional[float] = None
-    gain_pct: Optional[float] = None
-    moves_with: Optional[Tuple[str, float]] = None  # larger holding, correlation
-    error: Optional[str] = None
+    characteristics: dict[str, float | None] = field(default_factory=dict)
+    beta: float | None = None  # vs the world benchmark, in the base currency
+    risk_share: float | None = None  # share of portfolio risk (see exposure.py)
+    price: float | None = None  # listing currency
+    listing_currency: str | None = None
+    price_base: float | None = None  # one share in the base currency
+    cost_price: float | None = None  # one share in the cost currency
+    value: float | None = None  # base currency
+    weight: float | None = None
+    target_weight: float | None = None
+    gain_pct: float | None = None
+    moves_with: tuple[str, float] | None = None  # larger holding, correlation
+    error: str | None = None
 
     @property
-    def call(self) -> Optional[str]:
+    def call(self) -> str | None:
         return (self.vet.get("verdict") or {}).get("call")
 
     @property
-    def signal(self) -> Optional[str]:
+    def signal(self) -> str | None:
         return (self.vet.get("header") or {}).get("signal")
 
     @property
-    def score(self) -> Optional[float]:
+    def score(self) -> float | None:
         return (self.vet.get("header") or {}).get("score")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         h = self.holding
         return {
             "ticker": h.ticker,
@@ -179,15 +180,15 @@ class HoldingReview:
 
 @dataclass
 class PortfolioReview:
-    holdings: List[HoldingReview]
+    holdings: list[HoldingReview]
     base_currency: str
     preset: str
-    unmapped: List[str] = field(default_factory=list)
-    summary: Dict[str, Any] = field(default_factory=dict)
-    exposure: Optional[Exposure] = None  # the data behind summary["exposure"]
-    history_rows: List[Row] = field(default_factory=list)  # for the score history
+    unmapped: list[str] = field(default_factory=list)
+    summary: dict[str, Any] = field(default_factory=dict)
+    exposure: Exposure | None = None  # the data behind summary["exposure"]
+    history_rows: list[Row] = field(default_factory=list)  # for the score history
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "base_currency": self.base_currency,
             "preset": self.preset,
@@ -200,7 +201,7 @@ class PortfolioReview:
 # ==================== Input ====================
 
 
-def load_portfolio(path: Path) -> Tuple[List[Holding], List[str]]:
+def load_portfolio(path: Path) -> tuple[list[Holding], list[str]]:
     """
     Holdings from a portfolio file (see `quant import-portfolio`), one per
     ticker across accounts, plus the names that have no ticker.
@@ -222,7 +223,7 @@ def load_portfolio(path: Path) -> Tuple[List[Holding], List[str]]:
     frame["cost_basis"] = pd.to_numeric(frame["cost_basis"], errors="coerce")
 
     unmapped = sorted({n or "?" for n in frame.loc[frame["ticker"] == "", "name"]})
-    holdings: List[Holding] = []
+    holdings: list[Holding] = []
     for ticker, rows in frame[frame["ticker"] != ""].groupby("ticker", sort=False):
         rows = rows[rows["shares"] > 0]
         if rows.empty:
@@ -246,7 +247,7 @@ def load_portfolio(path: Path) -> Tuple[List[Holding], List[str]]:
     return holdings, unmapped
 
 
-def _average_cost(rows: pd.DataFrame) -> Optional[float]:
+def _average_cost(rows: pd.DataFrame) -> float | None:
     """Share-weighted cost basis over the rows that have one."""
     costed = rows.dropna(subset=["cost_basis"])
     if costed.empty or costed["shares"].sum() <= 0:
@@ -261,10 +262,10 @@ class MarketData:
         self.fetcher = fetcher
         self.base_currency = base_currency
         self.use_cache = use_cache
-        self._rates: Dict[Tuple[str, str], Optional[float]] = {}
-        self._closes: Dict[str, Optional[pd.Series]] = {}
+        self._rates: dict[tuple[str, str], float | None] = {}
+        self._closes: dict[str, pd.Series | None] = {}
 
-    def rate(self, from_ccy: str, to_ccy: str) -> Optional[float]:
+    def rate(self, from_ccy: str, to_ccy: str) -> float | None:
         """Latest multiplier from one currency (minor units allowed) into another."""
         key = (from_ccy, to_ccy)
         if key not in self._rates:
@@ -276,7 +277,7 @@ class MarketData:
             self._rates[key] = converted[0] if converted else None
         return self._rates[key]
 
-    def closes(self, symbol: str) -> Optional[pd.Series]:
+    def closes(self, symbol: str) -> pd.Series | None:
         """Daily closes over `HISTORY_PERIOD`, in the symbol's own currency."""
         if symbol not in self._closes:
             try:
@@ -289,17 +290,17 @@ class MarketData:
                 self._closes[symbol] = None
         return self._closes[symbol]
 
-    def base_closes(self, symbol: str, currency: str) -> Optional[pd.Series]:
+    def base_closes(self, symbol: str, currency: str) -> pd.Series | None:
         """Daily closes converted into the base currency."""
         close = self.closes(symbol)
         if close is None:
             return None
         return to_base_currency(close, currency, self.base_currency, self.closes)
 
-    def benchmarks(self) -> Dict[str, pd.Series]:
+    def benchmarks(self) -> dict[str, pd.Series]:
         """Home and world benchmark closes in the base currency, by label."""
         home = HOME_BENCHMARKS.get(self.base_currency.upper())
-        found: Dict[str, pd.Series] = {}
+        found: dict[str, pd.Series] = {}
         for symbol, currency, label in [*([home] if home else []), WORLD_BENCHMARK]:
             converted = self.base_closes(symbol, currency)
             if converted is not None:
@@ -311,14 +312,14 @@ class MarketData:
 
 
 def review_portfolio(
-    holdings: List[Holding],
-    fetcher: Optional[DataFetcher] = None,
-    options: Optional[AnalysisOptions] = None,
+    holdings: list[Holding],
+    fetcher: DataFetcher | None = None,
+    options: AnalysisOptions | None = None,
     base_currency: str = BASE_CURRENCY,
     workers: int = DEFAULT_WORKERS,
     data_dir: str = "data",
-    progress: Optional[Callable[[str, Optional[Exception]], None]] = None,
-    targets: Optional[TargetSettings] = None,
+    progress: Callable[[str, Exception | None], None] | None = None,
+    targets: TargetSettings | None = None,
 ) -> PortfolioReview:
     """Vet every holding, value it in the base currency and decide an action."""
     targets = targets or TargetSettings()
@@ -327,11 +328,11 @@ def review_portfolio(
     config = options.scoring_config or ScoringConfig()
     use_cache = options.use_cache
     by_ticker = {h.ticker: h for h in holdings}
-    reviews: Dict[str, HoldingReview] = {h.ticker: HoldingReview(holding=h) for h in holdings}
+    reviews: dict[str, HoldingReview] = {h.ticker: HoldingReview(holding=h) for h in holdings}
 
-    history: List[Row] = []
+    history: list[Row] = []
 
-    def vet(ticker: str) -> Tuple[Dict[str, Any], Dict[str, Any], Optional[Row]]:
+    def vet(ticker: str) -> tuple[dict[str, Any], dict[str, Any], Row | None]:
         result = vet_ticker(ticker, fetcher=fetcher, options=options, data_dir=data_dir)
         # The score before the peer rescale, like `vet` records (see tracking.history)
         row = history_row(result.report, result.base_scoring, "review", result.red_flags)
@@ -383,7 +384,7 @@ def review_portfolio(
     )
 
 
-def apply_vet(review: HoldingReview, data: Dict[str, Any], info: Dict[str, Any]) -> None:
+def apply_vet(review: HoldingReview, data: dict[str, Any], info: dict[str, Any]) -> None:
     """Fill a review from `vet_ticker`'s result (to_dict) and the report's info."""
     review.vet = data
     review.is_fund = is_fund(info, review.holding.name)
@@ -394,7 +395,7 @@ def apply_vet(review: HoldingReview, data: Dict[str, Any], info: Dict[str, Any])
     review.listing_currency = info.get("currency") or review.holding.currency
 
 
-def is_fund(info: Dict[str, Any], name: str = "") -> bool:
+def is_fund(info: dict[str, Any], name: str = "") -> bool:
     """ETFs and mutual funds: by Yahoo's quote type, else by the name."""
     quote_type = str(info.get("quote_type") or "").upper()
     if quote_type:
@@ -402,7 +403,7 @@ def is_fund(info: Dict[str, Any], name: str = "") -> bool:
     return any(word in name.upper().split() for word in ("ETF", "UCITS"))
 
 
-def characteristics(info: Dict[str, Any]) -> Dict[str, Optional[float]]:
+def characteristics(info: dict[str, Any]) -> dict[str, float | None]:
     """Earnings yield (1 / P/E, forward if trailing is missing) and ROE from Yahoo info."""
     pe = finite_float(info.get("pe_ratio")) or finite_float(info.get("forward_pe"))
     return {
@@ -414,7 +415,7 @@ def characteristics(info: Dict[str, Any]) -> Dict[str, Optional[float]]:
 def value_holding(
     review: HoldingReview,
     base_currency: str,
-    rate: Callable[[str, str], Optional[float]],
+    rate: Callable[[str, str], float | None],
 ) -> None:
     """Market value in the base currency, and gain vs cost in the cost currency."""
     h = review.holding
@@ -432,10 +433,10 @@ def value_holding(
                 review.gain_pct = (review.cost_price / h.cost_basis - 1) * 100
 
 
-def _exposure(reviews: List[HoldingReview], market: MarketData) -> Exposure:
+def _exposure(reviews: list[HoldingReview], market: MarketData) -> Exposure:
     """Two years of closes per valued holding, in the base currency, then the exposure."""
-    local: Dict[str, pd.Series] = {}
-    in_base: Dict[str, pd.Series] = {}
+    local: dict[str, pd.Series] = {}
+    in_base: dict[str, pd.Series] = {}
     for review in reviews:
         ticker = review.holding.ticker
         if not review.weight or not review.listing_currency:
@@ -451,8 +452,8 @@ def _exposure(reviews: List[HoldingReview], market: MarketData) -> Exposure:
 
 
 def _set_targets(
-    reviews: List[HoldingReview], exposure: Exposure, settings: TargetSettings
-) -> Dict[str, Any]:
+    reviews: list[HoldingReview], exposure: Exposure, settings: TargetSettings
+) -> dict[str, Any]:
     """Target weight per valued holding (see `targets.py`), and how they were set."""
     valued = [r for r in reviews if r.weight]
     targets, notes = target_weights(
@@ -468,7 +469,7 @@ def _set_targets(
     return notes
 
 
-def _find_overlaps(reviews: List[HoldingReview], correlations: pd.DataFrame) -> None:
+def _find_overlaps(reviews: list[HoldingReview], correlations: pd.DataFrame) -> None:
     """For each holding, the most correlated larger holding at or above the threshold."""
     if correlations.empty:
         return
@@ -476,7 +477,7 @@ def _find_overlaps(reviews: List[HoldingReview], correlations: pd.DataFrame) -> 
         ticker = review.holding.ticker
         if review.value is None or ticker not in correlations.columns:
             continue
-        best: Optional[Tuple[str, float]] = None
+        best: tuple[str, float] | None = None
         for other in reviews:
             other_ticker = other.holding.ticker
             if (
@@ -496,7 +497,7 @@ def _find_overlaps(reviews: List[HoldingReview], correlations: pd.DataFrame) -> 
         review.moves_with = best
 
 
-def is_overweight(weight: Optional[float], target: Optional[float]) -> bool:
+def is_overweight(weight: float | None, target: float | None) -> bool:
     if weight is None or target is None:
         return False
     return weight >= target * OVERWEIGHT_RATIO and weight - target >= OVERWEIGHT_MIN_GAP
@@ -521,7 +522,7 @@ def is_under_review(review: HoldingReview) -> bool:
     )
 
 
-def decide_action(review: HoldingReview) -> Tuple[str, List[str]]:
+def decide_action(review: HoldingReview) -> tuple[str, list[str]]:
     """The action for one holding and its reasons, most decisive first."""
     if not has_data(review):
         detail = review.error or ("no price" if review.vet else "no score")
@@ -530,7 +531,7 @@ def decide_action(review: HoldingReview) -> Tuple[str, List[str]]:
     # The verdict itself is shown next to the action, so reasons say why.
     # Verdict reasons start with the signal ("Sell 44/100 ...") and include
     # "red flag: ..." for the first high-severity flag.
-    verdict_reasons: List[str] = list((review.vet.get("verdict") or {}).get("reasons") or [])
+    verdict_reasons: list[str] = list((review.vet.get("verdict") or {}).get("reasons") or [])
     weight, target = review.weight, review.target_weight
     call = review.call
     high_flags = [
@@ -548,7 +549,7 @@ def decide_action(review: HoldingReview) -> Tuple[str, List[str]]:
             else "look into the flag before selling",
         ]
 
-    trims: List[str] = []
+    trims: list[str] = []
     if is_overweight(weight, target):
         trims.append(f"weight {_weights(weight, target)}")
     if review.moves_with:
@@ -566,11 +567,11 @@ def decide_action(review: HoldingReview) -> Tuple[str, List[str]]:
     return HOLD, verdict_reasons[:2] or [f"vet verdict {call}"]
 
 
-def _weights(weight: Optional[float], target: Optional[float]) -> str:
+def _weights(weight: float | None, target: float | None) -> str:
     return f"{weight or 0.0:.1%} vs target {target or 0.0:.1%}"
 
 
-def _with_tax_note(review: HoldingReview, reasons: List[str]) -> List[str]:
+def _with_tax_note(review: HoldingReview, reasons: list[str]) -> list[str]:
     """Selling at a gain outside a tax-free account realizes it."""
     accounts = [a.upper() for a in review.holding.accounts]
     if not review.gain_pct or review.gain_pct <= 0:
@@ -586,12 +587,12 @@ def _with_tax_note(review: HoldingReview, reasons: List[str]) -> List[str]:
 
 
 def summarize_portfolio(
-    reviews: List[HoldingReview],
+    reviews: list[HoldingReview],
     correlations: pd.DataFrame,
     base_currency: str,
-    exposure: Optional[Dict[str, Any]] = None,
+    exposure: dict[str, Any] | None = None,
     sector_limit: float = Limits.max_sector,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Portfolio totals, concentration and overlap; `exposure` from
     `measure_exposure`, `sector_limit` from the targets file.
@@ -600,7 +601,7 @@ def summarize_portfolio(
     valued = [r for r in reviews if r.value is not None and r.weight is not None]
     total = sum(r.value or 0.0 for r in valued)
 
-    def weighted(attr: Callable[[HoldingReview], Optional[float]]) -> Optional[float]:
+    def weighted(attr: Callable[[HoldingReview], float | None]) -> float | None:
         pairs = [(r.weight or 0.0, attr(r)) for r in valued if attr(r) is not None]
         weight_sum = sum(w for w, _ in pairs)
         if not pairs or weight_sum <= 0:
@@ -646,7 +647,7 @@ def summarize_portfolio(
     }
 
 
-def unlabeled_accounts(holdings: Iterable[Holding]) -> List[str]:
+def unlabeled_accounts(holdings: Iterable[Holding]) -> list[str]:
     """Named accounts that aren't labelled ASK, IPS or AF (a bare Nordnet number), in order."""
     seen = dict.fromkeys(
         p.account
@@ -664,10 +665,10 @@ def unlabeled_account_note(account: str) -> str:
 
 
 def _shares(
-    reviews: List[HoldingReview], key: Callable[[HoldingReview], str]
-) -> List[Dict[str, Any]]:
+    reviews: list[HoldingReview], key: Callable[[HoldingReview], str]
+) -> list[dict[str, Any]]:
     """Weight per group, largest first."""
-    totals: Dict[str, float] = {}
+    totals: dict[str, float] = {}
     for r in reviews:
         totals[key(r)] = totals.get(key(r), 0.0) + (r.weight or 0.0)
     return [
@@ -676,7 +677,7 @@ def _shares(
     ]
 
 
-def _portfolio_gain(valued: List[HoldingReview], total: float) -> Optional[float]:
+def _portfolio_gain(valued: list[HoldingReview], total: float) -> float | None:
     """Value-weighted gain, from each holding's gain (cost = value / (1 + gain))."""
     with_gain = [r for r in valued if r.gain_pct is not None and r.value]
     if not with_gain:
@@ -686,15 +687,15 @@ def _portfolio_gain(valued: List[HoldingReview], total: float) -> Optional[float
     return (value / cost - 1) * 100 if cost > 0 else None
 
 
-def sort_reviews(reviews: List[HoldingReview]) -> List[HoldingReview]:
+def sort_reviews(reviews: list[HoldingReview]) -> list[HoldingReview]:
     """By action (Exit first), then by weight, largest first."""
     return sorted(reviews, key=lambda r: (ACTION_ORDER.index(r.action), -(r.weight or 0.0)))
 
 
-def _clean(value: Any) -> Optional[str]:
+def _clean(value: Any) -> str | None:
     text = str(value or "").strip()
     return None if not text or text == "N/A" else text
 
 
-def _round(value: Optional[float], digits: int) -> Optional[float]:
+def _round(value: float | None, digits: int) -> float | None:
     return round(value, digits) if value is not None else None

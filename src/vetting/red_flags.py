@@ -10,10 +10,11 @@ Each rule is a small function that returns zero or more RedFlags, so rules can
 be tested one at a time with synthetic reports.
 """
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from itertools import pairwise
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 from ..analysis.fundamental import altman_zones
 from ..scoring.dimensions import (
@@ -48,14 +49,14 @@ class RedFlag:
     detail: str
     rule: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-def find_red_flags(report: Dict[str, Any], today: Optional[datetime] = None) -> List[RedFlag]:
+def find_red_flags(report: dict[str, Any], today: datetime | None = None) -> list[RedFlag]:
     """Run every rule against a report dict; most severe first."""
     today = today or _report_date(report)
-    flags: List[RedFlag] = []
+    flags: list[RedFlag] = []
     for rule in RULES:
         flags.extend(rule(report, today))
     return sorted(flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 99))
@@ -64,7 +65,7 @@ def find_red_flags(report: Dict[str, Any], today: Optional[datetime] = None) -> 
 # ==================== Rules ====================
 
 
-def check_beneish(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+def check_beneish(report: dict[str, Any], today: datetime) -> list[RedFlag]:
     if "beneish_m" not in applicable_quality_models(report.get("info")):
         return []
     beneish = _quality(report).get("beneish_m") or {}
@@ -86,7 +87,7 @@ def check_beneish(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
     ]
 
 
-def check_altman(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+def check_altman(report: dict[str, Any], today: datetime) -> list[RedFlag]:
     quality = _quality(report)
     z = finite_float(quality.get("altman_z"))
     model = quality.get("altman_model") or "Z"
@@ -107,7 +108,7 @@ def check_altman(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
     ]
 
 
-def check_negative_fcf(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+def check_negative_fcf(report: dict[str, Any], today: datetime) -> list[RedFlag]:
     # A bank's or insurer's operating cash flow is mostly deposits, loans and
     # float moving through, so its FCF says little about the business
     if _is_financial(report):
@@ -128,7 +129,7 @@ def check_negative_fcf(report: Dict[str, Any], today: datetime) -> List[RedFlag]
     ]
 
 
-def check_dilution(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+def check_dilution(report: dict[str, Any], today: datetime) -> list[RedFlag]:
     history = _history(report)
     shares, periods = history.get("shares_outstanding", []), history.get("periods", [])
     rate = share_growth_per_year(shares, periods)
@@ -158,7 +159,7 @@ def check_dilution(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
     ]
 
 
-def check_dividend_coverage(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+def check_dividend_coverage(report: dict[str, Any], today: datetime) -> list[RedFlag]:
     info = report.get("info") or {}
     dividend = (report.get("valuation_analysis") or {}).get("dividend_analysis") or {}
     pays = dividend.get("pays_dividends") or (finite_float(info.get("dividend_yield")) or 0) > 0
@@ -193,7 +194,7 @@ def check_dividend_coverage(report: Dict[str, Any], today: datetime) -> List[Red
     ]
 
 
-def check_interest_coverage(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+def check_interest_coverage(report: dict[str, Any], today: datetime) -> list[RedFlag]:
     if _is_financial(report):
         return []
     coverage = _first(_history(report).get("interest_coverage", []))
@@ -209,7 +210,7 @@ def check_interest_coverage(report: Dict[str, Any], today: datetime) -> List[Red
     ]
 
 
-def check_statement_age(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+def check_statement_age(report: dict[str, Any], today: datetime) -> list[RedFlag]:
     periods = _history(report).get("periods") or []
     if not periods:
         return []
@@ -230,7 +231,7 @@ def check_statement_age(report: Dict[str, Any], today: datetime) -> List[RedFlag
     ]
 
 
-def check_confidence(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+def check_confidence(report: dict[str, Any], today: datetime) -> list[RedFlag]:
     scoring = report.get("scoring") or {}
     if not scoring:
         return [
@@ -278,14 +279,14 @@ def check_confidence(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
     return flags
 
 
-def check_freshness(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+def check_freshness(report: dict[str, Any], today: datetime) -> list[RedFlag]:
     warnings = (report.get("data_freshness") or {}).get("warnings") or []
     return [
         RedFlag(severity="medium", title="Stale data", detail=w, rule="freshness") for w in warnings
     ]
 
 
-def check_currency_mismatch(report: Dict[str, Any], today: datetime) -> List[RedFlag]:
+def check_currency_mismatch(report: dict[str, Any], today: datetime) -> list[RedFlag]:
     """Statements in another currency that the pipeline could not convert."""
     info = report.get("info") or {}
     listing = info.get("currency")
@@ -307,7 +308,7 @@ def check_currency_mismatch(report: Dict[str, Any], today: datetime) -> List[Red
     ]
 
 
-RULES: List[Callable[[Dict[str, Any], datetime], List[RedFlag]]] = [
+RULES: list[Callable[[dict[str, Any], datetime], list[RedFlag]]] = [
     check_beneish,
     check_altman,
     check_negative_fcf,
@@ -324,7 +325,7 @@ RULES: List[Callable[[Dict[str, Any], datetime], List[RedFlag]]] = [
 # ==================== Helpers ====================
 
 
-def share_growth_per_year(shares: List[Optional[float]], periods: List[str]) -> Optional[float]:
+def share_growth_per_year(shares: list[float | None], periods: list[str]) -> float | None:
     """
     Annualized change in share count (percent/yr) over up to the last 3 years.
 
@@ -347,9 +348,7 @@ def share_growth_per_year(shares: List[Optional[float]], periods: List[str]) -> 
     return float(((latest / oldest) ** (1 / years) - 1) * 100)
 
 
-def one_off_issuance(
-    shares: List[Optional[float]], periods: List[str]
-) -> Optional[Tuple[str, float]]:
+def one_off_issuance(shares: list[float | None], periods: list[str]) -> tuple[str, float] | None:
     """
     (period, % jump) when the share count rose more than ONE_OFF_ISSUANCE_PCT in
     one year and at most DILUTION_PCT_PER_YEAR in each other year, else None.
@@ -370,32 +369,32 @@ def one_off_issuance(
     return None
 
 
-def _report_date(report: Dict[str, Any]) -> datetime:
+def _report_date(report: dict[str, Any]) -> datetime:
     try:
         return datetime.fromisoformat(str(report.get("generated_at"))[:19])
     except ValueError:
         return datetime.now()
 
 
-def _analysis(report: Dict[str, Any]) -> Dict[str, Any]:
+def _analysis(report: dict[str, Any]) -> dict[str, Any]:
     return (report.get("fundamental_analysis") or {}).get("analysis") or {}
 
 
-def _quality(report: Dict[str, Any]) -> Dict[str, Any]:
+def _quality(report: dict[str, Any]) -> dict[str, Any]:
     return _analysis(report).get("quality_scores") or {}
 
 
-def _history(report: Dict[str, Any]) -> Dict[str, Any]:
+def _history(report: dict[str, Any]) -> dict[str, Any]:
     return _analysis(report).get("annual_history") or {}
 
 
-def _sector(report: Dict[str, Any]) -> str:
+def _sector(report: dict[str, Any]) -> str:
     return str((report.get("info") or {}).get("sector") or "").lower()
 
 
-def _is_financial(report: Dict[str, Any]) -> bool:
+def _is_financial(report: dict[str, Any]) -> bool:
     return _sector(report) in _FINANCIAL_SECTORS
 
 
-def _first(values: List[Optional[float]]) -> Optional[float]:
+def _first(values: list[float | None]) -> float | None:
     return finite_float(values[0]) if values else None

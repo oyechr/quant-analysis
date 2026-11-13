@@ -7,7 +7,7 @@ Supports ASCII table, Markdown, JSON, and correlation heatmap outputs.
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -106,13 +106,13 @@ def format_comparison_markdown(df: pd.DataFrame, title: str = "") -> str:
 
 
 def format_comparison_json(
-    scores_df: Optional[pd.DataFrame] = None,
-    valuation_df: Optional[pd.DataFrame] = None,
-    correlation_df: Optional[pd.DataFrame] = None,
-    metrics_df: Optional[pd.DataFrame] = None,
-    portfolio_stats: Optional[Dict[str, Any]] = None,
-    correlation_flags: Optional[Dict[str, Any]] = None,
-    risk_parity: Optional[Dict[str, Any]] = None,
+    scores_df: pd.DataFrame | None = None,
+    valuation_df: pd.DataFrame | None = None,
+    correlation_df: pd.DataFrame | None = None,
+    metrics_df: pd.DataFrame | None = None,
+    portfolio_stats: dict[str, Any] | None = None,
+    correlation_flags: dict[str, Any] | None = None,
+    risk_parity: dict[str, Any] | None = None,
 ) -> str:
     """
     Combine comparison data into a JSON string.
@@ -129,7 +129,7 @@ def format_comparison_json(
     Returns:
         JSON string.
     """
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     if scores_df is not None and not scores_df.empty:
         result["scores"] = _df_to_dict(scores_df)
@@ -150,8 +150,8 @@ def format_comparison_json(
 
 
 def format_diversification(
-    correlation_flags: Optional[Dict[str, Any]],
-    risk_parity: Optional[Dict[str, Any]],
+    correlation_flags: dict[str, Any] | None,
+    risk_parity: dict[str, Any] | None,
     markdown: bool = False,
 ) -> str:
     """
@@ -215,7 +215,7 @@ def format_diversification(
     return "\n".join(lines)
 
 
-def format_portfolio_view(portfolio_stats: Dict[str, Any]) -> str:
+def format_portfolio_view(portfolio_stats: dict[str, Any]) -> str:
     """Weighted score, beta and diversification ratio, then one line per holding."""
     ws = portfolio_stats.get("weighted_composite_score")
     wb = portfolio_stats.get("weighted_beta")
@@ -249,7 +249,7 @@ def format_portfolio_view(portfolio_stats: Dict[str, Any]) -> str:
 
 def format_correlation_heatmap(
     corr_df: pd.DataFrame,
-    save_path: Optional[str] = None,
+    save_path: str | None = None,
 ) -> str:
     """
     Render correlation matrix as ASCII table, optionally saving a chart image.
@@ -348,9 +348,9 @@ def _fmt_cell(value: Any) -> str:
     return str(value)
 
 
-def _df_to_dict(df: pd.DataFrame) -> Dict[str, Any]:
+def _df_to_dict(df: pd.DataFrame) -> dict[str, Any]:
     """Convert DataFrame to a JSON-friendly dict."""
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     for col in df.columns:
         result[col] = {}
         for idx in df.index:

@@ -10,8 +10,9 @@ its own working directory and default settings, and blocks the network.
 import socket
 import sys
 from collections import Counter
+from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -34,7 +35,7 @@ def _exchange_tz(symbol: str) -> str:
 def make_prices(
     symbol: str,
     days: int = 300,
-    end: Optional[pd.Timestamp] = None,
+    end: pd.Timestamp | None = None,
     seed: int = 0,
     daily_vol: float = 0.015,
 ) -> pd.DataFrame:
@@ -57,7 +58,7 @@ def make_prices(
     )
 
 
-def make_statements(years: int = 4, revenue: float = 100e9, growth: float = 0.08) -> Dict[str, Any]:
+def make_statements(years: int = 4, revenue: float = 100e9, growth: float = 0.08) -> dict[str, Any]:
     """Annual statements (newest year first, like yfinance) for a steadily growing company."""
     dates = [pd.Timestamp(f"{2025 - i}-12-31") for i in range(years)]
     income, balance, cashflow = {}, {}, {}
@@ -103,7 +104,7 @@ def make_statements(years: int = 4, revenue: float = 100e9, growth: float = 0.08
     }
 
 
-def make_context(symbol: str) -> Dict[str, Any]:
+def make_context(symbol: str) -> dict[str, Any]:
     """Earnings, dividends, holders and analyst ratings in yfinance's shapes."""
     tz = _exchange_tz(symbol)
     quarters = pd.date_range(end="2026-09-30", periods=8, freq="QE")
@@ -182,22 +183,22 @@ class FakeMarket:
 
     def __init__(self) -> None:
         self.calls: Counter[tuple[str, str]] = Counter()
-        self.price_overrides: Dict[str, pd.DataFrame] = {}
+        self.price_overrides: dict[str, pd.DataFrame] = {}
         self.failing: set[str] = set()
-        self.info_overrides: Dict[str, Dict[str, Any]] = {}
+        self.info_overrides: dict[str, dict[str, Any]] = {}
         # symbol -> attribute (e.g. "cashflow", "income_stmt") -> value
-        self.attribute_overrides: Dict[str, Dict[str, Any]] = {}
+        self.attribute_overrides: dict[str, dict[str, Any]] = {}
         # Yahoo industry/sector key -> top company symbols (yf.Industry/Sector(key).top_companies)
-        self.industries: Dict[str, List[str]] = {}
-        self.sectors: Dict[str, List[str]] = {}
+        self.industries: dict[str, list[str]] = {}
+        self.sectors: dict[str, list[str]] = {}
 
-    def ticker(self, symbol: str) -> "FakeTicker":
+    def ticker(self, symbol: str) -> FakeTicker:
         return FakeTicker(symbol.upper(), self)
 
-    def industry(self, key: str) -> "FakeGroup":
+    def industry(self, key: str) -> FakeGroup:
         return FakeGroup("industry", key, self)
 
-    def sector(self, key: str) -> "FakeGroup":
+    def sector(self, key: str) -> FakeGroup:
         return FakeGroup("sector", key, self)
 
 

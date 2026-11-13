@@ -9,11 +9,11 @@ consensus picks, a ticker file, or literal tickers.
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
 
 import pandas as pd
 import requests
@@ -56,10 +56,10 @@ class IndexSource:
     yahoo_suffix: str = ""  # appended to each symbol, e.g. ".OL"
     us_listing: bool = True  # convert share-class dots to Yahoo dashes
     min_expected: int = 10  # sanity check against grabbing the wrong table
-    nasdaq_list: Optional[str] = None  # list-type for api.nasdaq.com, e.g. "nasdaq100"
+    nasdaq_list: str | None = None  # list-type for api.nasdaq.com, e.g. "nasdaq100"
 
 
-BUILTIN_INDEXES: Dict[str, IndexSource] = {
+BUILTIN_INDEXES: dict[str, IndexSource] = {
     "sp500": IndexSource(
         name="sp500",
         description="S&P 500 constituents",
@@ -101,15 +101,15 @@ WATCHLIST_UNIVERSE = "watchlist"
 class Universe:
     """Resolved list of tickers plus where they came from."""
 
-    tickers: List[str]
-    sources: List[str] = field(default_factory=list)
+    tickers: list[str]
+    sources: list[str] = field(default_factory=list)
 
     @property
     def label(self) -> str:
         return "+".join(self.sources) if self.sources else "custom"
 
 
-def list_universes() -> Dict[str, str]:
+def list_universes() -> dict[str, str]:
     """Built-in universe names and descriptions (for --help / listings)."""
     names = {name: src.description for name, src in BUILTIN_INDEXES.items()}
     names[DISCOVER_UNIVERSE] = "Consensus picks from the latest `quant discover` run"
@@ -118,10 +118,10 @@ def list_universes() -> Dict[str, str]:
 
 
 def resolve_universe(
-    specs: List[str],
+    specs: list[str],
     data_dir: str = "data",
     use_cache: bool = True,
-    fetch_text: Optional[Callable[[str], str]] = None,
+    fetch_text: Callable[[str], str] | None = None,
     watchlist_path: Path = Path(DEFAULT_WATCHLIST),
 ) -> Universe:
     """
@@ -138,9 +138,9 @@ def resolve_universe(
     Raises:
         ValueError: If a built-in or discover universe can't be loaded
     """
-    tickers: List[str] = []
-    sources: List[str] = []
-    literals: List[str] = []
+    tickers: list[str] = []
+    sources: list[str] = []
+    literals: list[str] = []
 
     for spec in specs:
         key = spec.strip().lower()
@@ -176,8 +176,8 @@ def load_index(
     source: IndexSource,
     data_dir: str = "data",
     use_cache: bool = True,
-    fetch_text: Optional[Callable[[str], str]] = None,
-) -> List[str]:
+    fetch_text: Callable[[str], str] | None = None,
+) -> list[str]:
     """
     Load index constituents, using a cached copy when younger than the
     'universe' TTL. Tries each configured source in turn, and falls back to an
@@ -193,12 +193,12 @@ def load_index(
     if use_cache and cached and _cache_age_hours(cached) < (ttl_hours or float("inf")):
         return list(cached["tickers"])
 
-    attempts: List[tuple[str, Callable[[str, IndexSource], List[str]]]] = []
+    attempts: list[tuple[str, Callable[[str, IndexSource], list[str]]]] = []
     if source.nasdaq_list:
         attempts.append((NASDAQ_LIST_URL.format(list_type=source.nasdaq_list), parse_nasdaq_list))
     attempts.append((source.url, parse_constituents))
 
-    failures: List[str] = []
+    failures: list[str] = []
     for url, parse in attempts:
         try:
             tickers = parse((fetch_text or _http_get)(url), source)
@@ -227,7 +227,7 @@ def load_index(
     )
 
 
-def parse_nasdaq_list(text: str, source: IndexSource) -> List[str]:
+def parse_nasdaq_list(text: str, source: IndexSource) -> list[str]:
     """
     Parse api.nasdaq.com list-type JSON.
 
@@ -242,9 +242,9 @@ def parse_nasdaq_list(text: str, source: IndexSource) -> List[str]:
     return tickers
 
 
-def _symbol_rows(node: object) -> List[List[dict]]:
+def _symbol_rows(node: object) -> list[list[dict]]:
     """All lists of dicts with a 'symbol' key anywhere in a JSON document."""
-    found: List[List[dict]] = []
+    found: list[list[dict]] = []
     if isinstance(node, list):
         if node and all(isinstance(x, dict) and "symbol" in x for x in node):
             found.append(node)
@@ -256,7 +256,7 @@ def _symbol_rows(node: object) -> List[List[dict]]:
     return found
 
 
-def parse_constituents(html: str, source: IndexSource) -> List[str]:
+def parse_constituents(html: str, source: IndexSource) -> list[str]:
     """
     Read constituents from a Wikipedia page; normalize to Yahoo symbols.
 
@@ -266,8 +266,8 @@ def parse_constituents(html: str, source: IndexSource) -> List[str]:
     """
     tables = pd.read_html(StringIO(html))
     wanted = [c.lower() for c in source.column_candidates]
-    seen: List[str] = []
-    ticker_columns: List[pd.Series] = []
+    seen: list[str] = []
+    ticker_columns: list[pd.Series] = []
     for table in tables:
         if _is_changes_table(table):
             continue
@@ -296,7 +296,7 @@ def parse_constituents(html: str, source: IndexSource) -> List[str]:
     )
 
 
-def _normalize_symbols(values: pd.Series, source: IndexSource) -> List[str]:
+def _normalize_symbols(values: pd.Series, source: IndexSource) -> list[str]:
     symbols = [_to_yahoo(str(s), source) for s in values.dropna()]
     return list(dict.fromkeys(s for s in symbols if s))
 
@@ -326,13 +326,13 @@ def _clean_header(column: object) -> str:
     return re.sub(r"\[[^\]]*\]", "", str(column)).strip().lower()
 
 
-def load_discover_tickers(data_dir: str = "data") -> List[str]:
+def load_discover_tickers(data_dir: str = "data") -> list[str]:
     """Consensus tickers from the most recent `quant discover` run, strongest first."""
     path = Path(data_dir) / "_discovery" / "discovery_result.json"
     if not path.exists():
         raise ValueError(f"No discovery results at {path}. Run `quant discover` first.")
     result = json.loads(path.read_text(encoding="utf-8"))
-    tickers: List[str] = []
+    tickers: list[str] = []
     for signal in result.get("overlap_signals", []):
         ticker = str(signal.get("ticker") or "").upper()
         if not ticker or (_CUSIP.match(ticker) and any(ch.isdigit() for ch in ticker)):
@@ -341,7 +341,7 @@ def load_discover_tickers(data_dir: str = "data") -> List[str]:
     return list(dict.fromkeys(tickers))
 
 
-def load_ticker_file(path: Path) -> List[str]:
+def load_ticker_file(path: Path) -> list[str]:
     """
     Read tickers from a text or CSV file.
 
@@ -356,7 +356,7 @@ def load_ticker_file(path: Path) -> List[str]:
             rows = [line.split(",") for line in lines[1:] if line.strip()]
             return [row[column].strip().upper() for row in rows if len(row) > column]
 
-    tickers: List[str] = []
+    tickers: list[str] = []
     for line in lines:
         line = line.split("#", 1)[0]
         tickers.extend(t.strip().upper() for t in re.split(r"[,\s]+", line) if t.strip())
@@ -382,7 +382,7 @@ def _http_get(url: str) -> str:
     return response.text
 
 
-def _read_universe_cache(cache_file: Path) -> Optional[dict]:
+def _read_universe_cache(cache_file: Path) -> dict | None:
     if not cache_file.exists():
         return None
     try:

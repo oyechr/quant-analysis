@@ -5,7 +5,7 @@ Modular handlers for different data sections in reports
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 
@@ -19,7 +19,7 @@ class ReportSection(ABC):
     """Base class for report sections"""
 
     @abstractmethod
-    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> dict[str, Any]:
         """
         Fetch raw data for this section
 
@@ -35,7 +35,7 @@ class ReportSection(ABC):
         pass
 
     @abstractmethod
-    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def format_for_json(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """
         Format data for JSON output
 
@@ -51,19 +51,19 @@ class ReportSection(ABC):
 class InfoSection(ReportSection):
     """Company information section"""
 
-    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> dict[str, Any]:
         logger.info(f"Fetching info for {ticker}")
-        info: Dict[str, Any] = fetcher.get_ticker_info(ticker, use_cache=use_cache)
+        info: dict[str, Any] = fetcher.get_ticker_info(ticker, use_cache=use_cache)
         return info
 
-    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def format_for_json(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         return raw_data
 
 
 class PriceDataSection(ReportSection):
     """Price data section"""
 
-    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> dict[str, Any]:
         logger.info(f"Fetching price data for {ticker}")
         period = kwargs.get("period", "1mo")
         try:
@@ -90,26 +90,26 @@ class PriceDataSection(ReportSection):
             logger.warning(f"Could not fetch price data: {e}")
             return {}
 
-    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def format_for_json(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         return raw_data
 
 
 class FundamentalsSection(ReportSection):
     """Fundamentals section"""
 
-    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> dict[str, Any]:
         logger.info(f"Fetching fundamentals for {ticker}")
         fundamentals = fetcher.fetch_fundamentals(ticker, use_cache=use_cache)
         return {k: {"shape": v.shape, "has_data": not v.empty} for k, v in fundamentals.items()}
 
-    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def format_for_json(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         return raw_data
 
 
 class EarningsSection(ReportSection):
     """Earnings section"""
 
-    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> dict[str, Any]:
         logger.info(f"Fetching earnings for {ticker}")
         earnings = fetcher.fetch_earnings(ticker, use_cache=use_cache)
         return {
@@ -135,14 +135,14 @@ class EarningsSection(ReportSection):
             ),
         }
 
-    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def format_for_json(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         return raw_data
 
 
 class HoldersSection(ReportSection):
     """Institutional holders section"""
 
-    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> dict[str, Any]:
         logger.info(f"Fetching holders for {ticker}")
         holders = fetcher.fetch_institutional_holders(ticker, use_cache=use_cache)
         return {
@@ -166,14 +166,14 @@ class HoldersSection(ReportSection):
             ),
         }
 
-    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def format_for_json(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         return raw_data
 
 
 class DividendsSection(ReportSection):
     """Dividends and stock splits section"""
 
-    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> dict[str, Any]:
         logger.info(f"Fetching dividends for {ticker}")
         dividends = fetcher.fetch_dividends(ticker, use_cache=use_cache)
         return {
@@ -199,14 +199,14 @@ class DividendsSection(ReportSection):
             ),
         }
 
-    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def format_for_json(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         return raw_data
 
 
 class AnalystRatingsSection(ReportSection):
     """Analyst ratings section"""
 
-    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> dict[str, Any]:
         logger.info(f"Fetching analyst ratings for {ticker}")
         analyst = fetcher.fetch_analyst_ratings(ticker, use_cache=use_cache)
         # dataframe_to_records keeps the GradeDate index (the date of each
@@ -218,19 +218,19 @@ class AnalystRatingsSection(ReportSection):
             "recent_changes": dataframe_to_records(analyst["upgrades_downgrades"].head(10)),
         }
 
-    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def format_for_json(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         return raw_data
 
 
 class NewsSection(ReportSection):
     """News section"""
 
-    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> Dict[str, Any]:
+    def fetch_data(self, fetcher, ticker: str, use_cache: bool = True, **kwargs) -> dict[str, Any]:
         logger.info(f"Fetching news for {ticker}")
         news = fetcher.fetch_news(ticker, use_cache=False)  # Always fresh
         return {"article_count": len(news), "recent_articles": news[:10] if news else []}
 
-    def format_for_json(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def format_for_json(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         return raw_data
 
 

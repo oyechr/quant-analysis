@@ -6,9 +6,10 @@ Eliminates duplication across report sections and generators.
 """
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from .files import ticker_dir
 
@@ -121,7 +122,7 @@ def format_percent(value: Any) -> str:
 
 
 def safe_get(
-    data: Dict[str, Any], key: str, default: Any = "N/A", formatter: Optional[Callable] = None
+    data: dict[str, Any], key: str, default: Any = "N/A", formatter: Callable | None = None
 ) -> Any:
     """
     Safely extract value from dictionary with optional formatting
@@ -146,7 +147,7 @@ def safe_get(
 # ==================== Markdown Generation ====================
 
 
-def create_markdown_header(ticker: str, title: str, include_timestamp: bool = True) -> List[str]:
+def create_markdown_header(ticker: str, title: str, include_timestamp: bool = True) -> list[str]:
     """
     Create standard markdown header for reports
 
@@ -171,7 +172,7 @@ def save_analysis_report(
     ticker: str,
     output_dir: Path,
     report_type: str,
-    content_generator: Callable[[], List[str]],
+    content_generator: Callable[[], list[str]],
     file_extension: str = "md",
 ) -> None:
     """
@@ -210,7 +211,7 @@ def save_analysis_report(
 
 
 def validate_dataframe(
-    df: Any, required_columns: Optional[List[str]] = None, min_rows: int = 1
+    df: Any, required_columns: list[str] | None = None, min_rows: int = 1
 ) -> bool:
     """
     Validate DataFrame has required structure and data
@@ -262,7 +263,7 @@ CALMAR_LADDER = ((3.0, "Excellent"), (1.0, "Good"))
 
 
 def rate_ratio(
-    value: Optional[float], ladder: tuple[tuple[float, str], ...], lowest: str
+    value: float | None, ladder: tuple[tuple[float, str], ...], lowest: str
 ) -> tuple[str, str]:
     """A risk ratio as (value text, rating); "N/A" when it's undefined."""
     if value is None:

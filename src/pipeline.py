@@ -9,10 +9,11 @@ rendering means a screen of 50 tickers doesn't write 700 report files.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, cast
 
 import pandas as pd
 
@@ -48,7 +49,7 @@ class AnalysisOptions:
     # Holders, analyst ratings, and news: shown in reports and chat, unused by
     # scoring. Skipping them saves three network calls per ticker when screening.
     include_context: bool = True
-    scoring_config: Optional[ScoringConfig] = None
+    scoring_config: ScoringConfig | None = None
 
 
 @dataclass
@@ -61,17 +62,17 @@ class AnalysisBundle:
     """
 
     ticker: str
-    report: Dict[str, Any]
-    scoring: Optional[ScoringResult] = None
-    technical: Optional[TechnicalAnalyzer] = None
-    fundamental: Optional[FundamentalAnalyzer] = None
-    risk: Optional[tuple] = None  # (RiskMetrics, metrics dict, benchmark DataFrame)
-    valuation: Optional[ValuationAnalyzer] = None
-    errors: Dict[str, str] = field(default_factory=dict)
+    report: dict[str, Any]
+    scoring: ScoringResult | None = None
+    technical: TechnicalAnalyzer | None = None
+    fundamental: FundamentalAnalyzer | None = None
+    risk: tuple | None = None  # (RiskMetrics, metrics dict, benchmark DataFrame)
+    valuation: ValuationAnalyzer | None = None
+    errors: dict[str, str] = field(default_factory=dict)
 
     @property
-    def freshness_warnings(self) -> List[str]:
-        warnings: List[str] = (self.report.get("data_freshness") or {}).get("warnings", [])
+    def freshness_warnings(self) -> list[str]:
+        warnings: list[str] = (self.report.get("data_freshness") or {}).get("warnings", [])
         return warnings
 
 
@@ -99,10 +100,10 @@ class _RunFetcher:
 
     def __init__(self, fetcher: DataFetcher):
         self._fetcher = fetcher
-        self._memo: Dict[tuple[Any, ...], Any] = {}
+        self._memo: dict[tuple[Any, ...], Any] = {}
         # Set by analyze_ticker when statements are in another currency than the price
-        self.statement_rate: Optional[float] = None
-        self.converted_ticker: Optional[str] = None
+        self.statement_rate: float | None = None
+        self.converted_ticker: str | None = None
 
     def __getattr__(self, name: str) -> Any:
         if name not in self._MEMOIZED:
@@ -121,9 +122,9 @@ class _RunFetcher:
 
         return memoized
 
-    def fetch_fundamentals(self, ticker: str, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
+    def fetch_fundamentals(self, ticker: str, use_cache: bool = True) -> dict[str, pd.DataFrame]:
         """Statements, converted to the listing currency when a rate is set for this ticker."""
-        raw: Dict[str, pd.DataFrame] = self._memoized("fetch_fundamentals")(
+        raw: dict[str, pd.DataFrame] = self._memoized("fetch_fundamentals")(
             ticker, use_cache=use_cache
         )
         if self.statement_rate is None or ticker.upper() != self.converted_ticker:
@@ -131,14 +132,14 @@ class _RunFetcher:
         key = ("converted_fundamentals", ticker.upper(), self.statement_rate)
         if key not in self._memo:
             self._memo[key] = convert_statements(raw, self.statement_rate)
-        converted: Dict[str, pd.DataFrame] = self._memo[key]
+        converted: dict[str, pd.DataFrame] = self._memo[key]
         return converted
 
 
 def analyze_ticker(
     ticker: str,
-    fetcher: Optional[DataFetcher] = None,
-    options: Optional[AnalysisOptions] = None,
+    fetcher: DataFetcher | None = None,
+    options: AnalysisOptions | None = None,
 ) -> AnalysisBundle:
     """
     Fetch data, run every requested analysis, and score one ticker.
@@ -168,7 +169,7 @@ def analyze_ticker(
     use_cache = options.use_cache
 
     logger.info(f"Analyzing {ticker}")
-    report: Dict[str, Any] = {
+    report: dict[str, Any] = {
         "ticker": ticker,
         "generated_at": datetime.now().isoformat(),
         "period": options.period,
@@ -197,7 +198,7 @@ def analyze_ticker(
         report["currency_conversion"] = conversion
 
     # Data sections
-    sections: Dict[str, ReportSection] = {
+    sections: dict[str, ReportSection] = {
         "info": InfoSection(),
         "price_data": PriceDataSection(),
         "fundamentals": FundamentalsSection(),
@@ -304,7 +305,7 @@ def analyze_ticker(
     return bundle
 
 
-def _latest_book_equity(run: _RunFetcher, ticker: str, use_cache: bool) -> Optional[float]:
+def _latest_book_equity(run: _RunFetcher, ticker: str, use_cache: bool) -> float | None:
     """
     Common equity from the latest converted balance sheet (quarterly first, like
     Yahoo's own P/B), or None if not reported.
@@ -329,7 +330,7 @@ def _latest_book_equity(run: _RunFetcher, ticker: str, use_cache: bool) -> Optio
 
 def _setup_statement_conversion(
     run: _RunFetcher, ticker: str, use_cache: bool
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Set the run's statement conversion rate, if statements need one.
 
@@ -345,7 +346,7 @@ def _setup_statement_conversion(
     result = conversion_rate(
         statement_ccy, listing_ccy, lambda symbol: run.latest_close(symbol, use_cache=use_cache)
     )
-    description: Dict[str, Any] = {"from": statement_ccy, "to": listing_ccy}
+    description: dict[str, Any] = {"from": statement_ccy, "to": listing_ccy}
     if result is None:
         description["rate"] = None
         description["error"] = f"no FX rate for {statement_ccy}->{listing_ccy}"
@@ -359,14 +360,14 @@ def _setup_statement_conversion(
     return description
 
 
-def _signals(run: Any, ticker: str, use_cache: bool, bundle: AnalysisBundle) -> Dict[str, Any]:
+def _signals(run: Any, ticker: str, use_cache: bool, bundle: AnalysisBundle) -> dict[str, Any]:
     """Post-earnings drift (PEAD) and relative strength vs the home benchmark."""
     from .analysis.fundamental import calculate_pead_signal
     from .analysis.technical import calculate_relative_strength
     from .markets import benchmark_for
 
     prices = run.fetch_ticker(ticker, period="1y", use_cache=use_cache)
-    signals: Dict[str, Any] = {}
+    signals: dict[str, Any] = {}
 
     earnings = run.fetch_earnings(ticker, use_cache=use_cache)
     signals["pead"] = calculate_pead_signal(pead_history(earnings), prices)
@@ -387,7 +388,7 @@ def _signals(run: Any, ticker: str, use_cache: bool, bundle: AnalysisBundle) -> 
     return {k: v for k, v in signals.items() if v is not None}
 
 
-def pead_history(earnings: Optional[Dict[str, pd.DataFrame]]) -> List[Dict[str, Any]]:
+def pead_history(earnings: dict[str, pd.DataFrame] | None) -> list[dict[str, Any]]:
     """
     Earnings surprises in the shape calculate_pead_signal() expects.
 
@@ -399,7 +400,7 @@ def pead_history(earnings: Optional[Dict[str, pd.DataFrame]]) -> List[Dict[str, 
         return []
 
     dates = earnings.get("earnings_dates")
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     if dates is not None and not dates.empty:
         frame = dates.reset_index() if "Earnings Date" not in dates.columns else dates
         for record in frame.to_dict("records"):
@@ -430,7 +431,7 @@ def pead_history(earnings: Optional[Dict[str, pd.DataFrame]]) -> List[Dict[str, 
     ]
 
 
-def _dividends_series(div_data: Optional[Dict[str, pd.DataFrame]]) -> Optional[pd.Series]:
+def _dividends_series(div_data: dict[str, pd.DataFrame] | None) -> pd.Series | None:
     """Convert fetch_dividends() output into the Series ValuationAnalyzer expects."""
     if not div_data or div_data.get("dividends") is None:
         return None
@@ -445,7 +446,7 @@ def _dividends_series(div_data: Optional[Dict[str, pd.DataFrame]]) -> Optional[p
     return dividends_df.iloc[:, 0]
 
 
-def _freshness_summary(ticker: str, fetcher: DataFetcher, report: Dict[str, Any]) -> Dict[str, Any]:
+def _freshness_summary(ticker: str, fetcher: DataFetcher, report: dict[str, Any]) -> dict[str, Any]:
     """
     Describe how old the underlying data is, with warnings a user should see.
 
@@ -455,7 +456,7 @@ def _freshness_summary(ticker: str, fetcher: DataFetcher, report: Dict[str, Any]
     now = datetime.now()
     fetched_at = fetcher.freshness(ticker)
     ttl_hours = fetcher.config.cache_ttl_hours or {}
-    warnings: List[str] = []
+    warnings: list[str] = []
 
     last_price_date = None
     raw_last = ((report.get("price_data") or {}).get("latest") or {}).get("date")

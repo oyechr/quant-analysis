@@ -3,7 +3,7 @@ Tests for the Phase 2b data sources: statement currency conversion, Yahoo
 industry peers, and analyst price targets. All offline via `fake_market`.
 """
 
-from typing import ClassVar, List
+from typing import ClassVar
 
 import pandas as pd
 import pytest
@@ -192,7 +192,7 @@ def _infos(*tickers, **fields):
 
 
 class TestPeerSourceChoice:
-    YAHOO: ClassVar[List[str]] = ["MSFT", "ORCL", "ADBE", "CRM", "NOW"]
+    YAHOO: ClassVar[list[str]] = ["MSFT", "ORCL", "ADBE", "CRM", "NOW"]
 
     def _run(self, ticker, info, yahoo=None):
         infos = _infos(*(yahoo or self.YAHOO))

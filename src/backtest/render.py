@@ -5,7 +5,7 @@ Rendering and saving for `quant backtest`
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from ..utils.files import atomic_write, atomic_write_text
 from ..vetting.render import Section, Table, sections_to_markdown, sections_to_text
@@ -32,7 +32,7 @@ CAVEATS = [
 ]
 
 
-def backtest_to_dict(result: BacktestResult) -> Dict[str, Any]:
+def backtest_to_dict(result: BacktestResult) -> dict[str, Any]:
     obs = result.observations
     return {
         "meta": {
@@ -51,7 +51,7 @@ def backtest_to_dict(result: BacktestResult) -> Dict[str, Any]:
     }
 
 
-def build_sections(data: Dict[str, Any]) -> List[Section]:
+def build_sections(data: dict[str, Any]) -> list[Section]:
     meta = data["meta"]
     horizons = [f"{h}m" for h in meta["horizons"]]
     sections = [
@@ -124,7 +124,7 @@ def build_sections(data: Dict[str, Any]) -> List[Section]:
             ),
         ]
 
-    notes: List[Union[str, Table]] = list(CAVEATS)
+    notes: list[str | Table] = list(CAVEATS)
     if data.get("errors"):
         failed = [f"{t} ({e})" for t, e in data["errors"].items()]
         notes.append(f"Not tested: {', '.join(failed[:10])}{' ...' if len(failed) > 10 else ''}")
@@ -132,15 +132,15 @@ def build_sections(data: Dict[str, Any]) -> List[Section]:
     return sections
 
 
-def render_text(data: Dict[str, Any]) -> str:
+def render_text(data: dict[str, Any]) -> str:
     return sections_to_text(build_sections(data))
 
 
-def render_markdown(data: Dict[str, Any]) -> str:
+def render_markdown(data: dict[str, Any]) -> str:
     return sections_to_markdown(build_sections(data))
 
 
-def save_backtest(result: BacktestResult, data: Dict[str, Any], output_dir: str) -> List[Path]:
+def save_backtest(result: BacktestResult, data: dict[str, Any], output_dir: str) -> list[Path]:
     """Summary (JSON, Markdown) and every observation (CSV) under <output_dir>/_backtests/."""
     out = Path(output_dir) / "_backtests"
     out.mkdir(parents=True, exist_ok=True)
@@ -153,14 +153,14 @@ def save_backtest(result: BacktestResult, data: Dict[str, Any], output_dir: str)
     return paths
 
 
-def _ci(ci: Optional[Dict[str, Any]], fmt: str, centre: float = 0.0) -> str:
+def _ci(ci: dict[str, Any] | None, fmt: str, centre: float = 0.0) -> str:
     if not ci:
         return "n/a"
     star = "*" if ci["low"] > centre or ci["high"] < centre else " "
     return f"{fmt.format(ci['mean'])} [{fmt.format(ci['low'])}, {fmt.format(ci['high'])}]{star}"
 
 
-def _band_row(row: Dict[str, Any], horizons: List[str]) -> List[str]:
+def _band_row(row: dict[str, Any], horizons: list[str]) -> list[str]:
     cells = [row["band"], row["range"], f"{row['share']:.0%}" if row["share"] is not None else ""]
     for h in horizons:
         cell = row[h]

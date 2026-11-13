@@ -6,9 +6,10 @@ Handles fetching historical market data from Yahoo Finance
 import json
 import logging
 import threading
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 import yfinance as yf
@@ -97,7 +98,7 @@ class DataFetcher:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.config = get_config()
         # ticker -> resource -> ISO timestamp of when the data was fetched from the source
-        self._fetched_at: Dict[str, Dict[str, str]] = {}
+        self._fetched_at: dict[str, dict[str, str]] = {}
         self._fetched_at_lock = threading.Lock()
 
     def validate_ticker(self, ticker: str) -> bool:
@@ -123,7 +124,7 @@ class DataFetcher:
             return False
 
     def _validate_params(
-        self, period: Optional[str], interval: str, start: Optional[str], end: Optional[str]
+        self, period: str | None, interval: str, start: str | None, end: str | None
     ):
         """
         Validate fetch parameters
@@ -171,8 +172,8 @@ class DataFetcher:
     def fetch_ticker(
         self,
         ticker: str,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
+        start: str | None = None,
+        end: str | None = None,
         period: str = "1y",
         interval: str = "1d",
         use_cache: bool = True,
@@ -277,9 +278,9 @@ class DataFetcher:
 
     def fetch_multiple_tickers(
         self,
-        tickers: List[str],
-        start: Optional[str] = None,
-        end: Optional[str] = None,
+        tickers: list[str],
+        start: str | None = None,
+        end: str | None = None,
         period: str = "1y",
         interval: str = "1d",
         use_cache: bool = True,
@@ -309,7 +310,7 @@ class DataFetcher:
 
         return results
 
-    def get_ticker_info(self, ticker: str, use_cache: bool = True) -> Dict[str, Any]:
+    def get_ticker_info(self, ticker: str, use_cache: bool = True) -> dict[str, Any]:
         """
         Get detailed information about a ticker
 
@@ -427,7 +428,7 @@ class DataFetcher:
             logger.info("Returning empty dict to allow other sections to continue")
             return {}
 
-    def fetch_fundamentals(self, ticker: str, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
+    def fetch_fundamentals(self, ticker: str, use_cache: bool = True) -> dict[str, pd.DataFrame]:
         """
         Fetch fundamental financial statements
 
@@ -471,7 +472,7 @@ class DataFetcher:
             use_cache=use_cache,
         )
 
-    def get_industry_peers(self, industry_key: str, use_cache: bool = True) -> List[str]:
+    def get_industry_peers(self, industry_key: str, use_cache: bool = True) -> list[str]:
         """
         Yahoo's leading companies in an industry (yf.Industry(key).top_companies).
 
@@ -485,7 +486,7 @@ class DataFetcher:
         """
         return self._peer_group("industry", industry_key, use_cache)
 
-    def get_sector_peers(self, sector_key: str, use_cache: bool = True) -> List[str]:
+    def get_sector_peers(self, sector_key: str, use_cache: bool = True) -> list[str]:
         """
         Yahoo's leading companies in a sector (yf.Sector(key).top_companies).
 
@@ -499,7 +500,7 @@ class DataFetcher:
         """
         return self._peer_group("sector", sector_key, use_cache)
 
-    def _peer_group(self, kind: str, key: str, use_cache: bool) -> List[str]:
+    def _peer_group(self, kind: str, key: str, use_cache: bool) -> list[str]:
         """
         Fetch and cache a Yahoo industry/sector company list.
 
@@ -532,7 +533,7 @@ class DataFetcher:
             logger.warning(f"{kind} lookup failed for {key}: {e}")
             return []
 
-    def latest_close(self, symbol: str, use_cache: bool = True) -> Optional[float]:
+    def latest_close(self, symbol: str, use_cache: bool = True) -> float | None:
         """Most recent close for a symbol (e.g. an FX pair like USDNOK=X), or None."""
         try:
             prices = self.fetch_ticker(symbol, period="1mo", use_cache=use_cache)
@@ -544,7 +545,7 @@ class DataFetcher:
         closes = prices["Close"].dropna()
         return float(closes.iloc[-1]) if not closes.empty else None
 
-    def fetch_earnings(self, ticker: str, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
+    def fetch_earnings(self, ticker: str, use_cache: bool = True) -> dict[str, pd.DataFrame]:
         """
         Fetch earnings history and upcoming earnings dates
 
@@ -582,7 +583,7 @@ class DataFetcher:
 
     def fetch_institutional_holders(
         self, ticker: str, use_cache: bool = True
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """
         Fetch institutional and mutual fund holders
 
@@ -615,7 +616,7 @@ class DataFetcher:
             use_cache=use_cache,
         )
 
-    def fetch_dividends(self, ticker: str, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
+    def fetch_dividends(self, ticker: str, use_cache: bool = True) -> dict[str, pd.DataFrame]:
         """
         Fetch dividend and stock split history
 
@@ -628,7 +629,7 @@ class DataFetcher:
         """
         keys = ["dividends", "splits", "actions"]
 
-        def fetch_fn(stock: yf.Ticker) -> Dict[str, pd.DataFrame]:
+        def fetch_fn(stock: yf.Ticker) -> dict[str, pd.DataFrame]:
             # Get data and convert Series to DataFrame if needed
             dividends_data = getattr(stock, "dividends", pd.Series())
             splits_data = getattr(stock, "splits", pd.Series())
@@ -668,7 +669,7 @@ class DataFetcher:
             use_cache=use_cache,
         )
 
-    def fetch_analyst_ratings(self, ticker: str, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
+    def fetch_analyst_ratings(self, ticker: str, use_cache: bool = True) -> dict[str, pd.DataFrame]:
         """
         Fetch analyst recommendations and price targets
 
@@ -712,7 +713,7 @@ class DataFetcher:
         self,
         ticker: str,
         use_cache: bool = False,  # News is time-sensitive, default to fresh
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Fetch recent news articles for a ticker
 
@@ -792,7 +793,7 @@ class DataFetcher:
                 timespec="seconds"
             )
 
-    def freshness(self, ticker: str) -> Dict[str, str]:
+    def freshness(self, ticker: str) -> dict[str, str]:
         """
         When each resource used for a ticker was fetched from the source.
 
@@ -803,7 +804,7 @@ class DataFetcher:
         with self._fetched_at_lock:
             return dict(self._fetched_at.get(ticker.upper(), {}))
 
-    def _load_price_cache(self, cache_file: Path, interval: str = "1d") -> Optional[pd.DataFrame]:
+    def _load_price_cache(self, cache_file: Path, interval: str = "1d") -> pd.DataFrame | None:
         """Load a cached price CSV, recording its age. Returns None if unreadable."""
         try:
             logger.info(f"Loading cached prices from {cache_file}")
@@ -818,7 +819,7 @@ class DataFetcher:
             logger.warning(f"Failed to load price cache {cache_file}: {e}")
             return None
 
-    def _load_json_cache(self, cache_path: Path, ignore_ttl: bool = False) -> Optional[Any]:
+    def _load_json_cache(self, cache_path: Path, ignore_ttl: bool = False) -> Any | None:
         """
         Load data from JSON cache file if it exists and has not expired
 
@@ -838,7 +839,7 @@ class DataFetcher:
 
         try:
             logger.info(f"Loading from cache: {cache_path}")
-            with open(cache_path, "r") as f:
+            with open(cache_path) as f:
                 data = json.load(f)
             self._record_fetch(
                 cache_path.parent.parent.name,
@@ -887,12 +888,12 @@ class DataFetcher:
         ticker: str,
         resource_name: str,
         cache_filename: str,
-        fetch_fn: Callable[[yf.Ticker], Dict[str, pd.DataFrame]],
-        serialize_fn: Callable[[Dict[str, pd.DataFrame]], Any],
-        deserialize_fn: Callable[[Any], Dict[str, pd.DataFrame]],
-        empty_result: Dict[str, pd.DataFrame],
+        fetch_fn: Callable[[yf.Ticker], dict[str, pd.DataFrame]],
+        serialize_fn: Callable[[dict[str, pd.DataFrame]], Any],
+        deserialize_fn: Callable[[Any], dict[str, pd.DataFrame]],
+        empty_result: dict[str, pd.DataFrame],
         use_cache: bool = True,
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """
         Generic template for fetching and caching financial data resources
 
@@ -960,7 +961,7 @@ class DataFetcher:
     # ==================== Legacy Methods ====================
 
     def _get_cache_filename(
-        self, ticker: str, start: Optional[str], end: Optional[str], period: str, interval: str
+        self, ticker: str, start: str | None, end: str | None, period: str, interval: str
     ) -> Path:
         """Generate cache filename based on parameters (for CSV price data)"""
         # Create cache subdirectory
@@ -973,7 +974,7 @@ class DataFetcher:
             filename = f"prices_{period}_{interval}.csv"
         return cache_dir / filename
 
-    def clear_cache(self, ticker: Optional[str] = None):
+    def clear_cache(self, ticker: str | None = None):
         """
         Clear cached data
 

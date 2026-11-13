@@ -12,7 +12,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ $xml.LoadXml('<toast' + $launch + '><visual><binding template="ToastGeneric"><te
 """
 
 
-def toast(title: str, message: str, open_path: Optional[Path] = None) -> bool:
+def toast(title: str, message: str, open_path: Path | None = None) -> bool:
     """
     Show a desktop notification; clicking it opens `open_path`, if given.
     Returns whether it was sent. Never raises: a missed notification

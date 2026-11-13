@@ -33,7 +33,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -128,8 +128,8 @@ class Filing:
 
     form: str
     accession: str  # without dashes
-    filing_date: Optional[datetime]
-    report_date: Optional[datetime]
+    filing_date: datetime | None
+    report_date: datetime | None
 
 
 class Edgar13FSource(PortfolioSource):
@@ -142,9 +142,9 @@ class Edgar13FSource(PortfolioSource):
 
     def __init__(
         self,
-        filers: Optional[list[dict]] = None,
+        filers: list[dict] | None = None,
         cache_dir: str = "data",
-        user_agent: Optional[str] = None,
+        user_agent: str | None = None,
     ):
         """
         Args:
@@ -221,7 +221,7 @@ class Edgar13FSource(PortfolioSource):
 
     # ==================== Cache ====================
 
-    def _read_cache(self, cache_file: Path) -> Optional[dict]:
+    def _read_cache(self, cache_file: Path) -> dict | None:
         if not cache_file.exists():
             return None
         try:
@@ -253,7 +253,7 @@ class Edgar13FSource(PortfolioSource):
 
     def _fetch_filer_portfolio_with_diff(
         self, name: str, cik: str, use_cache: bool = True
-    ) -> Optional[TrackedPortfolio]:
+    ) -> TrackedPortfolio | None:
         """
         The latest quarter's holdings, diffed against the quarter before.
 
@@ -328,7 +328,7 @@ class Edgar13FSource(PortfolioSource):
         filing_dates = recent.get("filingDate", [])
         report_dates = recent.get("reportDate", [])
 
-        def _date(values: list, i: int) -> Optional[datetime]:
+        def _date(values: list, i: int) -> datetime | None:
             try:
                 return datetime.strptime(str(values[i]), "%Y-%m-%d")
             except IndexError, ValueError:
@@ -347,7 +347,7 @@ class Edgar13FSource(PortfolioSource):
 
     def _period_holdings(
         self, cik_padded: str, period: list[Filing]
-    ) -> tuple[list[Holding], Optional[Filing]]:
+    ) -> tuple[list[Holding], Filing | None]:
         """
         One quarter's holdings: the newest complete filing (13F-HR, or a
         RESTATEMENT amendment) plus the NEW HOLDINGS amendments filed after
@@ -361,7 +361,7 @@ class Edgar13FSource(PortfolioSource):
                 logger.warning(f"No information table in filing {filing.accession}")
                 continue
             if filing.form == FORM_13F:
-                kind: Optional[str] = RESTATEMENT
+                kind: str | None = RESTATEMENT
             else:
                 kind = self._amendment_type(primary_url) if primary_url else None
             if kind not in (RESTATEMENT, NEW_HOLDINGS):
@@ -374,9 +374,7 @@ class Edgar13FSource(PortfolioSource):
                 return aggregate_holdings([h for part in parts for h in part]), filing
         return [], None
 
-    def _filing_documents(
-        self, cik_padded: str, accession: str
-    ) -> tuple[Optional[str], Optional[str]]:
+    def _filing_documents(self, cik_padded: str, accession: str) -> tuple[str | None, str | None]:
         """URLs of a filing's information table and primary document, from its index."""
         base = f"{EDGAR_ARCHIVES_URL}/{cik_padded.lstrip('0')}/{accession}"
         try:
@@ -399,7 +397,7 @@ class Edgar13FSource(PortfolioSource):
             f"{base}/{primary}" if primary else None,
         )
 
-    def _amendment_type(self, url: str) -> Optional[str]:
+    def _amendment_type(self, url: str) -> str | None:
         """RESTATEMENT or NEW HOLDINGS, from an amendment's primary document."""
         try:
             root = ET.fromstring(self._get(url).content)
@@ -452,7 +450,7 @@ class Edgar13FSource(PortfolioSource):
     def _deserialize_portfolio(self, data: dict) -> TrackedPortfolio:
         """Deserialize a TrackedPortfolio from cached JSON."""
 
-        def _datetime(value: Any) -> Optional[datetime]:
+        def _datetime(value: Any) -> datetime | None:
             try:
                 return datetime.fromisoformat(value) if value else None
             except TypeError, ValueError:
@@ -534,7 +532,7 @@ def parse_information_table(content: bytes) -> list[Holding]:
     return holdings
 
 
-def _text(element: ET.Element, path: str) -> Optional[str]:
+def _text(element: ET.Element, path: str) -> str | None:
     """Text at a slash-separated path of local names, in any namespace."""
     found = element.find("/".join(f"{{*}}{part}" for part in path.split("/")))
     if found is None:
@@ -544,14 +542,14 @@ def _text(element: ET.Element, path: str) -> Optional[str]:
     return None
 
 
-def _float(text: Optional[str]) -> Optional[float]:
+def _float(text: str | None) -> float | None:
     try:
         return float(text.replace(",", "")) if text else None
     except ValueError:
         return None
 
 
-def _parse_entry(entry: ET.Element) -> Optional[Holding]:
+def _parse_entry(entry: ET.Element) -> Holding | None:
     name = _text(entry, "nameOfIssuer")
     if not name:
         return None
@@ -566,7 +564,7 @@ def _parse_entry(entry: ET.Element) -> Optional[Holding]:
     )
 
 
-def _add(a: Optional[float], b: Optional[float]) -> Optional[float]:
+def _add(a: float | None, b: float | None) -> float | None:
     return b if a is None else a if b is None else a + b
 
 
@@ -590,7 +588,7 @@ def aggregate_holdings(holdings: list[Holding]) -> list[Holding]:
 def diff_holdings(
     current: list[Holding],
     previous: list[Holding],
-    filing_date: Optional[datetime] = None,
+    filing_date: datetime | None = None,
 ) -> list[Holding]:
     """
     The current holdings (summed per identifier, as new objects) with

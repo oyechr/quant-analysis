@@ -34,7 +34,7 @@ import math
 import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -60,15 +60,15 @@ class Limits:
 
 @dataclass
 class TickerTarget:
-    target: Optional[float] = None
-    max: Optional[float] = None
+    target: float | None = None
+    max: float | None = None
 
 
 @dataclass
 class TargetSettings:
     limits: Limits = field(default_factory=Limits)
-    tickers: Dict[str, TickerTarget] = field(default_factory=dict)
-    source: Optional[str] = None  # the file read, or None for the defaults
+    tickers: dict[str, TickerTarget] = field(default_factory=dict)
+    source: str | None = None  # the file read, or None for the defaults
 
 
 def load_targets(path: Path = DEFAULT_TARGETS) -> TargetSettings:
@@ -89,7 +89,7 @@ def load_targets(path: Path = DEFAULT_TARGETS) -> TargetSettings:
             raise ValueError(f"{path.name}: unknown limit {key!r} (known: {sorted(allowed)})")
         setattr(limits, key, _limit(value, type(getattr(limits, key)), f"{path.name}: {key}"))
 
-    tickers: Dict[str, TickerTarget] = {}
+    tickers: dict[str, TickerTarget] = {}
     for ticker, values in _table(raw.get("ticker"), f"{path.name}: [ticker]").items():
         values = _table(values, f"{path.name}: [ticker.{ticker!r}]")
         bad = set(values) - {"target", "max"}
@@ -104,7 +104,7 @@ def load_targets(path: Path = DEFAULT_TARGETS) -> TargetSettings:
     return TargetSettings(limits=limits, tickers=tickers, source=str(path))
 
 
-def _table(value: Any, what: str) -> Dict[str, Any]:
+def _table(value: Any, what: str) -> dict[str, Any]:
     if value is None:
         return {}
     if not isinstance(value, dict):
@@ -124,7 +124,7 @@ def _limit(value: Any, kind: type, what: str) -> float | int:
     return int(value) if kind is int else float(value)
 
 
-def _fraction(value: Any, what: str) -> Optional[float]:
+def _fraction(value: Any, what: str) -> float | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -173,13 +173,13 @@ def equal_risk_weights(cov: pd.DataFrame) -> pd.Series:
 
 
 def target_weights(
-    weights: Dict[str, float],
+    weights: dict[str, float],
     cov: pd.DataFrame,
-    sectors: Dict[str, str],
+    sectors: dict[str, str],
     settings: TargetSettings,
-    exits: Set[str],
-    frozen: Set[str],
-) -> Tuple[Dict[str, float], Dict[str, Any]]:
+    exits: set[str],
+    frozen: set[str],
+) -> tuple[dict[str, float], dict[str, Any]]:
     """
     Target weight per holding, and notes on how they were set.
 
@@ -189,7 +189,7 @@ def target_weights(
     lists the fixed, the capped and any weight left unallocated because
     every holding hit a cap.
     """
-    fixed: Dict[str, float] = {}
+    fixed: dict[str, float] = {}
     for ticker, weight in weights.items():
         own = settings.tickers.get(ticker)
         if ticker in exits:
@@ -223,11 +223,11 @@ def target_weights(
 
 
 def _apply_caps(
-    targets: Dict[str, float],
-    free: List[str],
-    sectors: Dict[str, str],
+    targets: dict[str, float],
+    free: list[str],
+    sectors: dict[str, str],
     settings: TargetSettings,
-) -> List[str]:
+) -> list[str]:
     """Cap positions and sectors in place, spreading the excess over the uncapped free holdings."""
     limits = settings.limits
 
@@ -235,7 +235,7 @@ def _apply_caps(
         own = settings.tickers.get(ticker)
         return own.max if own and own.max is not None else limits.max_position
 
-    capped: Set[str] = set()
+    capped: set[str] = set()
     for _ in range(CAP_ROUNDS):
         excess = 0.0
         for ticker in free:
@@ -278,7 +278,7 @@ def _apply_caps(
 
 
 def _sector_full(
-    ticker: str, targets: Dict[str, float], sectors: Dict[str, str], limits: Limits
+    ticker: str, targets: dict[str, float], sectors: dict[str, str], limits: Limits
 ) -> bool:
     sector = sectors.get(ticker) or "Unknown"
     if sector in EXEMPT_SECTORS:

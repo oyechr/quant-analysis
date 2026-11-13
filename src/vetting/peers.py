@@ -17,9 +17,10 @@ currency than their price, the caller normalizes them first
 
 import logging
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from statistics import median
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from ..utils.concurrency import run_concurrently
 from ..utils.financial import finite_float
@@ -27,9 +28,9 @@ from ..utils.fx import major_currency, usd_per_unit
 
 logger = logging.getLogger(__name__)
 
-InfoLookup = Callable[[str], Dict[str, Any]]
-ListLookup = Callable[[str], List[str]]
-FxLookup = Callable[[str], Optional[float]]
+InfoLookup = Callable[[str], dict[str, Any]]
+ListLookup = Callable[[str], list[str]]
+FxLookup = Callable[[str], float | None]
 
 MAX_YAHOO_PEERS = 10
 MAX_YAHOO_CANDIDATES = 25  # info is fetched for each before the size filter
@@ -44,7 +45,7 @@ class Metric:
     lower_is_cheaper: bool = True
 
 
-METRICS: List[Metric] = [
+METRICS: list[Metric] = [
     Metric("pe_ratio", "P/E"),
     Metric("forward_pe", "Fwd P/E"),
     Metric("ev_to_ebitda", "EV/EBITDA"),
@@ -58,13 +59,13 @@ METRICS: List[Metric] = [
 class MetricComparison:
     key: str
     label: str
-    value: Optional[float]
-    median: Optional[float]
-    percentile: Optional[float]  # 0-100: share of peers below the target's value
-    cheapness: Optional[float]  # 0-100: share of peers more expensive than the target
+    value: float | None
+    median: float | None
+    percentile: float | None  # 0-100: share of peers below the target's value
+    cheapness: float | None  # 0-100: share of peers more expensive than the target
     n: int  # peers with a usable value
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "label": self.label,
             "value": _round(self.value),
@@ -78,13 +79,13 @@ class MetricComparison:
 @dataclass
 class PeerValuation:
     ticker: str
-    peers: List[str]
+    peers: list[str]
     basis: str  # "explicit", "yahoo_industry", "yahoo_industry_sector", "yahoo_sector", "none"
-    group: Optional[str] = None  # the industry/sector name used
-    metrics: Dict[str, MetricComparison] = field(default_factory=dict)
-    missing: List[str] = field(default_factory=list)  # requested peers with no data
+    group: str | None = None  # the industry/sector name used
+    metrics: dict[str, MetricComparison] = field(default_factory=dict)
+    missing: list[str] = field(default_factory=list)  # requested peers with no data
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ticker": self.ticker,
             "basis": self.basis,
@@ -98,7 +99,7 @@ class PeerValuation:
 # ==================== Maths ====================
 
 
-def percentile_rank(value: float, population: List[float]) -> Optional[float]:
+def percentile_rank(value: float, population: list[float]) -> float | None:
     """
     Percent of `population` below `value`, counting ties as half (0-100).
 
@@ -111,7 +112,7 @@ def percentile_rank(value: float, population: List[float]) -> Optional[float]:
     return (below + 0.5 * equal) / len(population) * 100
 
 
-def metric_value(info: Dict[str, Any], key: str) -> Optional[float]:
+def metric_value(info: dict[str, Any], key: str) -> float | None:
     """
     A comparable metric value from an info dict, or None if unusable.
 
@@ -136,7 +137,7 @@ def metric_value(info: Dict[str, Any], key: str) -> Optional[float]:
 _STATEMENT_RATIOS = ("price_to_sales", "ev_to_ebitda", "price_to_book", "fcf_yield")
 
 
-def _mixed_currency(info: Dict[str, Any], key: str) -> bool:
+def _mixed_currency(info: dict[str, Any], key: str) -> bool:
     """
     Whether a statement-based ratio may mix currencies.
 
@@ -157,10 +158,10 @@ def _mixed_currency(info: Dict[str, Any], key: str) -> bool:
 
 def compare_to_peers(
     ticker: str,
-    target_info: Dict[str, Any],
-    peer_infos: Dict[str, Dict[str, Any]],
+    target_info: dict[str, Any],
+    peer_infos: dict[str, dict[str, Any]],
     basis: str,
-    group: Optional[str] = None,
+    group: str | None = None,
 ) -> PeerValuation:
     """Median and percentile of the target on each metric against the peers."""
     result = PeerValuation(ticker=ticker, peers=list(peer_infos), basis=basis, group=group)
@@ -192,12 +193,12 @@ def compare_to_peers(
 
 def peer_valuation(
     ticker: str,
-    info: Dict[str, Any],
+    info: dict[str, Any],
     fetch_info: InfoLookup,
-    peers: Optional[List[str]] = None,
-    industry_peers: Optional[ListLookup] = None,
-    sector_peers: Optional[ListLookup] = None,
-    fx_lookup: Optional[FxLookup] = None,
+    peers: list[str] | None = None,
+    industry_peers: ListLookup | None = None,
+    sector_peers: ListLookup | None = None,
+    fx_lookup: FxLookup | None = None,
     min_peers: int = 4,
 ) -> PeerValuation:
     """
@@ -237,12 +238,12 @@ def peer_valuation(
 
 def _yahoo_group(
     ticker: str,
-    info: Dict[str, Any],
+    info: dict[str, Any],
     kind: str,
-    lister: Optional[ListLookup],
+    lister: ListLookup | None,
     fetch_info: InfoLookup,
-    fx_lookup: Optional[FxLookup],
-) -> Dict[str, Dict[str, Any]]:
+    fx_lookup: FxLookup | None,
+) -> dict[str, dict[str, Any]]:
     """Similar-size peers from Yahoo's list for the target's industry or sector, closest first."""
     key = info.get(f"{kind}_key")
     if lister is None or not key:
@@ -257,10 +258,10 @@ def _yahoo_group(
 
 
 def _similar_size(
-    info: Dict[str, Any],
-    peers: Dict[str, Dict[str, Any]],
-    fx_lookup: Optional[FxLookup],
-) -> Dict[str, Dict[str, Any]]:
+    info: dict[str, Any],
+    peers: dict[str, dict[str, Any]],
+    fx_lookup: FxLookup | None,
+) -> dict[str, dict[str, Any]]:
     """Peers within SIZE_BAND of the target's USD market cap, closest first."""
     target = _usd_market_cap(info, fx_lookup)
     if target is None:
@@ -273,7 +274,7 @@ def _similar_size(
     return {t: peers[t] for t in ranked}
 
 
-def _usd_market_cap(info: Dict[str, Any], fx_lookup: Optional[FxLookup]) -> Optional[float]:
+def _usd_market_cap(info: dict[str, Any], fx_lookup: FxLookup | None) -> float | None:
     cap = finite_float(info.get("market_cap"))
     if cap is None or cap <= 0:
         return None
@@ -287,11 +288,11 @@ def _usd_market_cap(info: Dict[str, Any], fx_lookup: Optional[FxLookup]) -> Opti
 
 
 def _load_infos(
-    ticker: str, symbols: List[str], fetch_info: InfoLookup
-) -> tuple[Dict[str, Dict[str, Any]], List[str]]:
+    ticker: str, symbols: list[str], fetch_info: InfoLookup
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Info dicts for `symbols` in the given order, plus the symbols with no data."""
     wanted = [t for t in dict.fromkeys(s.upper() for s in symbols) if t != ticker]
-    results: Dict[str, Dict[str, Any]] = {}
+    results: dict[str, dict[str, Any]] = {}
     for symbol, peer_info, error in run_concurrently(
         fetch_info, wanted, workers=PEER_FETCH_WORKERS
     ):
@@ -304,8 +305,8 @@ def _load_infos(
 
 
 def _drop_same_company(
-    info: Dict[str, Any], peers: Dict[str, Dict[str, Any]]
-) -> Dict[str, Dict[str, Any]]:
+    info: dict[str, Any], peers: dict[str, dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
     """Leave out other share classes / listings of the target (GOOG for GOOGL, EQNR for EQNR.OL)."""
     name = _clean(info.get("name"))
     if not name:
@@ -318,5 +319,5 @@ def _clean(value: Any) -> str:
     return "" if text in ("", "n/a", "none", "unknown") else text
 
 
-def _round(value: Optional[float], digits: int = 2) -> Optional[float]:
+def _round(value: float | None, digits: int = 2) -> float | None:
     return None if value is None else round(value, digits)

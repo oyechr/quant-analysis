@@ -8,7 +8,8 @@ a `]` can't break a table or a link.
 """
 
 import numbers
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from ..analysis.fundamental import altman_zones
 from ..markets import benchmark_name
@@ -22,8 +23,8 @@ from ..utils.report import (
     rate_ratio,
 )
 
-Lines = List[str]
-Ladder = Sequence[Tuple[float, str]]
+Lines = list[str]
+Ladder = Sequence[tuple[float, str]]
 
 # Plain-language notes. `_above` takes the first label whose threshold the
 # value exceeds; `_below` the first whose threshold it is under.
@@ -72,7 +73,7 @@ MAX_ROWS = 5
 
 
 def render_report_markdown(
-    ticker: str, data: Dict[str, Any], scoring_result: Optional[ScoringResult] = None
+    ticker: str, data: dict[str, Any], scoring_result: ScoringResult | None = None
 ) -> str:
     """
     report.md as a comprehensive, consolidated analysis document.
@@ -103,7 +104,7 @@ def render_report_markdown(
 # ==================== Sections ====================
 
 
-def _header(ticker: str, data: Dict[str, Any], info: Dict[str, Any]) -> Lines:
+def _header(ticker: str, data: dict[str, Any], info: dict[str, Any]) -> Lines:
     md = [
         f"# {ticker} — Full Analysis Report",
         "",
@@ -116,7 +117,7 @@ def _header(ticker: str, data: Dict[str, Any], info: Dict[str, Any]) -> Lines:
     return md
 
 
-def _score_section(result: Optional[ScoringResult]) -> Lines:
+def _score_section(result: ScoringResult | None) -> Lines:
     if not result:
         return []
     md = _rule(f"Composite Score: {result.composite_score:.0f}/100 — {result.signal}")
@@ -148,7 +149,7 @@ def _score_section(result: Optional[ScoringResult]) -> Lines:
 
 
 def _overview_section(
-    info: Dict[str, Any], price_data: Dict[str, Any], currency: str, price: Optional[float]
+    info: dict[str, Any], price_data: dict[str, Any], currency: str, price: float | None
 ) -> Lines:
     sym = get_currency_symbol(currency)
     md = _rule("Company Overview")
@@ -215,7 +216,7 @@ def _overview_section(
     return md + _table(["Metric", "Value", "Meaning"], rows)
 
 
-def _technical_section(tech: Dict[str, Any], sym: str) -> Lines:
+def _technical_section(tech: dict[str, Any], sym: str) -> Lines:
     if not tech:
         return []
     md = _rule("Technical Analysis")
@@ -280,7 +281,7 @@ def _technical_section(tech: Dict[str, Any], sym: str) -> Lines:
     return md
 
 
-def _fundamental_section(fund: Dict[str, Any]) -> Lines:
+def _fundamental_section(fund: dict[str, Any]) -> Lines:
     if not fund:
         return []
     md = _rule("Fundamental Analysis")
@@ -310,7 +311,7 @@ def _fundamental_section(fund: Dict[str, Any]) -> Lines:
     return md
 
 
-def _growth_lines(growth: Dict[str, Any]) -> Lines:
+def _growth_lines(growth: dict[str, Any]) -> Lines:
     rows = []
     for label, key in (("Revenue", "revenue"), ("Earnings", "earnings"), ("Free Cash Flow", "fcf")):
         rate = growth.get(key)
@@ -321,7 +322,7 @@ def _growth_lines(growth: Dict[str, Any]) -> Lines:
     return ["### Growth", "", *_table(["Metric", "1 Year", "3 Year (CAGR)"], rows)]
 
 
-def _margin_lines(margins: Dict[str, Any]) -> Lines:
+def _margin_lines(margins: dict[str, Any]) -> Lines:
     if not margins:
         return []
     rows = []
@@ -336,7 +337,7 @@ def _margin_lines(margins: Dict[str, Any]) -> Lines:
     return ["### Profitability", "", *_table(["Margin", "Value", "Meaning"], rows)]
 
 
-def _quality_lines(quality: Dict[str, Any]) -> Lines:
+def _quality_lines(quality: dict[str, Any]) -> Lines:
     if not quality:
         return []
     md = [
@@ -390,7 +391,7 @@ def _quality_lines(quality: Dict[str, Any]) -> Lines:
     return md
 
 
-def _risk_section(risk: Dict[str, Any]) -> Lines:
+def _risk_section(risk: dict[str, Any]) -> Lines:
     if not risk:
         return []
     md = _rule("Risk Analysis")
@@ -476,7 +477,7 @@ def _risk_section(risk: Dict[str, Any]) -> Lines:
     return md
 
 
-def _drawdown_lines(dd: Dict[str, Any]) -> Lines:
+def _drawdown_lines(dd: dict[str, Any]) -> Lines:
     if not dd:
         return []
     md = ["### Drawdown", "", f"- **Maximum drawdown:** {dd.get('max_drawdown', 0):.1%}"]
@@ -495,7 +496,7 @@ def _drawdown_lines(dd: Dict[str, Any]) -> Lines:
     return md
 
 
-def _market_lines(mr: Dict[str, Any]) -> Lines:
+def _market_lines(mr: dict[str, Any]) -> Lines:
     if not mr:
         return []
     beta = mr.get("beta", 0)
@@ -512,7 +513,7 @@ def _market_lines(mr: Dict[str, Any]) -> Lines:
     ]
 
 
-def _tail_lines(var95: Dict[str, Any], var99: Dict[str, Any]) -> Lines:
+def _tail_lines(var95: dict[str, Any], var99: dict[str, Any]) -> Lines:
     if not var95:
         return []
     md = [
@@ -529,7 +530,7 @@ def _tail_lines(var95: Dict[str, Any], var99: Dict[str, Any]) -> Lines:
     return md
 
 
-def _distribution_lines(dist: Dict[str, Any]) -> Lines:
+def _distribution_lines(dist: dict[str, Any]) -> Lines:
     if not dist:
         return []
     md = [
@@ -551,7 +552,7 @@ def _distribution_lines(dist: Dict[str, Any]) -> Lines:
     return md
 
 
-def _kelly_lines(kelly: Dict[str, Any]) -> Lines:
+def _kelly_lines(kelly: dict[str, Any]) -> Lines:
     if not kelly:
         return []
     md = [
@@ -570,7 +571,7 @@ def _kelly_lines(kelly: Dict[str, Any]) -> Lines:
     return md
 
 
-def _valuation_section(val: Dict[str, Any], sym: str, price: Optional[float]) -> Lines:
+def _valuation_section(val: dict[str, Any], sym: str, price: float | None) -> Lines:
     if not val:
         return []
     md = _rule("Valuation")
@@ -624,7 +625,7 @@ def _valuation_section(val: Dict[str, Any], sym: str, price: Optional[float]) ->
     return md
 
 
-def _monte_carlo_lines(mc: Dict[str, Any], sym: str, price: Optional[float]) -> Lines:
+def _monte_carlo_lines(mc: dict[str, Any], sym: str, price: float | None) -> Lines:
     if mc.get("error"):
         return [f"**Monte Carlo:** Not applicable — {mc['error']}", ""]
     if mc.get("probability_undervalued") is None:
@@ -659,7 +660,7 @@ def _monte_carlo_lines(mc: Dict[str, Any], sym: str, price: Optional[float]) -> 
     return md
 
 
-def _analyst_section(ratings: Dict[str, Any], sym: str) -> Lines:
+def _analyst_section(ratings: dict[str, Any], sym: str) -> Lines:
     """Yahoo's current rating counts, then the latest rating changes."""
     recs = ratings.get("recent_recommendations") or []
     latest = recs[0] if recs and isinstance(recs[0], dict) else {}
@@ -700,7 +701,7 @@ def _analyst_section(ratings: Dict[str, Any], sym: str) -> Lines:
     return md
 
 
-def _holders_section(holders: Dict[str, Any]) -> Lines:
+def _holders_section(holders: dict[str, Any]) -> Lines:
     rows = [
         [h.get("Holder") or "N/A", f"{h['pctHeld']:.2%}"]
         for h in (holders.get("top_institutional") or [])[:MAX_ROWS]
@@ -711,7 +712,7 @@ def _holders_section(holders: Dict[str, Any]) -> Lines:
     return _rule("Top Institutional Holders") + _table(["Institution", "% Held"], rows)
 
 
-def _news_section(news: Dict[str, Any]) -> Lines:
+def _news_section(news: dict[str, Any]) -> Lines:
     items = [
         item
         for item in (_news_item(a) for a in news.get("recent_articles") or [])
@@ -732,7 +733,7 @@ def _news_section(news: Dict[str, Any]) -> Lines:
     return md
 
 
-def _news_item(article: Any) -> Optional[Tuple[str, str, str, str]]:
+def _news_item(article: Any) -> tuple[str, str, str, str] | None:
     """(title, url, publisher, date) from a yfinance article, or None without a title.
 
     yfinance nests the article under "content" (provider.displayName,
@@ -765,7 +766,7 @@ def _news_item(article: Any) -> Optional[Tuple[str, str, str, str]]:
 # ==================== Helpers ====================
 
 
-def _current_price(data: Dict[str, Any]) -> Optional[float]:
+def _current_price(data: dict[str, Any]) -> float | None:
     """The first positive price from info, the latest bar, or the valuation models."""
     info = data.get("info") or {}
     latest = (data.get("price_data") or {}).get("latest") or {}
@@ -786,7 +787,7 @@ def _rule(title: str) -> Lines:
     return ["---", "", f"## {title}", ""]
 
 
-def _table(headers: List[str], rows: List[List[Any]]) -> Lines:
+def _table(headers: list[str], rows: list[list[Any]]) -> Lines:
     lines = [
         "| " + " | ".join(headers) + " |",
         "|" + "|".join("-" * (len(h) + 2) for h in headers) + "|",

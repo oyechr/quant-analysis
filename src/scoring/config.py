@@ -206,14 +206,14 @@ class ScoringConfig:
             return "Strong Sell"
 
     @classmethod
-    def load_from_file(cls, path: Path) -> "ScoringConfig":
+    def load_from_file(cls, path: Path) -> ScoringConfig:
         """Load scoring configuration from JSON file"""
         if not path.exists():
             logger.info(f"Scoring config not found at {path}, using defaults")
             return cls()
 
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = json.load(f)
 
             config = cls(name=data.get("name", path.stem))
@@ -245,7 +245,7 @@ class ScoringConfig:
         logger.info(f"Scoring configuration saved to {path}")
 
     @classmethod
-    def value_investor(cls) -> "ScoringConfig":
+    def value_investor(cls) -> ScoringConfig:
         """Preset: Value-oriented investor (emphasizes fundamentals + valuation)"""
         return cls(
             name="value",
@@ -253,7 +253,7 @@ class ScoringConfig:
         )
 
     @classmethod
-    def growth_investor(cls) -> "ScoringConfig":
+    def growth_investor(cls) -> ScoringConfig:
         """Preset: Growth-oriented investor (emphasizes growth + momentum)"""
         return cls(
             name="growth",
@@ -261,7 +261,7 @@ class ScoringConfig:
         )
 
     @classmethod
-    def income_investor(cls) -> "ScoringConfig":
+    def income_investor(cls) -> ScoringConfig:
         """Preset: Income-oriented investor (emphasizes dividends + risk)"""
         return cls(
             name="income",

@@ -6,7 +6,7 @@ used across technical, fundamental, and risk analysis modules.
 """
 
 import math
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -32,7 +32,7 @@ def to_float(value: Any) -> float:
     return 0.0
 
 
-def finite_float(value: Any, default: Optional[float] = None) -> Optional[float]:
+def finite_float(value: Any, default: float | None = None) -> float | None:
     """
     A value as a float, or `default` when it's missing, not a number, NaN or
     infinite. Use this where a missing value must stay missing; `to_float`
@@ -192,7 +192,7 @@ def calculate_cagr(ending_value: float, beginning_value: float, num_periods: int
     return float((pow(ending_value / beginning_value, 1 / num_periods) - 1) * 100)
 
 
-def calculate_growth_rate(current: Optional[float], previous: Optional[float]) -> Optional[float]:
+def calculate_growth_rate(current: float | None, previous: float | None) -> float | None:
     """
     Calculate percentage growth rate between two values
 
@@ -208,7 +208,7 @@ def calculate_growth_rate(current: Optional[float], previous: Optional[float]) -
     return ((current - previous) / abs(previous)) * 100
 
 
-def safe_divide(numerator: Optional[float], denominator: Optional[float]) -> Optional[float]:
+def safe_divide(numerator: float | None, denominator: float | None) -> float | None:
     """
     Safely divide two numbers, returning None on invalid inputs
 
@@ -234,7 +234,7 @@ OCF_ROWS = (
 )
 
 
-def operating_cash_flow(cash_flow: Optional[pd.DataFrame], col: int = 0) -> Optional[float]:
+def operating_cash_flow(cash_flow: pd.DataFrame | None, col: int = 0) -> float | None:
     """Operating cash flow in column `col` (0 = latest), or None."""
     for row in OCF_ROWS:
         value = safe_get_dataframe_value(cash_flow, row, col)
@@ -243,7 +243,7 @@ def operating_cash_flow(cash_flow: Optional[pd.DataFrame], col: int = 0) -> Opti
     return None
 
 
-def free_cash_flow(cash_flow: Optional[pd.DataFrame], col: int = 0) -> Optional[float]:
+def free_cash_flow(cash_flow: pd.DataFrame | None, col: int = 0) -> float | None:
     """
     Free cash flow in column `col` (0 = latest): Yahoo's "Free Cash Flow" row,
     else operating cash flow minus capex. One rule for the DCF, the FCF yield
@@ -259,7 +259,7 @@ def free_cash_flow(cash_flow: Optional[pd.DataFrame], col: int = 0) -> Optional[
     return ocf - abs(capex)  # Yahoo reports capex as negative; some sources don't
 
 
-def calculate_kelly_criterion(price_data: pd.DataFrame) -> Optional[dict]:
+def calculate_kelly_criterion(price_data: pd.DataFrame) -> dict | None:
     """
     Calculate Kelly Criterion for optimal position sizing
 

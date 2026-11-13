@@ -5,7 +5,8 @@ Calculates technical indicators from price data using finta library
 
 import logging
 import math
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import pandas as pd
 from finta import TA
@@ -30,7 +31,7 @@ class TechnicalAnalyzer:
         self,
         price_data: pd.DataFrame,
         currency: str = "USD",
-        config: Optional[AnalysisConfig] = None,
+        config: AnalysisConfig | None = None,
     ):
         """
         Initialize analyzer with price data
@@ -232,7 +233,7 @@ class TechnicalAnalyzer:
         self.df["Williams_R"] = TA.WILLIAMS(self._finta_df(), period=period).values
         return self.df
 
-    def calculate_statistics(self) -> Dict[str, Any]:
+    def calculate_statistics(self) -> dict[str, Any]:
         """
         Calculate statistical summary of price and volume data
 
@@ -341,7 +342,7 @@ class TechnicalAnalyzer:
         logger.info(f"Calculated {len(self.df.columns) - 6} indicators")  # Subtract OHLCV + 1
         return self.df
 
-    def get_latest_values(self) -> Dict[str, Any]:
+    def get_latest_values(self) -> dict[str, Any]:
         """
         Get most recent indicator values (latest row)
 
@@ -357,7 +358,7 @@ class TechnicalAnalyzer:
         base_cols = ["Open", "High", "Low", "Close", "Volume", "Adj Close"]
         indicator_cols = [col for col in self.df.columns if col not in base_cols]
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "date": format_date(latest.name),
             "close_price": float(latest["Close"]),
             "indicators": {},
@@ -370,7 +371,7 @@ class TechnicalAnalyzer:
 
         return result
 
-    def crossovers(self) -> Dict[str, Optional[str]]:
+    def crossovers(self) -> dict[str, str | None]:
         """
         The trend state for scoring, as values rather than text:
 
@@ -380,12 +381,12 @@ class TechnicalAnalyzer:
         - `ma_cross`: "golden" / "death" when SMA 50 crossed SMA 200 on the
           last bar, else None.
         """
-        state: Dict[str, Optional[str]] = {"macd_cross": None, "ma_regime": None, "ma_cross": None}
+        state: dict[str, str | None] = {"macd_cross": None, "ma_regime": None, "ma_cross": None}
         if len(self.df) < 2:
             return state
         last, prev = self.df.iloc[-1], self.df.iloc[-2]
 
-        def cross(fast: str, slow: str, up: str, down: str) -> Optional[str]:
+        def cross(fast: str, slow: str, up: str, down: str) -> str | None:
             values = [_finite(row.get(name)) for row in (last, prev) for name in (fast, slow)]
             if not all(math.isfinite(v) for v in values):
                 return None
@@ -403,7 +404,7 @@ class TechnicalAnalyzer:
             state["ma_regime"] = "bullish" if sma50 > sma200 else "bearish"
         return state
 
-    def generate_signals(self) -> Dict[str, str]:
+    def generate_signals(self) -> dict[str, str]:
         """
         Generate trading signals based on indicator values
 
@@ -515,7 +516,7 @@ class TechnicalAnalyzer:
 
         return signals
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """
         Get comprehensive summary with latest values and signals
 
@@ -535,7 +536,7 @@ class TechnicalAnalyzer:
             },
         }
 
-    def calculate_support_resistance(self, window: int = 20, num_levels: int = 3) -> Dict[str, Any]:
+    def calculate_support_resistance(self, window: int = 20, num_levels: int = 3) -> dict[str, Any]:
         """
         Calculate support and resistance levels from price data.
 
@@ -569,7 +570,7 @@ class TechnicalAnalyzer:
             "current_price": round(current_price, 2) if current_price else None,
         }
 
-    def format_markdown(self) -> List[str]:
+    def format_markdown(self) -> list[str]:
         """
         Format technical analysis as detailed markdown report
 
@@ -808,8 +809,8 @@ class TechnicalAnalyzer:
 
 def calculate_relative_strength(
     price_data: pd.DataFrame,
-    benchmark_data: Optional[pd.DataFrame] = None,
-) -> Optional[Dict[str, Any]]:
+    benchmark_data: pd.DataFrame | None = None,
+) -> dict[str, Any] | None:
     """
     Calculate IBD-style Relative Strength Rating (1-99).
 
@@ -920,7 +921,7 @@ def _closes_by_date(close: pd.Series) -> pd.Series:
     return out[~out.index.duplicated(keep="last")].sort_index()
 
 
-def _close_on(closes: pd.Series, date: pd.Timestamp) -> Optional[float]:
+def _close_on(closes: pd.Series, date: pd.Timestamp) -> float | None:
     """The last close on or before `date`, or None if the series starts after it."""
     if closes.empty or closes.index[0] > date:
         return None

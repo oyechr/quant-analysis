@@ -1,13 +1,11 @@
 """Terminal rendering of a DiscoveryResult (`quant discover`)."""
 
-from typing import List
-
 from .models import DiscoveryResult
 
 _RULE = "  " + "=" * 66
 
 
-def _heading(title: str) -> List[str]:
+def _heading(title: str) -> list[str]:
     return [_RULE, f"  {title}", _RULE, ""]
 
 

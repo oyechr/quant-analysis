@@ -11,7 +11,7 @@ just mathematically rigorous factor construction.
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -35,15 +35,15 @@ class FactorScore:
     """Individual factor score for a ticker"""
 
     ticker: str
-    value_score: Optional[float] = None
-    quality_score: Optional[float] = None
-    momentum_score: Optional[float] = None
-    low_vol_score: Optional[float] = None
-    size_score: Optional[float] = None
-    composite_score: Optional[float] = None
-    percentile_rank: Optional[float] = None
+    value_score: float | None = None
+    quality_score: float | None = None
+    momentum_score: float | None = None
+    low_vol_score: float | None = None
+    size_score: float | None = None
+    composite_score: float | None = None
+    percentile_rank: float | None = None
     factors_available: int = 0
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -70,13 +70,13 @@ class FactorRanker:
     - Low Volatility: Inverse of annualized volatility
     """
 
-    def __init__(self, weights: Optional[FactorWeights] = None):
+    def __init__(self, weights: FactorWeights | None = None):
         self.weights = weights or FactorWeights()
 
     def rank_universe(
         self,
-        ticker_data: Dict[str, Dict[str, Any]],
-    ) -> List[FactorScore]:
+        ticker_data: dict[str, dict[str, Any]],
+    ) -> list[FactorScore]:
         """
         Rank a universe of tickers by multi-factor composite score.
 
@@ -98,7 +98,7 @@ class FactorRanker:
         # Step 1: Raw factor components per ticker. Value and quality blend several
         # metrics on different scales (earnings yield ~0.05 vs book/price ~0.5), so
         # each component is ranked on its own before averaging.
-        components: Dict[str, Dict[str, Dict[str, float]]] = {
+        components: dict[str, dict[str, dict[str, float]]] = {
             t: {
                 "value": self._value_components(data),
                 "quality": self._quality_components(data),
@@ -107,7 +107,7 @@ class FactorRanker:
             }
             for t, data in ticker_data.items()
         }
-        raw_factors: Dict[str, Dict[str, Optional[float]]] = {
+        raw_factors: dict[str, dict[str, float | None]] = {
             t: {
                 "value": self._calc_value_factor(data),
                 "quality": self._calc_quality_factor(data),
@@ -119,11 +119,11 @@ class FactorRanker:
 
         # Step 2: Cross-sectional percentile (0-100) per component, averaged per factor
         factor_names = ["value", "quality", "momentum", "low_vol"]
-        percentile_scores: Dict[str, Dict[str, float]] = {t: {} for t in ticker_data}
+        percentile_scores: dict[str, dict[str, float]] = {t: {} for t in ticker_data}
 
         for factor in factor_names:
             component_names = {name for t in ticker_data for name in components[t][factor]}
-            component_pcts: Dict[str, List[float]] = {t: [] for t in ticker_data}
+            component_pcts: dict[str, list[float]] = {t: [] for t in ticker_data}
             for name in component_names:
                 values = {
                     t: components[t][factor][name]
@@ -137,7 +137,7 @@ class FactorRanker:
                     percentile_scores[t][factor] = float(np.mean(pcts))
 
         # Step 3: Weighted composite score
-        results: List[FactorScore] = []
+        results: list[FactorScore] = []
 
         for ticker in ticker_data:
             scores = percentile_scores[ticker]
@@ -196,10 +196,10 @@ class FactorRanker:
         results.sort(key=lambda r: r.composite_score or 0, reverse=True)
         return results
 
-    def _value_components(self, data: Dict[str, Any]) -> Dict[str, float]:
+    def _value_components(self, data: dict[str, Any]) -> dict[str, float]:
         """Value metrics (higher = cheaper): earnings yield, FCF yield, book/price."""
         info = data.get("info", {})
-        components: Dict[str, float] = {}
+        components: dict[str, float] = {}
 
         earnings_yield = _earnings_yield(info)
         if earnings_yield is not None:
@@ -219,7 +219,7 @@ class FactorRanker:
 
         return components
 
-    def _calc_value_factor(self, data: Dict[str, Any]) -> Optional[float]:
+    def _calc_value_factor(self, data: dict[str, Any]) -> float | None:
         """
         Value factor: composite of earnings yield, FCF yield, book/price.
         Higher = cheaper = better value.
@@ -227,14 +227,14 @@ class FactorRanker:
         components = self._value_components(data)
         return float(np.mean(list(components.values()))) if components else None
 
-    def _quality_components(self, data: Dict[str, Any]) -> Dict[str, float]:
+    def _quality_components(self, data: dict[str, Any]) -> dict[str, float]:
         """
         Quality metrics, each oriented so higher = better, normalized to 0-1:
         ROE, low accruals, low leverage, Piotroski F-Score.
         """
         info = data.get("info", {})
         report = data.get("report") or {}
-        components: Dict[str, float] = {}
+        components: dict[str, float] = {}
 
         # ROE: -50% to +50% -> 0 to 1 (caps outliers from tiny equity bases)
         roe = info.get("roe") or info.get("returnOnEquity")
@@ -264,7 +264,7 @@ class FactorRanker:
 
         return components
 
-    def _calc_quality_factor(self, data: Dict[str, Any]) -> Optional[float]:
+    def _calc_quality_factor(self, data: dict[str, Any]) -> float | None:
         """
         Quality factor: composite of ROE, low accruals, low leverage, F-Score.
         Higher = better quality.
@@ -272,19 +272,19 @@ class FactorRanker:
         components = self._quality_components(data)
         return float(np.mean(list(components.values()))) if components else None
 
-    def _calc_momentum_factor(self, data: Dict[str, Any]) -> Optional[float]:
+    def _calc_momentum_factor(self, data: dict[str, Any]) -> float | None:
         price_data = data.get("price_data")
         if price_data is None or price_data.empty:
             return None
         return momentum_12_1(price_data["Close"])
 
-    def _calc_low_vol_factor(self, data: Dict[str, Any]) -> Optional[float]:
+    def _calc_low_vol_factor(self, data: dict[str, Any]) -> float | None:
         price_data = data.get("price_data")
         if price_data is None or price_data.empty:
             return None
         return inverse_volatility(price_data["Close"])
 
-    def format_rankings(self, results: List[FactorScore]) -> str:
+    def format_rankings(self, results: list[FactorScore]) -> str:
         """Format factor rankings as a readable table"""
         if not results:
             return "No rankings available"
@@ -322,7 +322,7 @@ class FactorRanker:
         lines.append("")
         return "\n".join(lines)
 
-    def to_dict(self, results: List[FactorScore]) -> List[Dict[str, Any]]:
+    def to_dict(self, results: list[FactorScore]) -> list[dict[str, Any]]:
         """Convert results to JSON-serializable list"""
         return [
             {
@@ -343,7 +343,7 @@ class FactorRanker:
         ]
 
 
-def momentum_12_1(close: pd.Series) -> Optional[float]:
+def momentum_12_1(close: pd.Series) -> float | None:
     """
     Momentum factor: the 12-minus-1-month return. Skipping the most recent
     month removes short-term reversal noise. Higher = better. None for a
@@ -358,7 +358,7 @@ def momentum_12_1(close: pd.Series) -> Optional[float]:
     return (price_end - price_start) / price_start
 
 
-def _earnings_yield(info: Dict[str, Any]) -> Optional[float]:
+def _earnings_yield(info: dict[str, Any]) -> float | None:
     """
     E/P. Yahoo gives no P/E for a loss-maker, so it's net margin over P/S
     there (net income / market cap), negative, and ranks below every
@@ -374,7 +374,7 @@ def _earnings_yield(info: Dict[str, Any]) -> Optional[float]:
     return None
 
 
-def inverse_volatility(close: pd.Series) -> Optional[float]:
+def inverse_volatility(close: pd.Series) -> float | None:
     """
     Low-volatility factor: 1 / annualized volatility of daily returns.
     Lower volatility = higher value (the low-vol anomaly).
@@ -387,11 +387,11 @@ def inverse_volatility(close: pd.Series) -> Optional[float]:
     return 1.0 / annualized_vol
 
 
-def _single(name: str, value: Optional[float]) -> Dict[str, float]:
+def _single(name: str, value: float | None) -> dict[str, float]:
     return {name: value} if value is not None else {}
 
 
-def _percentiles(values: Dict[str, float]) -> Dict[str, float]:
+def _percentiles(values: dict[str, float]) -> dict[str, float]:
     """
     Cross-sectional percentile rank (0-100) of each value; ties share a rank.
     Needs at least 2 values to be meaningful.

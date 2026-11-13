@@ -3,7 +3,6 @@ keeping keys out of the config's repr."""
 
 import json
 from pathlib import Path
-from typing import Dict
 
 import pytest
 
@@ -79,7 +78,7 @@ def test_environment_fills_missing_keys_only() -> None:
         ({"GEMINI_API_KEY": ""}, None),
     ],
 )
-def test_google_key_from_either_variable(env: Dict[str, str], expected: object) -> None:
+def test_google_key_from_either_variable(env: dict[str, str], expected: object) -> None:
     assert with_env_keys(AnalysisConfig(), env).llm_google_api_key == expected
 
 

@@ -48,9 +48,9 @@ line-length = 100
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "C4", "NPY", "RUF", "SIM"]
+select = ["E", "F", "W", "I", "B", "C4", "NPY", "RUF", "SIM", "UP"]
 # E: pycodestyle errors  F: pyflakes  W: pycodestyle warnings  I: isort
-# B: bugbear  C4: comprehensions  NPY: numpy  RUF: ruff  SIM: simplify
+# B: bugbear  C4: comprehensions  NPY: numpy  RUF: ruff  SIM: simplify  UP: pyupgrade
 ignore = [
     "E501",  # line too long — handled by formatter
     "RUF001", "RUF002", "RUF003",  # ×, σ and – in text are deliberate

@@ -3,7 +3,6 @@ ticker folders that stay inside their base folder."""
 
 import os
 from pathlib import Path
-from typing import List, Union
 
 import pytest
 
@@ -35,7 +34,7 @@ def test_failed_write_keeps_the_old_file(tmp_path: Path) -> None:
 
 
 def test_writers_get_their_own_temp_files(tmp_path: Path) -> None:
-    seen: List[str] = []
+    seen: list[str] = []
     path = tmp_path / "scores.csv"
 
     def write(tmp: Path) -> None:
@@ -52,10 +51,10 @@ def test_replace_retries_while_windows_holds_the_file(
 ) -> None:
     import src.utils.files as files
 
-    calls: List[Union[str, Path]] = []
+    calls: list[str | Path] = []
     real_replace = os.replace
 
-    def flaky(src: Union[str, Path], dst: Union[str, Path]) -> None:
+    def flaky(src: str | Path, dst: str | Path) -> None:
         calls.append(dst)
         if len(calls) < 3:
             raise PermissionError("in use")

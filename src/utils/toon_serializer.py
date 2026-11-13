@@ -17,7 +17,8 @@ See: https://github.com/toon-format/spec
 
 import json
 import logging
-from typing import Any, Dict, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from toon import encode as toon_encode
 
@@ -33,7 +34,7 @@ TOON_EXCLUDED_SECTIONS: Sequence[str] = ("news",)
 
 
 def report_to_toon(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     excluded_sections: Sequence[str] = TOON_EXCLUDED_SECTIONS,
 ) -> str:
     """

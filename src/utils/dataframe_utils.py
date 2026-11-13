@@ -5,8 +5,6 @@ Helper functions for working with pandas DataFrames and Series,
 particularly for financial data with datetime indices.
 """
 
-from typing import Optional
-
 import pandas as pd
 
 
@@ -38,8 +36,8 @@ def normalize_datetime_index(series: pd.Series) -> pd.Series:
 
 
 def safe_get_dataframe_value(
-    df: Optional[pd.DataFrame], row_name: str, col_index: int = 0
-) -> Optional[float]:
+    df: pd.DataFrame | None, row_name: str, col_index: int = 0
+) -> float | None:
     """
     Safely extract a numeric value from a DataFrame
 

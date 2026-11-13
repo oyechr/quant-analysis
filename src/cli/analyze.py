@@ -1,7 +1,6 @@
 """Single-ticker and multi-ticker analysis: report, score, vet, compare, watch."""
 
 import time
-from typing import Dict, Optional
 
 import click
 
@@ -136,7 +135,7 @@ def score(ctx, tickers, config_name, workers):
     tickers_list = list(dict.fromkeys(t.upper() for t in tickers))
 
     echo_status(f"  Analyzing {len(tickers_list)} ticker(s)...")
-    results: Dict[str, Optional[ScoringResult]] = {}
+    results: dict[str, ScoringResult | None] = {}
     history = []
     for ticker, bundle, error in run_concurrently(
         lambda t: generator.generate(t, options, output_format=output_format),

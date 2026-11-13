@@ -23,8 +23,9 @@ sector, country and currency, and the factor tilts of the stocks held.
 
 import logging
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -51,21 +52,21 @@ STALE_ROWS = 5
 
 # (symbol, listing currency, label)
 WORLD_BENCHMARK = ("ACWI", "USD", "World")
-HOME_BENCHMARKS: Dict[str, Tuple[str, str, str]] = {"NOK": ("OSEBX.OL", "NOK", "Oslo")}
+HOME_BENCHMARKS: dict[str, tuple[str, str, str]] = {"NOK": ("OSEBX.OL", "NOK", "Oslo")}
 
 DIMENSIONS = ("valuation", "fundamental", "technical", "risk")
 
 
 @dataclass
 class Exposure:
-    summary: Dict[str, Any]  # JSON-ready, shown by `review`
+    summary: dict[str, Any]  # JSON-ready, shown by `review`
     covariance: pd.DataFrame = field(default_factory=pd.DataFrame)  # weekly, shrunk
     correlations: pd.DataFrame = field(default_factory=pd.DataFrame)  # weekly, sample
     returns: pd.DataFrame = field(default_factory=pd.DataFrame)  # weekly, included holdings
     # The inputs, so the exposure can be measured again after trades
-    closes: Dict[str, pd.Series] = field(default_factory=dict)
-    benchmarks: Dict[str, pd.Series] = field(default_factory=dict)
-    local_closes: Dict[str, pd.Series] = field(default_factory=dict)
+    closes: dict[str, pd.Series] = field(default_factory=dict)
+    benchmarks: dict[str, pd.Series] = field(default_factory=dict)
+    local_closes: dict[str, pd.Series] = field(default_factory=dict)
 
 
 # ==================== Returns and covariance ====================
@@ -75,8 +76,8 @@ def to_base_currency(
     close: pd.Series,
     currency: str,
     base_currency: str,
-    fx_closes: Callable[[str], Optional[pd.Series]],
-) -> Optional[pd.Series]:
+    fx_closes: Callable[[str], pd.Series | None],
+) -> pd.Series | None:
     """
     Daily closes in the base currency, indexed by trading date.
 
@@ -97,9 +98,9 @@ def to_base_currency(
 
 
 def weekly_returns(
-    closes: Dict[str, pd.Series],
+    closes: dict[str, pd.Series],
     min_weeks: int = MIN_WEEKS,
-    stale: Optional[List[str]] = None,
+    stale: list[str] | None = None,
 ) -> pd.DataFrame:
     """
     Friday-to-Friday returns over the weeks every series covers.
@@ -125,7 +126,7 @@ def weekly_returns(
     return returns.drop(columns=flat)
 
 
-def shrunk_covariance(returns: pd.DataFrame) -> Tuple[pd.DataFrame, float]:
+def shrunk_covariance(returns: pd.DataFrame) -> tuple[pd.DataFrame, float]:
     """
     Ledoit-Wolf covariance shrunk towards constant correlation, and the
     shrinkage intensity (0 = the sample matrix, 1 = the target).
@@ -173,7 +174,7 @@ def risk_contributions(weights: pd.Series, cov: pd.DataFrame) -> pd.Series:
     return pd.Series(w.to_numpy() * marginal / total, index=cov.columns)
 
 
-def beta(returns: pd.Series, benchmark: pd.Series, min_weeks: int = MIN_WEEKS) -> Optional[float]:
+def beta(returns: pd.Series, benchmark: pd.Series, min_weeks: int = MIN_WEEKS) -> float | None:
     """Cov(r, b) / Var(b) over the weeks both have, or None with too few."""
     both = pd.concat([returns, benchmark], axis=1, join="inner").dropna()
     if len(both) < min_weeks:
@@ -184,7 +185,7 @@ def beta(returns: pd.Series, benchmark: pd.Series, min_weeks: int = MIN_WEEKS) -
     return float(both.iloc[:, 0].cov(both.iloc[:, 1])) / variance
 
 
-def effective_number(shares: List[float]) -> Optional[float]:
+def effective_number(shares: list[float]) -> float | None:
     """1 / Σs² of shares normalized to sum to 1 (N for N equal shares)."""
     total = sum(shares)
     if not shares or not total > 0:
@@ -192,7 +193,7 @@ def effective_number(shares: List[float]) -> Optional[float]:
     return 1.0 / sum((s / total) ** 2 for s in shares)
 
 
-def weighted_median(values: List[Tuple[float, float]]) -> Optional[float]:
+def weighted_median(values: list[tuple[float, float]]) -> float | None:
     """Median of (weight, value) pairs: the value where the cumulative weight reaches half."""
     pairs = sorted((v, w) for w, v in values if w > 0)
     total = sum(w for _, w in pairs)
@@ -210,10 +211,10 @@ def weighted_median(values: List[Tuple[float, float]]) -> Optional[float]:
 
 
 def measure_exposure(
-    reviews: List["HoldingReview"],
-    closes: Dict[str, pd.Series],
-    benchmarks: Dict[str, pd.Series],
-    local_closes: Optional[Dict[str, pd.Series]] = None,
+    reviews: list[HoldingReview],
+    closes: dict[str, pd.Series],
+    benchmarks: dict[str, pd.Series],
+    local_closes: dict[str, pd.Series] | None = None,
 ) -> Exposure:
     """
     Portfolio exposure from the holdings' weights and base-currency closes.
@@ -231,12 +232,12 @@ def measure_exposure(
     """
     valued = [r for r in reviews if r.weight]
     weights = pd.Series({r.holding.ticker: r.weight or 0.0 for r in valued}, dtype=float)
-    stale: List[str] = []
+    stale: list[str] = []
     returns = weekly_returns({t: closes[t] for t in weights.index if t in closes}, stale=stale)
     included = [t for t in weights.index if t in returns.columns]
     excluded = [t for t in weights.index if t not in returns.columns]
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "weeks": len(returns),
         "start": returns.index[0].date().isoformat() if len(returns) else None,
         "end": returns.index[-1].date().isoformat() if len(returns) else None,
@@ -248,7 +249,7 @@ def measure_exposure(
         "betas": [],
     }
     risk = pd.Series(dtype=float)
-    vols: Dict[str, float] = {}
+    vols: dict[str, float] = {}
     cov = pd.DataFrame()
     if included:
         cov, shrinkage = shrunk_covariance(returns[included])
@@ -311,12 +312,12 @@ def _by_trading_date(series: pd.Series) -> pd.Series:
 
 
 def _groups(
-    reviews: List["HoldingReview"],
+    reviews: list[HoldingReview],
     risk: pd.Series,
-    key: Callable[["HoldingReview"], str],
-) -> List[Dict[str, Any]]:
+    key: Callable[[HoldingReview], str],
+) -> list[dict[str, Any]]:
     """Value weight and risk share per group, largest weight first."""
-    totals: Dict[str, Dict[str, Optional[float]]] = {}
+    totals: dict[str, dict[str, float | None]] = {}
     for r in reviews:
         group = totals.setdefault(key(r), {"weight": 0.0, "risk": None})
         group["weight"] = (group["weight"] or 0.0) + (r.weight or 0.0)
@@ -332,15 +333,15 @@ def _groups(
 
 
 def _factor_tilts(
-    reviews: List["HoldingReview"],
-    vols: Dict[str, float],
-    local_closes: Dict[str, pd.Series],
-) -> List[Dict[str, Any]]:
+    reviews: list[HoldingReview],
+    vols: dict[str, float],
+    local_closes: dict[str, pd.Series],
+) -> list[dict[str, Any]]:
     """Weighted median per factor over the stocks (funds left out), with the extremes."""
     stocks = [r for r in reviews if not r.is_fund]
     stock_weight = sum(r.weight or 0.0 for r in stocks)
 
-    def measure(r: "HoldingReview", name: str) -> Optional[float]:
+    def measure(r: HoldingReview, name: str) -> float | None:
         ticker = r.holding.ticker
         if name == "momentum":
             close = local_closes.get(ticker)
@@ -376,10 +377,10 @@ def _factor_tilts(
     return tilts
 
 
-def _dimension_scores(reviews: List["HoldingReview"]) -> Dict[str, Optional[float]]:
+def _dimension_scores(reviews: list[HoldingReview]) -> dict[str, float | None]:
     """Weighted average vet dimension score over the stocks (50 is neutral)."""
     stocks = [r for r in reviews if not r.is_fund]
-    scores: Dict[str, Optional[float]] = {}
+    scores: dict[str, float | None] = {}
     for name in DIMENSIONS:
         pairs = [
             (r.weight or 0.0, float(score))

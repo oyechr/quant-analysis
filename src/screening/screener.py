@@ -13,10 +13,11 @@ so stage 2 reuses it instead of downloading prices again.
 import json
 import logging
 import re
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -48,12 +49,12 @@ class ScreenFilters:
     `cap_currency`). Volume is in shares.
     """
 
-    sectors: Tuple[str, ...] = ()
-    exclude_sectors: Tuple[str, ...] = ()
-    min_market_cap: Optional[float] = None
-    max_market_cap: Optional[float] = None
-    min_avg_volume: Optional[float] = None
-    currency: Optional[str] = None
+    sectors: tuple[str, ...] = ()
+    exclude_sectors: tuple[str, ...] = ()
+    min_market_cap: float | None = None
+    max_market_cap: float | None = None
+    min_avg_volume: float | None = None
+    currency: str | None = None
 
     @property
     def caps_active(self) -> bool:
@@ -69,8 +70,8 @@ class ScreenFilters:
         )
 
     def rejection_reason(
-        self, info: Dict[str, Any], cap_rate: Optional[float] = 1.0, cap_currency: str = ""
-    ) -> Optional[str]:
+        self, info: dict[str, Any], cap_rate: float | None = 1.0, cap_currency: str = ""
+    ) -> str | None:
         """
         Why a ticker fails the filters, or None if it passes.
 
@@ -110,13 +111,13 @@ class ScreenCandidate:
     """One ticker's journey through the screen."""
 
     ticker: str
-    info: Dict[str, Any] = field(default_factory=dict)
-    factor: Optional[FactorScore] = None
-    factor_rank: Optional[int] = None
-    scoring: Optional[ScoringResult] = None
-    report: Optional[Dict[str, Any]] = field(default=None, repr=False)  # stage 2 only
-    warnings: List[str] = field(default_factory=list)
-    error: Optional[str] = None
+    info: dict[str, Any] = field(default_factory=dict)
+    factor: FactorScore | None = None
+    factor_rank: int | None = None
+    scoring: ScoringResult | None = None
+    report: dict[str, Any] | None = field(default=None, repr=False)  # stage 2 only
+    warnings: list[str] = field(default_factory=list)
+    error: str | None = None
 
     @property
     def name(self) -> str:
@@ -128,15 +129,15 @@ class ScreenCandidate:
         sector = self.info.get("sector")
         return sector if sector and sector != "N/A" else ""
 
-    def to_row(self) -> Dict[str, Any]:
+    def to_row(self) -> dict[str, Any]:
         """Flat record for CSV/JSON export."""
         s, f = self.scoring, self.factor
 
-        def _dim(name: str) -> Optional[float]:
+        def _dim(name: str) -> float | None:
             dim = getattr(s, name, None) if s else None
             return round(dim.score, 1) if dim else None
 
-        def _pct(value: Optional[float]) -> Optional[float]:
+        def _pct(value: float | None) -> float | None:
             return round(value, 1) if value is not None else None
 
         return {
@@ -169,13 +170,13 @@ class ScreenResult:
     universe: str
     preset: str
     universe_size: int
-    scored: List[ScreenCandidate]  # stage-2 candidates, best composite score first
-    ranked: List[ScreenCandidate]  # every stage-1 survivor, in factor order
-    excluded: Dict[str, str]  # ticker -> reason (filtered out or data unavailable)
-    cap_currency: Optional[str] = None  # currency of the market cap filters, if any were set
+    scored: list[ScreenCandidate]  # stage-2 candidates, best composite score first
+    ranked: list[ScreenCandidate]  # every stage-1 survivor, in factor order
+    excluded: dict[str, str]  # ticker -> reason (filtered out or data unavailable)
+    cap_currency: str | None = None  # currency of the market cap filters, if any were set
     generated_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "meta": {
                 "universe": self.universe,
@@ -198,10 +199,10 @@ class Screener:
 
     def __init__(
         self,
-        fetcher: Optional[DataFetcher] = None,
-        options: Optional[AnalysisOptions] = None,
+        fetcher: DataFetcher | None = None,
+        options: AnalysisOptions | None = None,
         workers: int = DEFAULT_WORKERS,
-        factor_weights: Optional[FactorWeights] = None,
+        factor_weights: FactorWeights | None = None,
     ):
         self.fetcher = fetcher or DataFetcher()
         # Holders/ratings/news aren't used by scoring; skip them for speed
@@ -212,17 +213,17 @@ class Screener:
     def run(
         self,
         tickers: Sequence[str],
-        filters: Optional[ScreenFilters] = None,
+        filters: ScreenFilters | None = None,
         top_n: int = 20,
         universe_label: str = "custom",
-        progress: Optional[ProgressFn] = None,
+        progress: ProgressFn | None = None,
     ) -> ScreenResult:
         filters = filters or ScreenFilters()
         tickers = list(dict.fromkeys(t.upper() for t in tickers))
-        excluded: Dict[str, str] = {}
+        excluded: dict[str, str] = {}
 
         # ---- Stage 1: info + prices for everyone ----
-        fetched: Dict[str, Tuple[Dict[str, Any], pd.DataFrame]] = {}
+        fetched: dict[str, tuple[dict[str, Any], pd.DataFrame]] = {}
         for i, (ticker, data, error) in enumerate(
             run_concurrently(self._fetch_stage1, tickers, workers=self.workers), 1
         ):
@@ -239,7 +240,7 @@ class Screener:
                 filters.currency or cap_currency(info for info, _ in fetched.values())
             )[0]
         cap_rate = self._cap_rates(currency) if currency else None
-        stage1: Dict[str, Tuple[Dict[str, Any], pd.DataFrame]] = {}
+        stage1: dict[str, tuple[dict[str, Any], pd.DataFrame]] = {}
         for ticker, (info, prices) in fetched.items():
             rate = cap_rate(info.get("currency") or str(currency)) if cap_rate else 1.0
             reason = filters.rejection_reason(info, rate, currency or "")
@@ -293,14 +294,14 @@ class Screener:
             cap_currency=currency,
         )
 
-    def _cap_rates(self, currency: str) -> Callable[[str], Optional[float]]:
+    def _cap_rates(self, currency: str) -> Callable[[str], float | None]:
         """Listing currency -> multiplier taking its market caps into `currency` (memoized)."""
-        rates: Dict[str, Optional[float]] = {}
+        rates: dict[str, float | None] = {}
 
-        def fx_lookup(symbol: str) -> Optional[float]:
+        def fx_lookup(symbol: str) -> float | None:
             return self.fetcher.latest_close(symbol, use_cache=self.options.use_cache)
 
-        def rate(listing_currency: str) -> Optional[float]:
+        def rate(listing_currency: str) -> float | None:
             # Yahoo gives market cap in the major unit (GBP for a GBp listing)
             major = major_currency(listing_currency)[0]
             if major not in rates:
@@ -310,7 +311,7 @@ class Screener:
 
         return rate
 
-    def _fetch_stage1(self, ticker: str) -> Tuple[Dict[str, Any], pd.DataFrame]:
+    def _fetch_stage1(self, ticker: str) -> tuple[dict[str, Any], pd.DataFrame]:
         use_cache = self.options.use_cache
         prices = self.fetcher.fetch_ticker(ticker, period=STAGE1_PERIOD, use_cache=use_cache)
         info = self.fetcher.get_ticker_info(ticker, use_cache=use_cache)
@@ -337,7 +338,7 @@ def format_screen_table(result: ScreenResult) -> str:
         "  " + "-" * 98,
     ]
 
-    def _pct(value: Optional[float]) -> str:
+    def _pct(value: float | None) -> str:
         return f"{value:.0f}" if value is not None else "-"
 
     for i, c in enumerate(result.scored, 1):
@@ -368,7 +369,7 @@ def format_screen_table(result: ScreenResult) -> str:
     return "\n".join(lines)
 
 
-def save_screen(result: ScreenResult, output_dir: str, output_format: str = "all") -> List[Path]:
+def save_screen(result: ScreenResult, output_dir: str, output_format: str = "all") -> list[Path]:
     """
     Write screen results to <output_dir>/_screens/.
 
@@ -381,7 +382,7 @@ def save_screen(result: ScreenResult, output_dir: str, output_format: str = "all
     safe_label = re.sub(r"[^A-Za-z0-9_+-]+", "_", result.universe)[:60]
     base = f"screen_{safe_label}_{stamp}"
     data = result.to_dict()
-    written: List[Path] = []
+    written: list[Path] = []
 
     def _write(suffix: str, content: str):
         for name in (f"{base}.{suffix}", f"latest.{suffix}"):
@@ -410,13 +411,13 @@ def parse_amount(text: str) -> float:
     return float(number) * _MULTIPLIERS[unit.lower()]
 
 
-def cap_currency(infos: Iterable[Dict[str, Any]]) -> str:
+def cap_currency(infos: Iterable[dict[str, Any]]) -> str:
     """Currency for market cap thresholds: the universe's own if it has one, else USD."""
     currencies = {major_currency(info["currency"])[0] for info in infos if info.get("currency")}
     return currencies.pop() if len(currencies) == 1 else "USD"
 
 
-def format_amount(value: Optional[float]) -> str:
+def format_amount(value: float | None) -> str:
     if value is None:
         return "N/A"
     for unit, size in (("T", 1e12), ("B", 1e9), ("M", 1e6), ("K", 1e3)):

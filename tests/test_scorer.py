@@ -863,7 +863,7 @@ class TestStockScorer:
 class TestOutputFormatting:
     """Tests for scoring result output formats"""
 
-    def _get_result(self, sample_data_dir) -> "ScoringResult":
+    def _get_result(self, sample_data_dir) -> ScoringResult:
         report = _load_sample_report(sample_data_dir, "AAPL")
         scorer = StockScorer()
         return scorer.score(report)

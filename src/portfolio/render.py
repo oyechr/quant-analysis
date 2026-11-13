@@ -6,7 +6,7 @@ view, then details for every holding whose action isn't Hold. Works from
 `PortfolioReview.to_dict()` and reuses the vet renderer's layout.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from ..vetting.render import (
     Block,
@@ -28,7 +28,7 @@ CAVEATS = [
 ]
 
 
-def build_sections(data: Dict[str, Any]) -> List[Section]:
+def build_sections(data: dict[str, Any]) -> list[Section]:
     return [
         _summary_section(data),
         _portfolio_section(data),
@@ -37,23 +37,23 @@ def build_sections(data: Dict[str, Any]) -> List[Section]:
     ]
 
 
-def render_text(data: Dict[str, Any]) -> str:
+def render_text(data: dict[str, Any]) -> str:
     return sections_to_text(build_sections(data))
 
 
-def render_markdown(data: Dict[str, Any]) -> str:
+def render_markdown(data: dict[str, Any]) -> str:
     return sections_to_markdown(build_sections(data))
 
 
 # ==================== Sections ====================
 
 
-def _summary_section(data: Dict[str, Any]) -> Section:
+def _summary_section(data: dict[str, Any]) -> Section:
     summary = data.get("summary") or {}
     ccy = data.get("base_currency") or ""
     actions = summary.get("actions") or {}
     title = f"PORTFOLIO REVIEW  {summary.get('holdings', 0)} holdings, preset {data.get('preset')}"
-    blocks: List[Block] = [
+    blocks: list[Block] = [
         "  ".join(f"{action.upper()} {n}" for action, n in actions.items()),
         f"Value {_money(summary.get('total_value'), ccy)}"
         + (
@@ -107,10 +107,10 @@ def _summary_section(data: Dict[str, Any]) -> Section:
     return Section(title, blocks)
 
 
-def _portfolio_section(data: Dict[str, Any]) -> Section:
+def _portfolio_section(data: dict[str, Any]) -> Section:
     summary = data.get("summary") or {}
     exposure = summary.get("exposure") or {}
-    blocks: List[Block] = []
+    blocks: list[Block] = []
 
     risk = []
     if exposure.get("volatility") is not None:
@@ -211,11 +211,11 @@ def _portfolio_section(data: Dict[str, Any]) -> Section:
     return Section("PORTFOLIO", blocks or ["No holdings could be valued"])
 
 
-def _details_section(data: Dict[str, Any]) -> Section:
+def _details_section(data: dict[str, Any]) -> Section:
     flagged = [h for h in data.get("holdings") or [] if h["action"] != "Hold"]
     if not flagged:
         return Section("DETAILS", ["Every holding is a Hold"])
-    blocks: List[Block] = []
+    blocks: list[Block] = []
     for h in flagged:
         accounts = ", ".join(h.get("accounts") or [])
         blocks.append(
@@ -245,8 +245,8 @@ def _details_section(data: Dict[str, Any]) -> Section:
     return Section("DETAILS", blocks)
 
 
-def _notes_section(data: Dict[str, Any]) -> Section:
-    blocks: List[Block] = [_targets_note((data.get("summary") or {}).get("targets") or {})]
+def _notes_section(data: dict[str, Any]) -> Section:
+    blocks: list[Block] = [_targets_note((data.get("summary") or {}).get("targets") or {})]
     blocks += CAVEATS
     unmapped = data.get("unmapped") or []
     if unmapped:
@@ -257,7 +257,7 @@ def _notes_section(data: Dict[str, Any]) -> Section:
     return Section("NOTES", blocks)
 
 
-def _targets_note(notes: Dict[str, Any]) -> str:
+def _targets_note(notes: dict[str, Any]) -> str:
     """How the Target column was set, in one line."""
     if not notes:
         return "No targets (no price history)."
@@ -289,7 +289,7 @@ _MEASURES = {
 }
 
 
-def _groups(rows: List[Dict[str, Any]], limit: int = 6) -> str:
+def _groups(rows: list[dict[str, Any]], limit: int = 6) -> str:
     """'Energy 20%/31%, ...': value weight / risk share (risk left out when unknown)."""
     parts = []
     for r in rows[:limit]:
@@ -333,22 +333,22 @@ REBALANCE_CAVEATS = [
 ]
 
 
-def build_proposal_sections(data: Dict[str, Any]) -> List[Section]:
+def build_proposal_sections(data: dict[str, Any]) -> list[Section]:
     return [_trades_section(data), _before_after_section(data), _proposal_notes(data)]
 
 
-def render_proposal_text(data: Dict[str, Any]) -> str:
+def render_proposal_text(data: dict[str, Any]) -> str:
     return sections_to_text(build_proposal_sections(data))
 
 
-def render_proposal_markdown(data: Dict[str, Any]) -> str:
+def render_proposal_markdown(data: dict[str, Any]) -> str:
     return sections_to_markdown(build_proposal_sections(data))
 
 
-def _trades_section(data: Dict[str, Any]) -> Section:
+def _trades_section(data: dict[str, Any]) -> Section:
     ccy = data.get("base_currency") or ""
     trades = data.get("trades") or []
-    blocks: List[Block] = [proposal_headline(data), ""]
+    blocks: list[Block] = [proposal_headline(data), ""]
     if not trades:
         blocks.append("No trades: every holding is within its target and limits.")
         return Section("REBALANCE PROPOSAL", blocks)
@@ -374,7 +374,7 @@ def _trades_section(data: Dict[str, Any]) -> Section:
     return Section("REBALANCE PROPOSAL", blocks)
 
 
-def proposal_headline(data: Dict[str, Any]) -> str:
+def proposal_headline(data: dict[str, Any]) -> str:
     """'4 sells (82,000 NOK), 3 buys (75,000 NOK), cash left 7,000 NOK; volatility ...'"""
     ccy = data.get("base_currency") or ""
     trades = data.get("trades") or []
@@ -403,12 +403,12 @@ def proposal_headline(data: Dict[str, Any]) -> str:
     return "; ".join(parts)
 
 
-def _before_after_section(data: Dict[str, Any]) -> Section:
+def _before_after_section(data: dict[str, Any]) -> Section:
     before, after = data.get("before") or {}, data.get("after") or {}
     if not before or not after:
         return Section("BEFORE / AFTER", ["No risk numbers (no price history)"])
 
-    def beta(summary: Dict[str, Any], label: str) -> Any:
+    def beta(summary: dict[str, Any], label: str) -> Any:
         return next(
             (b["beta"] for b in summary.get("betas") or [] if b["benchmark"] == label), None
         )
@@ -431,7 +431,7 @@ def _before_after_section(data: Dict[str, Any]) -> Section:
         ],
         ["Top 5 weight", _share(before.get("top5")), _share(after.get("top5"))],
     ]
-    blocks: List[Block] = [Table(["", "Before", "After"], rows, "lrr")]
+    blocks: list[Block] = [Table(["", "Before", "After"], rows, "lrr")]
     for label, key in (
         ("By sector", "by_sector"),
         ("By country", "by_country"),
@@ -444,8 +444,8 @@ def _before_after_section(data: Dict[str, Any]) -> Section:
     return Section("BEFORE / AFTER", blocks)
 
 
-def _proposal_notes(data: Dict[str, Any]) -> Section:
-    blocks: List[Block] = [f"!  {warning}" for warning in data.get("warnings") or []]
+def _proposal_notes(data: dict[str, Any]) -> Section:
+    blocks: list[Block] = [f"!  {warning}" for warning in data.get("warnings") or []]
     blocks += [f"Not traded: {note}" for note in data.get("notes") or []]
     if data.get("reserve"):
         blocks.append(
@@ -455,8 +455,8 @@ def _proposal_notes(data: Dict[str, Any]) -> Section:
 
 
 def _mix_changes(
-    before: List[Dict[str, Any]], after: List[Dict[str, Any]]
-) -> List[tuple[str, float, float]]:
+    before: list[dict[str, Any]], after: list[dict[str, Any]]
+) -> list[tuple[str, float, float]]:
     """Groups whose value share moved, largest move first: (name, before, after)."""
     old = {g["name"]: g["weight"] or 0.0 for g in before}
     new = {g["name"]: g["weight"] or 0.0 for g in after}

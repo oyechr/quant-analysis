@@ -24,7 +24,7 @@ message, so a failed turn never ends the chat session.
 
 import logging
 import sys
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +64,10 @@ def _fmt(value: Any, pct: bool = False, decimals: int = 1) -> str:
 
 
 def build_brief_context(
-    report_data: Dict[str, Any],
-    red_flags: Optional[List[Dict[str, Any]]] = None,
-    peer_valuation: Optional[Dict[str, Any]] = None,
-    score_history: Optional[List[Dict[str, Any]]] = None,
+    report_data: dict[str, Any],
+    red_flags: list[dict[str, Any]] | None = None,
+    peer_valuation: dict[str, Any] | None = None,
+    score_history: list[dict[str, Any]] | None = None,
 ) -> str:
     """
     Build a focused context string (~1,500 tokens) from a full report dict.
@@ -367,7 +367,7 @@ def _emit(text: str) -> None:
     sys.stdout.flush()
 
 
-def _note_stop_reason(reason: Optional[str]) -> None:
+def _note_stop_reason(reason: str | None) -> None:
     """Say so when a reply was cut off or declined instead of ending normally.
 
     Anthropic says max_tokens/refusal; OpenAI-compatible APIs say
@@ -388,10 +388,10 @@ def _note_stop_reason(reason: Optional[str]) -> None:
 
 def chat_turn(
     context: str,
-    messages: List[Dict[str, str]],
-    model: Optional[str] = None,
-    anthropic_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
+    messages: list[dict[str, str]],
+    model: str | None = None,
+    anthropic_api_key: str | None = None,
+    openai_api_key: str | None = None,
 ) -> str:
     """
     Send one conversational turn to the LLM and stream the response.
@@ -484,7 +484,7 @@ def _anthropic_error_message(e: Exception, model: str) -> str:
     return f"Anthropic API error: {e}"
 
 
-def _chat_anthropic(system: str, messages: List[Dict[str, str]], model: str, api_key: str) -> str:
+def _chat_anthropic(system: str, messages: list[dict[str, str]], model: str, api_key: str) -> str:
     try:
         import anthropic
     except ImportError as e:
@@ -501,7 +501,7 @@ def _chat_anthropic(system: str, messages: List[Dict[str, str]], model: str, api
             model=model,
             max_tokens=ANTHROPIC_MAX_TOKENS,
             system=system,
-            messages=cast(List[MessageParam], messages),
+            messages=cast(list[MessageParam], messages),
         ) as stream:
             for text in stream.text_stream:
                 _emit(text)
@@ -517,7 +517,7 @@ def _chat_anthropic(system: str, messages: List[Dict[str, str]], model: str, api
 
 def _chat_openai(
     system: str,
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     model: str,
     api_key: str,
     provider: str = "openai",
@@ -537,13 +537,13 @@ def _chat_openai(
     )
     client = openai.OpenAI(api_key=api_key, base_url=GOOGLE_OPENAI_URL if google else None)
     # max_tokens is rejected by OpenAI's reasoning models (o-series, gpt-5)
-    limit: Dict[str, Any] = {} if google else {"max_completion_tokens": OPENAI_MAX_TOKENS}
+    limit: dict[str, Any] = {} if google else {"max_completion_tokens": OPENAI_MAX_TOKENS}
     full_messages = cast(
-        List[ChatCompletionMessageParam],
+        list[ChatCompletionMessageParam],
         [{"role": "system", "content": system}, *messages],
     )
     tokens = []
-    finish_reason: Optional[str] = None
+    finish_reason: str | None = None
     chunks = 0
     refusal = ""
 

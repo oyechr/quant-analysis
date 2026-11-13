@@ -18,9 +18,10 @@ Caches, under `data/_discovery/enrichment/`:
 import json
 import logging
 import time
+from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Iterable, Optional
+from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -68,8 +69,8 @@ class HoldingEnricher:
     def __init__(
         self,
         cache_dir: str = "data",
-        fetcher: Optional[DataFetcher] = None,
-        api_key: Optional[str] = None,
+        fetcher: DataFetcher | None = None,
+        api_key: str | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ):
         from ..config import get_config
@@ -199,7 +200,7 @@ class HoldingEnricher:
         job: Callable[[str], dict],
         result: dict[str, str],
         us_only: bool,
-    ) -> Optional[list[str]]:
+    ) -> list[str] | None:
         """
         Ask OpenFIGI in batches; hits go into `result` and the cache. Returns
         the CUSIPs OpenFIGI doesn't know, or None when a request failed (the
@@ -272,7 +273,7 @@ def _is_us_listing(exch_code: Any) -> bool:
     return code == "US" or (len(code) == 2 and code.startswith("U"))
 
 
-def _ticker_from(answer: Any, us_only: bool = False) -> Optional[str]:
+def _ticker_from(answer: Any, us_only: bool = False) -> str | None:
     """
     The ticker in one OpenFIGI answer ({"data": [...]}), preferring equity
     and the US composite. With `us_only`, listings outside the US are ignored

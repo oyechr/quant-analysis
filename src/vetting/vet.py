@@ -9,7 +9,7 @@ pipeline with no file I/O (saving is up to the caller).
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -42,20 +42,20 @@ class VetResult:
     bundle: AnalysisBundle
     preset: str
     # The score before P/E is judged against peers (what the score history records)
-    base_scoring: Optional[ScoringResult] = None
-    red_flags: List[RedFlag] = field(default_factory=list)
-    peers: Optional[PeerValuation] = None
-    funds: Optional[FundActivity] = None
-    fair_value: Dict[str, Any] = field(default_factory=dict)
-    signal_flips: Dict[str, Any] = field(default_factory=dict)
-    next_earnings: Optional[str] = None
-    next_steps: List[str] = field(default_factory=list)
+    base_scoring: ScoringResult | None = None
+    red_flags: list[RedFlag] = field(default_factory=list)
+    peers: PeerValuation | None = None
+    funds: FundActivity | None = None
+    fair_value: dict[str, Any] = field(default_factory=dict)
+    signal_flips: dict[str, Any] = field(default_factory=dict)
+    next_earnings: str | None = None
+    next_steps: list[str] = field(default_factory=list)
 
     @property
-    def report(self) -> Dict[str, Any]:
+    def report(self) -> dict[str, Any]:
         return self.bundle.report
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         info = self.report.get("info") or {}
         scoring = self.report.get("scoring") or {}
         data = {
@@ -94,16 +94,16 @@ class VetResult:
         return data
 
 
-def _days_until(date: str, today: Optional[datetime] = None) -> int:
+def _days_until(date: str, today: datetime | None = None) -> int:
     """Whole days from today (local date) to a YYYY-MM-DD date."""
     return (pd.Timestamp(date) - pd.Timestamp(today or datetime.now()).normalize()).days
 
 
 def vet_ticker(
     ticker: str,
-    fetcher: Optional[DataFetcher] = None,
-    options: Optional[AnalysisOptions] = None,
-    peers: Optional[List[str]] = None,
+    fetcher: DataFetcher | None = None,
+    options: AnalysisOptions | None = None,
+    peers: list[str] | None = None,
     data_dir: str = "data",
 ) -> VetResult:
     """Analyze a ticker and assemble everything `quant vet` shows."""
@@ -120,7 +120,7 @@ def vet_ticker(
     )
 
     # Peer valuation, then rescore so P/E is judged against the peers
-    def fx_lookup(symbol: str) -> Optional[float]:
+    def fx_lookup(symbol: str) -> float | None:
         return fetcher.latest_close(symbol, use_cache=options.use_cache)
 
     try:
@@ -176,7 +176,7 @@ _BUY_SIGNALS = ("Buy", "Strong Buy")
 _SELL_SIGNALS = ("Sell", "Strong Sell")
 
 
-def summarize_verdict(data: Dict[str, Any], today: Optional[datetime] = None) -> Dict[str, Any]:
+def summarize_verdict(data: dict[str, Any], today: datetime | None = None) -> dict[str, Any]:
     """
     The bottom line of a vet, from `VetResult.to_dict()` output.
 
@@ -199,7 +199,7 @@ def summarize_verdict(data: Dict[str, Any], today: Optional[datetime] = None) ->
     else:
         call = WATCH
 
-    reasons: List[str] = []
+    reasons: list[str] = []
     if score is not None:
         reasons.append(f"{signal} {score:.0f}/100 ({header.get('confidence')} confidence)")
     # Low-severity flags are data notes (thin coverage), not findings about the company
@@ -241,7 +241,7 @@ def summarize_verdict(data: Dict[str, Any], today: Optional[datetime] = None) ->
     return {"call": call, "reasons": reasons, "flip": flip}
 
 
-def _peer_view(peers: Dict[str, Any]) -> Optional[str]:
+def _peer_view(peers: dict[str, Any]) -> str | None:
     """Cheap/rich/in line, from the average cheapness across peer metrics."""
     ranks = [
         m["cheapness"]
@@ -260,7 +260,7 @@ def _peer_view(peers: Dict[str, Any]) -> Optional[str]:
     return f"{view} vs {len(peers['peers'])} peers"
 
 
-def _momentum_view(rs: Dict[str, Any]) -> Optional[str]:
+def _momentum_view(rs: dict[str, Any]) -> str | None:
     rating = rs.get("rs_rating")
     if rating is None:
         return None
@@ -271,7 +271,7 @@ def _momentum_view(rs: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _analyst_view(fair_value: Dict[str, Any]) -> Optional[str]:
+def _analyst_view(fair_value: dict[str, Any]) -> str | None:
     """Analyst mean target vs price, when at least 3 analysts cover the stock."""
     analysts = fair_value.get("analysts") or {}
     upside = (fair_value.get("upside_pct") or {}).get("analyst_mean")
@@ -280,7 +280,7 @@ def _analyst_view(fair_value: Dict[str, Any]) -> Optional[str]:
     return f"analyst target {upside:+.0f}%"
 
 
-def _fund_view(funds: Dict[str, Any]) -> Optional[str]:
+def _fund_view(funds: dict[str, Any]) -> str | None:
     positions = funds.get("positions") or []
     buying = sum(1 for p in positions if p.get("action") in ("new", "add"))
     selling = sum(1 for p in positions if p.get("action") in ("trim", "exit"))
@@ -289,7 +289,7 @@ def _fund_view(funds: Dict[str, Any]) -> Optional[str]:
     return f"tracked funds: {buying} buying, {selling} selling"
 
 
-def next_earnings_date(report: Dict[str, Any], today: Optional[datetime] = None) -> Optional[str]:
+def next_earnings_date(report: dict[str, Any], today: datetime | None = None) -> str | None:
     """Earliest upcoming earnings date in the report, as YYYY-MM-DD."""
     today = today or datetime.now()
     upcoming = []
@@ -311,15 +311,15 @@ def next_steps(
     result: VetResult,
     peers_given: bool,
     min_peers: int = 4,
-    today: Optional[datetime] = None,
-) -> List[str]:
+    today: datetime | None = None,
+) -> list[str]:
     """
     Concrete follow-ups based on what the vet found (and didn't). `min_peers`
     is the scorer's (`ValuationScoringParams.min_peers`): with fewer, P/E is
     scored on absolute cut-offs, not against the peers.
     """
     t = result.ticker
-    steps: List[str] = []
+    steps: list[str] = []
 
     high = [f for f in result.red_flags if f.severity == "high"]
     if high:

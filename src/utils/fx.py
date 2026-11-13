@@ -14,14 +14,15 @@ other ratios unchanged; only the levels move.
 
 import math
 import re
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 import pandas as pd
 
 from .financial import finite_float
 
 # Listing currencies quoted in minor units: code -> (major currency, units per major)
-MINOR_UNITS: Dict[str, Tuple[str, float]] = {
+MINOR_UNITS: dict[str, tuple[str, float]] = {
     "GBp": ("GBP", 100.0),
     "GBX": ("GBP", 100.0),
     "ZAc": ("ZAR", 100.0),
@@ -33,7 +34,7 @@ MINOR_UNITS: Dict[str, Tuple[str, float]] = {
 _NON_MONETARY = re.compile(r"(Shares( Number)?$|^Share Issued$|^Tax Rate)", re.IGNORECASE)
 
 
-def major_currency(code: str) -> Tuple[str, float]:
+def major_currency(code: str) -> tuple[str, float]:
     """'GBp' -> ('GBP', 100.0); 'USD' -> ('USD', 1.0)."""
     if code in MINOR_UNITS:
         return MINOR_UNITS[code]
@@ -45,7 +46,7 @@ def fx_symbol(from_currency: str, to_currency: str) -> str:
     return f"{from_currency.upper()}{to_currency.upper()}=X"
 
 
-def needs_conversion(statement_currency: Optional[str], listing_currency: Optional[str]) -> bool:
+def needs_conversion(statement_currency: str | None, listing_currency: str | None) -> bool:
     if not statement_currency or not listing_currency:
         return False
     return statement_currency != listing_currency
@@ -54,8 +55,8 @@ def needs_conversion(statement_currency: Optional[str], listing_currency: Option
 def conversion_rate(
     statement_currency: str,
     listing_currency: str,
-    fx_lookup: Callable[[str], Optional[float]],
-) -> Optional[Tuple[float, Optional[str]]]:
+    fx_lookup: Callable[[str], float | None],
+) -> tuple[float, str | None] | None:
     """
     Multiplier turning statement amounts into listing-currency amounts.
 
@@ -74,7 +75,7 @@ def conversion_rate(
     return rate * listing_units / statement_units, symbol
 
 
-def usd_per_unit(currency: str, fx_lookup: Callable[[str], Optional[float]]) -> Optional[float]:
+def usd_per_unit(currency: str, fx_lookup: Callable[[str], float | None]) -> float | None:
     """
     USD value of one unit of `currency` (GBp -> GBPUSD / 100), or None if unknown.
 
@@ -94,8 +95,8 @@ def usd_per_unit(currency: str, fx_lookup: Callable[[str], Optional[float]]) -> 
 
 
 def adjust_info_ratios(
-    info: Dict[str, Any], rate: float, book_equity: Optional[float] = None
-) -> Dict[str, Any]:
+    info: dict[str, Any], rate: float, book_equity: float | None = None
+) -> dict[str, Any]:
     """
     Fix Yahoo's statement-based ratios for a ticker whose statements are in
     another currency than its price.
@@ -121,7 +122,7 @@ def adjust_info_ratios(
     ratio correction.
     """
     out = dict(info)
-    converted: List[str] = []
+    converted: list[str] = []
     units = major_currency(str(info.get("currency") or ""))[1]
     rate = rate / units
     price_to_sales = finite_float(info.get("price_to_sales"))
@@ -148,7 +149,7 @@ def adjust_info_ratios(
     return out
 
 
-def market_cap_in_listing_units(info: Dict[str, Any]) -> Optional[float]:
+def market_cap_in_listing_units(info: dict[str, Any]) -> float | None:
     """
     Market cap in the units of the price and the converted statements. Yahoo
     gives it in the major currency even for a minor-unit listing (BARC.L: GBP,
@@ -161,8 +162,8 @@ def market_cap_in_listing_units(info: Dict[str, Any]) -> Optional[float]:
 
 
 def normalize_info(
-    info: Dict[str, Any], fx_lookup: Callable[[str], Optional[float]]
-) -> Dict[str, Any]:
+    info: dict[str, Any], fx_lookup: Callable[[str], float | None]
+) -> dict[str, Any]:
     """
     `info` with its statement-based ratios in the listing currency, where
     Yahoo mixed currencies and an FX rate is available (see adjust_info_ratios).
@@ -178,10 +179,10 @@ def normalize_info(
 
 
 def convert_statements(
-    fundamentals: Dict[str, pd.DataFrame], rate: float
-) -> Dict[str, pd.DataFrame]:
+    fundamentals: dict[str, pd.DataFrame], rate: float
+) -> dict[str, pd.DataFrame]:
     """Copies of the statement frames with every monetary line multiplied by `rate`."""
-    converted: Dict[str, pd.DataFrame] = {}
+    converted: dict[str, pd.DataFrame] = {}
     for name, frame in fundamentals.items():
         if frame is None or frame.empty:
             converted[name] = frame

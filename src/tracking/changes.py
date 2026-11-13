@@ -8,9 +8,10 @@ cleared, the price move, price against the watchlist target/stop, and
 earnings coming up. Open journal theses are checked against the new rows.
 """
 
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
-from typing import Any, Callable, Collection, Dict, List, Optional, Sequence
+from typing import Any
 
 import pandas as pd
 
@@ -34,20 +35,20 @@ NEAR_LEVEL_PCT = 5.0  # mention a target/stop this close to the price
 class TickerChange:
     ticker: str
     today: date
-    name: Optional[str] = None
-    current: Optional[Row] = None
-    previous: Optional[Row] = None
-    watch: Optional[WatchItem] = None
+    name: str | None = None
+    current: Row | None = None
+    previous: Row | None = None
+    watch: WatchItem | None = None
     held: bool = False
-    next_earnings: Optional[str] = None
-    error: Optional[str] = None
+    next_earnings: str | None = None
+    error: str | None = None
 
     @property
-    def score_delta(self) -> Optional[float]:
+    def score_delta(self) -> float | None:
         return _delta(self.current, self.previous, "score")
 
     @property
-    def price_change_pct(self) -> Optional[float]:
+    def price_change_pct(self) -> float | None:
         cur, prev = self.current or {}, self.previous or {}
         if not cur.get("price") or not prev.get("price"):
             return None
@@ -56,36 +57,36 @@ class TickerChange:
         return float((cur["price"] / prev["price"] - 1) * 100)
 
     @property
-    def signal_change(self) -> Optional[tuple[str, str]]:
+    def signal_change(self) -> tuple[str, str] | None:
         if not self.current or not self.previous:
             return None
         old, new = self.previous.get("signal"), self.current.get("signal")
         return (old, new) if old and new and old != new else None
 
     @property
-    def new_flags(self) -> List[str]:
+    def new_flags(self) -> list[str]:
         if self.previous is None:
             return []
         before = set(flag_titles(self.previous))
         return [t for t in flag_titles(self.current) if t not in before]
 
     @property
-    def resolved_flags(self) -> List[str]:
+    def resolved_flags(self) -> list[str]:
         if self.previous is None:
             return []
         now = set(flag_titles(self.current))
         return [t for t in flag_titles(self.previous) if t not in now]
 
     @property
-    def earnings_in_days(self) -> Optional[int]:
+    def earnings_in_days(self) -> int | None:
         if not self.next_earnings:
             return None
         days = (pd.Timestamp(self.next_earnings) - pd.Timestamp(self.today)).days
         return days if 0 <= days <= EARNINGS_SOON_DAYS else None
 
-    def notes(self) -> List[str]:
+    def notes(self) -> list[str]:
         """What is worth a look, most decisive first."""
-        notes: List[str] = []
+        notes: list[str] = []
         if self.signal_change:
             notes.append(f"signal {self.signal_change[0]} -> {self.signal_change[1]}")
         delta = self.score_delta
@@ -107,11 +108,11 @@ class TickerChange:
             notes.append(f"earnings {self.next_earnings} ({self.earnings_in_days}d)")
         return notes
 
-    def _level_notes(self) -> List[str]:
+    def _level_notes(self) -> list[str]:
         price = (self.current or {}).get("price")
         if not price or self.watch is None:
             return []
-        notes: List[str] = []
+        notes: list[str] = []
         target, stop = self.watch.target, self.watch.stop
         if target is not None:
             if price >= target:
@@ -135,7 +136,7 @@ class TickerChange:
             -abs(self.score_delta or 0),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ticker": self.ticker,
             "name": self.name,
@@ -160,10 +161,10 @@ class TickerChange:
 class ChangesResult:
     preset: str
     today: date
-    changes: List[TickerChange] = field(default_factory=list)
-    theses: List[ThesisCheck] = field(default_factory=list)
+    changes: list[TickerChange] = field(default_factory=list)
+    theses: list[ThesisCheck] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "preset": self.preset,
             "date": self.today.isoformat(),
@@ -174,13 +175,13 @@ class ChangesResult:
 
 def track_changes(
     tickers: Sequence[str],
-    fetcher: Optional[DataFetcher] = None,
-    options: Optional[AnalysisOptions] = None,
-    watchlist: Optional[Dict[str, WatchItem]] = None,
+    fetcher: DataFetcher | None = None,
+    options: AnalysisOptions | None = None,
+    watchlist: dict[str, WatchItem] | None = None,
     data_dir: str = "data",
     workers: int = DEFAULT_WORKERS,
-    today: Optional[date] = None,
-    progress: Optional[Callable[[str, Optional[Exception]], None]] = None,
+    today: date | None = None,
+    progress: Callable[[str, Exception | None], None] | None = None,
     held: Collection[str] = (),
     journal: Sequence[Decision] = (),
 ) -> ChangesResult:
@@ -198,7 +199,7 @@ def track_changes(
 
     # Latest row per ticker from an earlier day, read before today's rows go in
     before_run = load_history(data_dir)
-    previous: Dict[str, Row] = {}
+    previous: dict[str, Row] = {}
     for row in before_run:
         if row["preset"] == preset and row["date"] < today.isoformat():
             previous[row["ticker"]] = row
@@ -208,7 +209,7 @@ def track_changes(
         return bundle, find_red_flags(bundle.report)
 
     result = ChangesResult(preset=preset, today=today)
-    rows: List[Row] = []
+    rows: list[Row] = []
     for ticker, outcome, error in run_concurrently(analyze, tickers, workers=workers):
         change = TickerChange(
             ticker=ticker,
@@ -247,16 +248,16 @@ def track_changes(
 # ==================== Output ====================
 
 
-def render_text(data: Dict[str, Any]) -> str:
+def render_text(data: dict[str, Any]) -> str:
     """Terminal layout from `ChangesResult.to_dict()`."""
     return sections_to_text(build_sections(data))
 
 
-def render_markdown(data: Dict[str, Any]) -> str:
+def render_markdown(data: dict[str, Any]) -> str:
     return sections_to_markdown(build_sections(data))
 
 
-def summary_line(data: Dict[str, Any]) -> Optional[str]:
+def summary_line(data: dict[str, Any]) -> str | None:
     """
     One line for a notification: theses newly broken or to recheck, tickers
     worth a look, or that nothing could be scored. None when all is quiet. A
@@ -269,7 +270,7 @@ def summary_line(data: Dict[str, Any]) -> Optional[str]:
     flagged = [t for t in data.get("theses") or [] if t["status"] != OK and t.get("new")]
     broken = sum(1 for t in flagged if t["status"] == BROKEN)
     moved = [c["ticker"] for c in scored if c.get("notes")]
-    parts: List[str] = []
+    parts: list[str] = []
     if broken:
         parts.append(f"{broken} {'thesis' if broken == 1 else 'theses'} broken")
     if len(flagged) > broken:
@@ -280,7 +281,7 @@ def summary_line(data: Dict[str, Any]) -> Optional[str]:
     return "; ".join(parts) or None
 
 
-def build_sections(data: Dict[str, Any]) -> List[Section]:
+def build_sections(data: dict[str, Any]) -> list[Section]:
     changes = data.get("changes") or []
     scored = [c for c in changes if not c.get("error")]
     rows = []
@@ -301,7 +302,7 @@ def build_sections(data: Dict[str, Any]) -> List[Section]:
                 prev["date"] if prev else "",
             ]
         )
-    summary: List[Any] = (
+    summary: list[Any] = (
         [
             Table(
                 ["Ticker", "", "Score", "Chg", "Signal", "Price", "Chg %", "Since"],
@@ -317,7 +318,7 @@ def build_sections(data: Dict[str, Any]) -> List[Section]:
 
     moved = [c for c in scored if c.get("notes")]
     if moved:
-        blocks: List[Any] = []
+        blocks: list[Any] = []
         for c in moved:
             title = f"{c['ticker']}  {c['name']}" if c.get("name") else c["ticker"]
             if blocks:
@@ -329,7 +330,7 @@ def build_sections(data: Dict[str, Any]) -> List[Section]:
     quiet = [c["ticker"] for c in scored if c.get("previous") and not c.get("notes")]
     first = [c["ticker"] for c in scored if not c.get("previous")]
     failed = [f"{c['ticker']}: {c['error']}" for c in changes if c.get("error")]
-    notes: List[Any] = []
+    notes: list[Any] = []
     if quiet:
         notes.append(f"No notable change: {', '.join(quiet)}")
     if first:
@@ -345,7 +346,7 @@ def build_sections(data: Dict[str, Any]) -> List[Section]:
     return sections
 
 
-def _delta(current: Optional[Row], previous: Optional[Row], column: str) -> Optional[float]:
+def _delta(current: Row | None, previous: Row | None, column: str) -> float | None:
     if not current or not previous:
         return None
     new, old = current.get(column), previous.get(column)
@@ -354,5 +355,5 @@ def _delta(current: Optional[Row], previous: Optional[Row], column: str) -> Opti
     return float(new) - float(old)
 
 
-def _fmt(value: Optional[float], pattern: str) -> str:
+def _fmt(value: float | None, pattern: str) -> str:
     return "" if value is None else pattern.format(value)

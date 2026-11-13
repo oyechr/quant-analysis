@@ -6,20 +6,17 @@ near-linear speedup for multi-ticker commands. Keep worker counts modest:
 Yahoo rate-limits aggressive clients.
 """
 
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, Iterable, Iterator, Optional, Tuple, TypeVar
-
-T = TypeVar("T")
-R = TypeVar("R")
 
 DEFAULT_WORKERS = 4
 
 
-def run_concurrently(
+def run_concurrently[T, R](
     fn: Callable[[T], R],
     items: Iterable[T],
     workers: int = DEFAULT_WORKERS,
-) -> Iterator[Tuple[T, Optional[R], Optional[Exception]]]:
+) -> Iterator[tuple[T, R | None, Exception | None]]:
     """
     Apply fn to each item on a thread pool, yielding results as they complete.
 

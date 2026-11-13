@@ -4,7 +4,6 @@ Data models for the Portfolio Discovery module.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
 
 
 @dataclass
@@ -13,13 +12,13 @@ class Holding:
 
     ticker: str
     name: str
-    shares: Optional[float] = None
-    value: Optional[float] = None  # Market value in USD
-    sector: Optional[str] = None
-    industry: Optional[str] = None
-    weight: Optional[float] = None  # % of portfolio
-    action: Optional[str] = None  # "buy", "sell", "hold", "new", "exit"
-    date: Optional[datetime] = None
+    shares: float | None = None
+    value: float | None = None  # Market value in USD
+    sector: str | None = None
+    industry: str | None = None
+    weight: float | None = None  # % of portfolio
+    action: str | None = None  # "buy", "sell", "hold", "new", "exit"
+    date: datetime | None = None
 
     def __post_init__(self):
         self.ticker = self.ticker.upper().strip()
@@ -32,10 +31,10 @@ class TrackedPortfolio:
     name: str
     source: str  # "edgar_13f", "congress", "manual", etc.
     holdings: list[Holding] = field(default_factory=list)
-    cik: Optional[str] = None  # SEC CIK number (for EDGAR source)
-    filing_date: Optional[datetime] = None
-    period_of_report: Optional[datetime] = None
-    description: Optional[str] = None
+    cik: str | None = None  # SEC CIK number (for EDGAR source)
+    filing_date: datetime | None = None
+    period_of_report: datetime | None = None
+    description: str | None = None
     # EDGAR accession numbers the holdings were built from (to tell when a cache is out of date)
     accessions: list[str] = field(default_factory=list)
 
@@ -50,7 +49,7 @@ class TrackedPortfolio:
         return [h for h in self.holdings if h.action != "exit"]
 
     @property
-    def total_value(self) -> Optional[float]:
+    def total_value(self) -> float | None:
         """Total portfolio value (sum of all holding values)."""
         values = [h.value for h in self.holdings if h.value is not None]
         return sum(values) if values else None
@@ -61,9 +60,9 @@ class DiscoverySignal:
     """A signal generated from cross-portfolio analysis."""
 
     ticker: str
-    name: Optional[str] = None
-    sector: Optional[str] = None
-    industry: Optional[str] = None
+    name: str | None = None
+    sector: str | None = None
+    industry: str | None = None
     signal_type: str = "overlap"  # "overlap", "convergence", "contrarian", "sector_cluster"
     strength: float = 0.0  # 0-100 signal strength
     portfolios: list[str] = field(default_factory=list)  # portfolio names that hold it
@@ -85,11 +84,11 @@ class SectorCluster:
     """A cluster of holdings in a specific sector/industry across portfolios."""
 
     sector: str
-    industry: Optional[str] = None
+    industry: str | None = None
     tickers: list[str] = field(default_factory=list)
     portfolios: list[str] = field(default_factory=list)
-    total_value: Optional[float] = None
-    weight_avg: Optional[float] = None  # Average weight across portfolios
+    total_value: float | None = None
+    weight_avg: float | None = None  # Average weight across portfolios
     holding_count: int = 0
     strength: float = 0.0  # 0-100, how concentrated this cluster is
 
@@ -106,7 +105,7 @@ class ConvergenceEvent:
     """Multiple portfolios taking the same action on the same ticker within a time window."""
 
     ticker: str
-    name: Optional[str] = None
+    name: str | None = None
     action: str = "buy"  # "buy" or "sell"
     portfolios: list[str] = field(default_factory=list)
     dates: list[datetime] = field(default_factory=list)
@@ -119,7 +118,7 @@ class ContrarianSignal:
     """Signal where one set of portfolios is buying while another is selling."""
 
     ticker: str
-    name: Optional[str] = None
+    name: str | None = None
     buyers: list[str] = field(default_factory=list)
     sellers: list[str] = field(default_factory=list)
     net_direction: str = "bullish"  # "bullish" if more buyers, "bearish" if more sellers

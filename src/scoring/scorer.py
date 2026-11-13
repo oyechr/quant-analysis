@@ -5,9 +5,10 @@ Designed for dual-purpose use: standalone analysis and LLM-optimized output.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from .config import ScoringConfig
 from .dimensions import (
@@ -44,17 +45,17 @@ class ScoringResult:
     confidence_score: float  # 0-1
 
     # Dimension scores
-    technical: Optional[DimensionResult] = None
-    fundamental: Optional[DimensionResult] = None
-    risk: Optional[DimensionResult] = None
-    valuation: Optional[DimensionResult] = None
+    technical: DimensionResult | None = None
+    fundamental: DimensionResult | None = None
+    risk: DimensionResult | None = None
+    valuation: DimensionResult | None = None
 
     # Trade levels
-    trade_levels: Optional[TradeLevelsResult] = None
+    trade_levels: TradeLevelsResult | None = None
 
     # Aggregated insights
-    strengths: List[str] = field(default_factory=list)
-    concerns: List[str] = field(default_factory=list)
+    strengths: list[str] = field(default_factory=list)
+    concerns: list[str] = field(default_factory=list)
 
     # Metadata
     generated_at: str = ""
@@ -63,12 +64,12 @@ class ScoringResult:
     dimensions_total: int = 4
     # Dimension (or "trade_levels") -> the error that kept it out. A scorer
     # bug would otherwise just reweight the composite, seen only in the log
-    errors: Dict[str, str] = field(default_factory=dict)
+    errors: dict[str, str] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
-        dimensions: Dict[str, Any] = {}
-        result: Dict[str, Any] = {
+        dimensions: dict[str, Any] = {}
+        result: dict[str, Any] = {
             "ticker": self.ticker,
             "composite_score": round(self.composite_score, 1),
             "signal": self.signal,
@@ -160,7 +161,7 @@ class ScoringResult:
         lines.append("=" * 60)
         return "\n".join(lines)
 
-    def format_for_toon(self) -> Dict[str, Any]:
+    def format_for_toon(self) -> dict[str, Any]:
         """
         Format scoring as a compact dict optimized for TOON serialization and LLM consumption.
         Designed to be inserted at the top of a TOON report for LLM pre-processing.
@@ -168,13 +169,13 @@ class ScoringResult:
         Returns:
             Compact dict with scoring summary
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "composite_score": round(self.composite_score, 1),
             "signal": self.signal,
             "confidence": self.confidence,
         }
 
-        dim_scores: Dict[str, Any] = {}
+        dim_scores: dict[str, Any] = {}
         for name, dim in [
             ("technical", self.technical),
             ("fundamental", self.fundamental),
@@ -282,7 +283,7 @@ class StockScorer:
         )
     """
 
-    def __init__(self, config: Optional[ScoringConfig] = None):
+    def __init__(self, config: ScoringConfig | None = None):
         """
         Initialize StockScorer.
 
@@ -296,7 +297,7 @@ class StockScorer:
         self.risk_scorer = RiskScorer(self.config)
         self.valuation_scorer = ValuationScorer(self.config)
 
-    def score(self, report_data: Dict[str, Any]) -> ScoringResult:
+    def score(self, report_data: dict[str, Any]) -> ScoringResult:
         """
         Score a stock from a full report data dictionary.
 
@@ -336,13 +337,13 @@ class StockScorer:
 
     def score_from_analyses(
         self,
-        technical_data: Optional[Dict[str, Any]] = None,
-        fundamental_data: Optional[Dict[str, Any]] = None,
-        risk_data: Optional[Dict[str, Any]] = None,
-        valuation_data: Optional[Dict[str, Any]] = None,
-        ticker_info: Optional[Dict[str, Any]] = None,
+        technical_data: dict[str, Any] | None = None,
+        fundamental_data: dict[str, Any] | None = None,
+        risk_data: dict[str, Any] | None = None,
+        valuation_data: dict[str, Any] | None = None,
+        ticker_info: dict[str, Any] | None = None,
         ticker: str = "UNKNOWN",
-        peer_valuation: Optional[Dict[str, Any]] = None,
+        peer_valuation: dict[str, Any] | None = None,
     ) -> ScoringResult:
         """
         Score a stock from individual analysis data dictionaries.
@@ -359,11 +360,11 @@ class StockScorer:
         Returns:
             ScoringResult with composite score, signals, and dimension breakdowns
         """
-        dimensions: List[tuple[str, DimensionResult]] = []  # (weight_attr, result)
-        all_strengths: List[str] = []
-        all_concerns: List[str] = []
+        dimensions: list[tuple[str, DimensionResult]] = []  # (weight_attr, result)
+        all_strengths: list[str] = []
+        all_concerns: list[str] = []
 
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
 
         def run(name: str, data: Any, fn: Callable[[], DimensionResult]) -> Any:
             if not data:
@@ -436,7 +437,7 @@ class StockScorer:
             errors=errors,
         )
 
-    def _calculate_composite(self, dimensions: List[tuple[str, DimensionResult]]) -> float:
+    def _calculate_composite(self, dimensions: list[tuple[str, DimensionResult]]) -> float:
         """
         Calculate weighted composite score from available dimensions.
         Re-normalizes weights when some dimensions are missing.
@@ -461,7 +462,7 @@ class StockScorer:
             return weighted_sum / total_weight
         return 50.0
 
-    def _calculate_confidence(self, dimensions: List[tuple[str, DimensionResult]]) -> float:
+    def _calculate_confidence(self, dimensions: list[tuple[str, DimensionResult]]) -> float:
         """
         Calculate confidence score (0-1) based on:
         1. Number of dimensions available (40% weight)
@@ -489,7 +490,7 @@ class StockScorer:
             return "Low"
 
 
-def format_score_table(results: Dict[str, Optional[ScoringResult]], preset: str) -> str:
+def format_score_table(results: dict[str, ScoringResult | None], preset: str) -> str:
     """One row per ticker (in the dict's order); None marks a ticker that failed."""
     lines = [
         "",

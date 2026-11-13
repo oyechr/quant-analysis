@@ -10,8 +10,8 @@ Detects patterns across multiple tracked portfolios:
 
 import logging
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Optional, Sequence
 
 from .models import (
     ContrarianSignal,
@@ -178,7 +178,7 @@ class PortfolioAnalyzer:
         identifies where multiple portfolios are concentrating.
         """
         # Group by (sector, industry) tuple
-        industry_map: dict[tuple[str, Optional[str]], list[tuple[str, Holding]]] = defaultdict(list)
+        industry_map: dict[tuple[str, str | None], list[tuple[str, Holding]]] = defaultdict(list)
 
         for portfolio in portfolios:
             for holding in portfolio.held:
@@ -274,7 +274,7 @@ class PortfolioAnalyzer:
         action: str,
         actions: list[tuple[str, Holding]],
         window: timedelta,
-    ) -> Optional[ConvergenceEvent]:
+    ) -> ConvergenceEvent | None:
         """Find the largest convergence cluster within a time window."""
         if len(actions) < self.min_overlap:
             return None
@@ -376,7 +376,7 @@ class PortfolioAnalyzer:
         return sorted(signals, key=lambda s: s.strength, reverse=True)
 
     @staticmethod
-    def _safe_avg(values: Sequence[Optional[float]]) -> Optional[float]:
+    def _safe_avg(values: Sequence[float | None]) -> float | None:
         """Calculate average of non-None values."""
         valid = [v for v in values if v is not None]
         return sum(valid) / len(valid) if valid else None

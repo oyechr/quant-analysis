@@ -16,10 +16,10 @@ editable by hand; `quant watchlist add/rm` rewrite it in the same layout.
 
 import json
 import tomllib
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
 
 from ..paths import WATCHLIST
 from ..utils.files import atomic_write_text
@@ -33,12 +33,12 @@ DEFAULT_WATCHLIST = WATCHLIST
 class WatchItem:
     ticker: str
     added: date
-    thesis: Optional[str] = None
-    target: Optional[float] = None
-    stop: Optional[float] = None
+    thesis: str | None = None
+    target: float | None = None
+    stop: float | None = None
 
 
-def load_watchlist(path: Path) -> Dict[str, WatchItem]:
+def load_watchlist(path: Path) -> dict[str, WatchItem]:
     """Watchlist entries by ticker, in file order; empty if the file doesn't exist."""
     if not path.exists():
         return {}
@@ -47,7 +47,7 @@ def load_watchlist(path: Path) -> Dict[str, WatchItem]:
     except tomllib.TOMLDecodeError as e:
         raise ValueError(f"Can't read {path}: {e}") from e
 
-    items: Dict[str, WatchItem] = {}
+    items: dict[str, WatchItem] = {}
     for ticker, entry in data.items():
         if not isinstance(entry, dict):
             raise ValueError(f"{path}: '{ticker}' should be a table, e.g. [\"{ticker}\"]")
@@ -62,8 +62,8 @@ def load_watchlist(path: Path) -> Dict[str, WatchItem]:
     return items
 
 
-def save_watchlist(items: Dict[str, WatchItem], path: Path) -> None:
-    lines: List[str] = []
+def save_watchlist(items: dict[str, WatchItem], path: Path) -> None:
+    lines: list[str] = []
     for item in items.values():
         lines.append(f"[{_toml_string(item.ticker)}]")
         if item.thesis:
@@ -80,18 +80,18 @@ def save_watchlist(items: Dict[str, WatchItem], path: Path) -> None:
 def add_to_watchlist(
     path: Path,
     tickers: Iterable[str],
-    thesis: Optional[str] = None,
-    target: Optional[float] = None,
-    stop: Optional[float] = None,
-    today: Optional[date] = None,
-) -> tuple[List[str], List[str]]:
+    thesis: str | None = None,
+    target: float | None = None,
+    stop: float | None = None,
+    today: date | None = None,
+) -> tuple[list[str], list[str]]:
     """
     Add tickers, or update the given fields of ones already listed (their
     added date is kept). Returns (added, updated).
     """
     items = load_watchlist(path)
-    added: List[str] = []
-    updated: List[str] = []
+    added: list[str] = []
+    updated: list[str] = []
     for ticker in dict.fromkeys(t.strip().upper() for t in tickers if t.strip()):
         item = items.get(ticker)
         if item is None:
@@ -109,11 +109,11 @@ def add_to_watchlist(
     return added, updated
 
 
-def remove_from_watchlist(path: Path, tickers: Iterable[str]) -> tuple[List[str], List[str]]:
+def remove_from_watchlist(path: Path, tickers: Iterable[str]) -> tuple[list[str], list[str]]:
     """Remove tickers. Returns (removed, not_found)."""
     items = load_watchlist(path)
-    removed: List[str] = []
-    missing: List[str] = []
+    removed: list[str] = []
+    missing: list[str] = []
     for ticker in dict.fromkeys(t.strip().upper() for t in tickers if t.strip()):
         if items.pop(ticker, None) is None:
             missing.append(ticker)
@@ -124,7 +124,7 @@ def remove_from_watchlist(path: Path, tickers: Iterable[str]) -> tuple[List[str]
     return removed, missing
 
 
-def render_watchlist(path: Path, items: Dict[str, WatchItem], last_rows: Dict[str, Row]) -> str:
+def render_watchlist(path: Path, items: dict[str, WatchItem], last_rows: dict[str, Row]) -> str:
     """The watchlist as a table, with each ticker's last history row (by ticker)."""
     rows = []
     for item in items.values():
@@ -154,7 +154,7 @@ def _toml_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def _price(value: object) -> Optional[float]:
+def _price(value: object) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value)

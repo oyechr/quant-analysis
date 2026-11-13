@@ -3,8 +3,9 @@
 The provider SDKs are replaced by fakes; the errors are the SDKs' own classes.
 """
 
+from collections.abc import Iterator, Sequence
 from types import SimpleNamespace
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Type
+from typing import Any
 
 import anthropic
 import httpx2
@@ -22,12 +23,12 @@ MESSAGES = [{"role": "user", "content": "Bear case?"}]
 
 
 class _FakeAnthropicStream:
-    def __init__(self, texts: Sequence[str], stop_reason: str, error: Optional[Exception]):
+    def __init__(self, texts: Sequence[str], stop_reason: str, error: Exception | None):
         self._texts = texts
         self._stop_reason = stop_reason
         self._error = error
 
-    def __enter__(self) -> "_FakeAnthropicStream":
+    def __enter__(self) -> _FakeAnthropicStream:
         return self
 
     def __exit__(self, *args: Any) -> None:
@@ -47,8 +48,8 @@ def _fake_anthropic(
     monkeypatch: pytest.MonkeyPatch,
     texts: Sequence[str] = ("Fine.",),
     stop_reason: str = "end_turn",
-    error: Optional[Exception] = None,
-    open_error: Optional[Exception] = None,
+    error: Exception | None = None,
+    open_error: Exception | None = None,
 ) -> None:
     def _stream(**kwargs: Any) -> _FakeAnthropicStream:
         if open_error is not None:
@@ -59,18 +60,18 @@ def _fake_anthropic(
     monkeypatch.setattr(anthropic, "Anthropic", lambda **kw: client)
 
 
-def _chunk(text: Optional[str], finish_reason: Optional[str] = None) -> SimpleNamespace:
+def _chunk(text: str | None, finish_reason: str | None = None) -> SimpleNamespace:
     delta = SimpleNamespace(content=text)
     return SimpleNamespace(choices=[SimpleNamespace(delta=delta, finish_reason=finish_reason)])
 
 
 def _fake_openai(
     monkeypatch: pytest.MonkeyPatch,
-    chunks: List[SimpleNamespace],
-    error: Optional[Exception] = None,
-) -> Dict[str, Any]:
+    chunks: list[SimpleNamespace],
+    error: Exception | None = None,
+) -> dict[str, Any]:
     """Record the client's base_url and the create() kwargs."""
-    seen: Dict[str, Any] = {}
+    seen: dict[str, Any] = {}
 
     def _create(**kwargs: Any) -> Iterator[SimpleNamespace]:
         seen["create"] = kwargs
@@ -78,7 +79,7 @@ def _fake_openai(
             raise error
         return iter(chunks)
 
-    def _client(api_key: str, base_url: Optional[str] = None) -> SimpleNamespace:
+    def _client(api_key: str, base_url: str | None = None) -> SimpleNamespace:
         seen["base_url"] = base_url
         return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=_create)))
 
@@ -90,7 +91,7 @@ _A_REQUEST = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
 
 
 def _anthropic_status(
-    cls: Type[anthropic.APIStatusError], status: int, body: Any = None
+    cls: type[anthropic.APIStatusError], status: int, body: Any = None
 ) -> Exception:
     return cls("error", response=httpx2.Response(status, request=_A_REQUEST), body=body)
 
@@ -287,7 +288,7 @@ def _write_report(tmp_path: Any) -> None:
     )
 
 
-def _run_chat(tmp_path: Any, replies: List[Any], typed: str, intro: bool = False) -> List[Any]:
+def _run_chat(tmp_path: Any, replies: list[Any], typed: str, intro: bool = False) -> list[Any]:
     """Run `quant chat AAPL`; each reply is a string or an exception to raise."""
     from unittest.mock import patch
 
@@ -295,10 +296,10 @@ def _run_chat(tmp_path: Any, replies: List[Any], typed: str, intro: bool = False
 
     from src.cli import cli
 
-    calls: List[Any] = []
+    calls: list[Any] = []
     queue = list(replies)
 
-    def _turn(context: str, messages: List[Dict[str, str]], model: Any = None) -> str:
+    def _turn(context: str, messages: list[dict[str, str]], model: Any = None) -> str:
         calls.append([dict(m) for m in messages])
         reply = queue.pop(0)
         if isinstance(reply, Exception):

@@ -11,8 +11,9 @@ Calculates risk and performance metrics for stock analysis:
 """
 
 import logging
+from collections.abc import Sequence
 from statistics import NormalDist
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -53,9 +54,9 @@ class RiskMetrics:
 
     def __init__(
         self,
-        price_data: Optional[pd.DataFrame] = None,
-        benchmark_data: Optional[pd.DataFrame] = None,
-        benchmark_ticker: Optional[str] = None,
+        price_data: pd.DataFrame | None = None,
+        benchmark_data: pd.DataFrame | None = None,
+        benchmark_ticker: str | None = None,
     ):
         """
         Initialize risk metrics calculator
@@ -69,9 +70,9 @@ class RiskMetrics:
         self.price_data = price_data
         self.benchmark_data = benchmark_data
         self.benchmark_ticker = benchmark_ticker or self.config.benchmark_ticker
-        self._cached_metrics: Optional[Dict[str, Any]] = None
+        self._cached_metrics: dict[str, Any] | None = None
 
-    def calculate_returns(self, price_data: pd.DataFrame) -> Dict[str, Any]:
+    def calculate_returns(self, price_data: pd.DataFrame) -> dict[str, Any]:
         """
         Calculate return metrics
 
@@ -123,8 +124,8 @@ class RiskMetrics:
             return {}
 
     def calculate_volatility(
-        self, price_data: pd.DataFrame, window: Optional[int] = None
-    ) -> Dict[str, Any]:
+        self, price_data: pd.DataFrame, window: int | None = None
+    ) -> dict[str, Any]:
         """
         Calculate volatility metrics
 
@@ -171,8 +172,8 @@ class RiskMetrics:
             return {}
 
     def calculate_sharpe_ratio(
-        self, price_data: pd.DataFrame, risk_free_rate: Optional[float] = None
-    ) -> Optional[float]:
+        self, price_data: pd.DataFrame, risk_free_rate: float | None = None
+    ) -> float | None:
         """
         Calculate Sharpe Ratio (risk-adjusted return)
 
@@ -212,8 +213,8 @@ class RiskMetrics:
             return None
 
     def calculate_sortino_ratio(
-        self, price_data: pd.DataFrame, risk_free_rate: Optional[float] = None
-    ) -> Optional[float]:
+        self, price_data: pd.DataFrame, risk_free_rate: float | None = None
+    ) -> float | None:
         """
         Calculate Sortino Ratio (downside risk-adjusted return)
 
@@ -256,7 +257,7 @@ class RiskMetrics:
             logger.error(f"Error calculating Sortino ratio: {e}")
             return None
 
-    def calculate_drawdown(self, price_data: pd.DataFrame) -> Dict[str, Any]:
+    def calculate_drawdown(self, price_data: pd.DataFrame) -> dict[str, Any]:
         """
         Calculate drawdown metrics
 
@@ -318,8 +319,8 @@ class RiskMetrics:
             return {}
 
     def calculate_beta_alpha(
-        self, price_data: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None
-    ) -> Dict[str, Any]:
+        self, price_data: pd.DataFrame, benchmark_data: pd.DataFrame | None = None
+    ) -> dict[str, Any]:
         """
         Calculate Beta and Alpha vs benchmark
 
@@ -387,7 +388,7 @@ class RiskMetrics:
 
     def calculate_var(
         self, price_data: pd.DataFrame, confidence_level: float = 0.95
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Calculate Value at Risk (VaR) and Conditional VaR (CVaR)
 
@@ -434,8 +435,8 @@ class RiskMetrics:
             return {}
 
     def calculate_information_ratio(
-        self, price_data: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None
-    ) -> Optional[float]:
+        self, price_data: pd.DataFrame, benchmark_data: pd.DataFrame | None = None
+    ) -> float | None:
         """
         Calculate Information Ratio (active return / tracking error)
 
@@ -489,7 +490,7 @@ class RiskMetrics:
             logger.error(f"Error calculating Information Ratio: {e}")
             return None
 
-    def calculate_calmar_ratio(self, price_data: pd.DataFrame) -> Optional[float]:
+    def calculate_calmar_ratio(self, price_data: pd.DataFrame) -> float | None:
         """
         Calculate Calmar Ratio (annualized return / max drawdown)
 
@@ -528,7 +529,7 @@ class RiskMetrics:
 
     def calculate_rolling_ratios(
         self, price_data: pd.DataFrame, windows: Sequence[int] = (30, 60, 90)
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Calculate rolling Sharpe and Sortino ratios over different windows
 
@@ -604,7 +605,7 @@ class RiskMetrics:
             logger.error(f"Error calculating rolling ratios: {e}")
             return {}
 
-    def calculate_distribution_stats(self, price_data: pd.DataFrame) -> Dict[str, Any]:
+    def calculate_distribution_stats(self, price_data: pd.DataFrame) -> dict[str, Any]:
         """
         Calculate return distribution statistics beyond normal distribution assumptions
 
@@ -708,7 +709,7 @@ class RiskMetrics:
             logger.error(f"Error calculating distribution stats: {e}")
             return {}
 
-    def calculate_regime(self, price_data: pd.DataFrame) -> Dict[str, Any]:
+    def calculate_regime(self, price_data: pd.DataFrame) -> dict[str, Any]:
         """
         Detect current market regime using volatility and trend signals
 
@@ -789,8 +790,8 @@ class RiskMetrics:
             return {}
 
     def calculate_scoring_metrics(
-        self, price_data: pd.DataFrame, benchmark_data: Optional[pd.DataFrame] = None
-    ) -> Dict[str, Any]:
+        self, price_data: pd.DataFrame, benchmark_data: pd.DataFrame | None = None
+    ) -> dict[str, Any]:
         """
         The metrics the risk score reads (scoring.dimensions.RiskScorer).
 
@@ -808,9 +809,9 @@ class RiskMetrics:
 
     def calculate_all_metrics(
         self,
-        price_data: Optional[pd.DataFrame] = None,
-        benchmark_data: Optional[pd.DataFrame] = None,
-    ) -> Dict[str, Any]:
+        price_data: pd.DataFrame | None = None,
+        benchmark_data: pd.DataFrame | None = None,
+    ) -> dict[str, Any]:
         """
         Calculate all risk metrics
 
@@ -854,9 +855,7 @@ class RiskMetrics:
             logger.error(f"Error calculating risk metrics: {e}")
             return {}
 
-    def format_markdown(
-        self, ticker: str = "", metrics: Optional[Dict[str, Any]] = None
-    ) -> List[str]:
+    def format_markdown(self, ticker: str = "", metrics: dict[str, Any] | None = None) -> list[str]:
         """
         Format risk analysis as detailed markdown report.
 
@@ -875,7 +874,7 @@ class RiskMetrics:
         if not metrics:
             return ["*Risk analysis not available*"]
 
-        md: List[str] = []
+        md: list[str] = []
 
         # Market Regime (context-setting — put first)
         if metrics.get("regime"):

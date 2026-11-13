@@ -31,9 +31,10 @@ from, with no costs.
 """
 
 import logging
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any
 
 import pandas as pd
 
@@ -66,9 +67,9 @@ class BacktestResult:
     preset: str
     years: int
     horizons: tuple[int, ...]
-    months: List[str]
+    months: list[str]
     observations: pd.DataFrame
-    errors: Dict[str, str] = field(default_factory=dict)
+    errors: dict[str, str] = field(default_factory=dict)
     generated_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
     @property
@@ -84,13 +85,13 @@ def history_period(years: int) -> str:
     return "max"
 
 
-def backtest_months(years: int, today: Optional[date] = None) -> List[pd.Period]:
+def backtest_months(years: int, today: date | None = None) -> list[pd.Period]:
     """The last `years` complete calendar months, oldest first."""
     last = pd.Period(today or date.today(), freq="M") - 1
     return [last - k for k in range(years * 12 - 1, -1, -1)]
 
 
-def month_end_positions(index: pd.DatetimeIndex) -> Dict[pd.Period, int]:
+def month_end_positions(index: pd.DatetimeIndex) -> dict[pd.Period, int]:
     """
     Month -> position of that month's last bar.
 
@@ -100,7 +101,7 @@ def month_end_positions(index: pd.DatetimeIndex) -> Dict[pd.Period, int]:
     returns to or from it would cover a different span than the benchmark's.
     """
     dates = trading_dates(index)
-    ends: Dict[pd.Period, int] = {}
+    ends: dict[pd.Period, int] = {}
     for position, month in enumerate(dates.to_period("M")):
         ends[month] = position  # later bars overwrite, so the last one wins
     return {
@@ -115,7 +116,7 @@ def score_window(
     benchmark_window: pd.DataFrame,
     benchmark_ticker: str,
     config: ScoringConfig,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Every signal from one lookback window of prices, plus the window's beta."""
     technical = TechnicalAnalyzer(window)
     technical.calculate_all_indicators()
@@ -150,7 +151,7 @@ def ticker_observations(
     months: Sequence[pd.Period],
     horizons: Sequence[int],
     config: ScoringConfig,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """One row per test month: the signals at that month-end and the forward returns."""
     close = prices["Close"]
     ends = month_end_positions(pd.DatetimeIndex(prices.index))
@@ -160,7 +161,7 @@ def ticker_observations(
     last_month = months[-1]
     risk_free = get_config().risk_free_rate
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for month in months:
         if month not in ends:
             continue
@@ -176,7 +177,7 @@ def ticker_observations(
         )
         benchmark_window = benchmark.iloc[max(0, j - LOOKBACK_BARS) : j]
 
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "month": str(month),
             "ticker": ticker,
             "benchmark": benchmark_ticker,
@@ -207,15 +208,15 @@ def ticker_observations(
 
 def run_backtest(
     tickers: Sequence[str],
-    fetcher: Optional[DataFetcher] = None,
+    fetcher: DataFetcher | None = None,
     years: int = 5,
     horizons: Sequence[int] = DEFAULT_HORIZONS,
-    config: Optional[ScoringConfig] = None,
+    config: ScoringConfig | None = None,
     use_cache: bool = True,
     workers: int = DEFAULT_WORKERS,
     universe_label: str = "custom",
-    today: Optional[date] = None,
-    progress: Optional[Callable[[str, Optional[Exception]], None]] = None,
+    today: date | None = None,
+    progress: Callable[[str, Exception | None], None] | None = None,
 ) -> BacktestResult:
     """Score every ticker at every month-end of the last `years` years."""
     fetcher = fetcher or DataFetcher()
@@ -226,15 +227,15 @@ def run_backtest(
     period = history_period(years)
 
     # Each benchmark once, before the tickers that share it
-    benchmarks: Dict[str, pd.DataFrame] = {}
-    errors: Dict[str, str] = {}
+    benchmarks: dict[str, pd.DataFrame] = {}
+    errors: dict[str, str] = {}
     for symbol in dict.fromkeys(benchmark_for(t) for t in tickers):
         try:
             benchmarks[symbol] = fetcher.fetch_ticker(symbol, period=period, use_cache=use_cache)
         except Exception as e:
             errors[symbol] = f"benchmark unavailable: {e}"
 
-    def run(ticker: str) -> List[Dict[str, Any]]:
+    def run(ticker: str) -> list[dict[str, Any]]:
         symbol = benchmark_for(ticker)
         if symbol not in benchmarks:
             raise ValueError(f"benchmark {symbol} unavailable")
@@ -245,7 +246,7 @@ def run_backtest(
             ticker, prices, benchmarks[symbol], symbol, months, horizons, config
         )
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for ticker, result, error in run_concurrently(run, tickers, workers=workers):
         if error is not None or result is None:
             errors[ticker] = str(error or "no result")

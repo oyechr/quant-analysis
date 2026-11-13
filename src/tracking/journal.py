@@ -34,11 +34,12 @@ layout, without comments or keys it doesn't know.
 import datetime as dt
 import math
 import tomllib
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 from statistics import mean
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -71,28 +72,28 @@ class Decision:
     ticker: str
     date: dt.date
     action: str
-    thesis: Optional[str] = None  # the reason, for a trim or sell
-    exit_if: Optional[str] = None
-    price: Optional[float] = None
-    shares: Optional[float] = None
-    stop: Optional[float] = None
-    target: Optional[float] = None
-    min_score: Optional[float] = None
-    review_by: Optional[dt.date] = None
+    thesis: str | None = None  # the reason, for a trim or sell
+    exit_if: str | None = None
+    price: float | None = None
+    shares: float | None = None
+    stop: float | None = None
+    target: float | None = None
+    min_score: float | None = None
+    review_by: dt.date | None = None
     # Snapshot of the score history at the decision
-    preset: Optional[str] = None
-    score: Optional[float] = None
-    signal: Optional[str] = None
-    currency: Optional[str] = None
+    preset: str | None = None
+    score: float | None = None
+    signal: str | None = None
+    currency: str | None = None
     # Every red flag's title: history rows before 2026-11 don't say which were high
-    flags: List[str] = field(default_factory=list)
-    closed: Optional[dt.date] = None
+    flags: list[str] = field(default_factory=list)
+    closed: dt.date | None = None
 
     @property
     def is_open(self) -> bool:
         return self.action in OPENING and self.closed is None
 
-    def take_snapshot(self, row: Optional[Row]) -> None:
+    def take_snapshot(self, row: Row | None) -> None:
         """Copy the score, signal and red flags from a history row (and the price, if unset)."""
         if not row:
             return
@@ -104,7 +105,7 @@ class Decision:
         if self.price is None:
             self.price = row.get("price")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ticker": self.ticker,
             "date": self.date.isoformat(),
@@ -120,7 +121,7 @@ class Decision:
 # ==================== File ====================
 
 
-def load_journal(path: Path) -> List[Decision]:
+def load_journal(path: Path) -> list[Decision]:
     """Decisions in file order; empty if the file doesn't exist."""
     if not path.exists():
         return []
@@ -129,7 +130,7 @@ def load_journal(path: Path) -> List[Decision]:
     except tomllib.TOMLDecodeError as e:
         raise ValueError(f"Can't read {path}: {e}") from e
 
-    decisions: List[Decision] = []
+    decisions: list[Decision] = []
     for i, entry in enumerate(data.get("decision") or [], 1):
         if not isinstance(entry, dict):
             raise ValueError(f"{path}: decision {i} should be a [[decision]] table")
@@ -167,7 +168,7 @@ def load_journal(path: Path) -> List[Decision]:
 
 
 def save_journal(decisions: Sequence[Decision], path: Path) -> None:
-    lines: List[str] = []
+    lines: list[str] = []
     for d in decisions:
         lines += ["[[decision]]", f"date = {d.date.isoformat()}", f"ticker = {_toml(d.ticker)}"]
         lines.append(f"action = {_toml(d.action)}")
@@ -188,7 +189,7 @@ def save_journal(decisions: Sequence[Decision], path: Path) -> None:
     atomic_write_text(path, "\n".join(lines))
 
 
-def add_decision(path: Path, decision: Decision) -> List[Decision]:
+def add_decision(path: Path, decision: Decision) -> list[Decision]:
     """
     Append a decision. A sell closes the ticker's open buys and adds as of its
     date; returns the decisions it closed.
@@ -196,7 +197,7 @@ def add_decision(path: Path, decision: Decision) -> List[Decision]:
     if decision.action not in ACTIONS:
         raise ValueError(f"Unknown action '{decision.action}' (use {', '.join(ACTIONS)})")
     decisions = load_journal(path)
-    closed: List[Decision] = []
+    closed: list[Decision] = []
     if decision.action == "sell":
         for d in decisions:
             if d.ticker == decision.ticker and d.is_open and d.date <= decision.date:
@@ -207,7 +208,7 @@ def add_decision(path: Path, decision: Decision) -> List[Decision]:
     return closed
 
 
-def snapshot_row(rows: Sequence[Row], day: date) -> Optional[Row]:
+def snapshot_row(rows: Sequence[Row], day: date) -> Row | None:
     """The latest history row on or before `day`, at most SNAPSHOT_MAX_DAYS old."""
     earliest = (day - timedelta(days=SNAPSHOT_MAX_DAYS)).isoformat()
     candidates = [r for r in rows if earliest <= r["date"] <= day.isoformat()]
@@ -220,10 +221,10 @@ def snapshot_row(rows: Sequence[Row], day: date) -> Optional[Row]:
 @dataclass
 class ThesisCheck:
     decision: Decision
-    current: Optional[Row]  # the latest history row for the ticker and preset
-    broken: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    previous_status: Optional[str] = None  # on the ticker's latest row before today
+    current: Row | None  # the latest history row for the ticker and preset
+    broken: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    previous_status: str | None = None  # on the ticker's latest row before today
 
     @property
     def status(self) -> str:
@@ -235,10 +236,10 @@ class ThesisCheck:
         return _RANK[self.status] < _RANK[self.previous_status or OK]
 
     @property
-    def return_pct(self) -> Optional[float]:
+    def return_pct(self) -> float | None:
         return _return_pct(self.decision, self.current)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "decision": self.decision.to_dict(),
             "current": self.current,
@@ -255,8 +256,8 @@ _RANK = {BROKEN: 0, CHECK: 1, OK: 2}
 
 
 def check_thesis(
-    decision: Decision, current: Optional[Row], today: date
-) -> Tuple[List[str], List[str]]:
+    decision: Decision, current: Row | None, today: date
+) -> tuple[list[str], list[str]]:
     """
     (broken, warnings) for an open buy or add.
 
@@ -265,8 +266,8 @@ def check_thesis(
     reached, review date reached, the score down THESIS_SCORE_DROP points
     since the decision, or no recent score.
     """
-    broken: List[str] = []
-    warnings: List[str] = []
+    broken: list[str] = []
+    warnings: list[str] = []
     if current is None:
         return broken, ["no score yet: run quant changes"]
 
@@ -303,9 +304,9 @@ def check_thesis(
 def check_journal(
     decisions: Sequence[Decision],
     history: Sequence[Row],
-    today: Optional[date] = None,
-    previous: Optional[Sequence[Row]] = None,
-) -> List[ThesisCheck]:
+    today: date | None = None,
+    previous: Sequence[Row] | None = None,
+) -> list[ThesisCheck]:
     """
     Check every open buy and add against its ticker's latest history row;
     broken first. `previous_status` is the same check on the latest row in
@@ -319,7 +320,7 @@ def check_journal(
     else:
         before = _latest_rows(previous, today, include_today=True)
 
-    checks: List[ThesisCheck] = []
+    checks: list[ThesisCheck] = []
     for d in decisions:
         if not d.is_open:
             continue
@@ -337,9 +338,9 @@ def check_journal(
 
 def _latest_rows(
     rows: Sequence[Row], today: date, include_today: bool
-) -> Dict[Tuple[str, str], Row]:
+) -> dict[tuple[str, str], Row]:
     """The latest row per (ticker, preset) up to today, or up to yesterday."""
-    latest: Dict[Tuple[str, str], Row] = {}
+    latest: dict[tuple[str, str], Row] = {}
     for row in rows:  # oldest first, so the last one wins
         if row["date"] < today.isoformat() or (include_today and row["date"] == today.isoformat()):
             latest[(row["ticker"], row["preset"])] = row
@@ -356,23 +357,23 @@ class Outcome:
     decision: Decision
     end: date
     benchmark: str
-    ticker_return: Optional[float] = None  # percent
-    benchmark_return: Optional[float] = None  # percent
+    ticker_return: float | None = None  # percent
+    benchmark_return: float | None = None  # percent
 
     @property
-    def excess(self) -> Optional[float]:
+    def excess(self) -> float | None:
         if self.ticker_return is None or self.benchmark_return is None:
             return None
         return self.ticker_return - self.benchmark_return
 
     @property
-    def good_call(self) -> Optional[bool]:
+    def good_call(self) -> bool | None:
         """A buy or add that beat the benchmark, or a trim or sell that lagged it."""
         if self.excess is None:
             return None
         return self.excess > 0 if self.decision.action in OPENING else self.excess < 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "decision": self.decision.to_dict(),
             "end": self.end.isoformat(),
@@ -386,18 +387,18 @@ class Outcome:
 
 def look_back(
     decisions: Sequence[Decision],
-    closes: Callable[[str], Optional[pd.Series]],
+    closes: Callable[[str], pd.Series | None],
     benchmark_for: Callable[[str], str],
-    today: Optional[date] = None,
-    since: Optional[date] = None,
-) -> List[Outcome]:
+    today: date | None = None,
+    since: date | None = None,
+) -> list[Outcome]:
     """
     Each decision from `since` on, from the close on its date to the close on
     the day it was closed (a buy or add later sold) or today. A trim or sell
     is measured to today: what the money would have done had it stayed.
     """
     today = today or date.today()
-    outcomes: List[Outcome] = []
+    outcomes: list[Outcome] = []
     for d in decisions:
         if since is not None and d.date < since:
             continue
@@ -415,9 +416,9 @@ def look_back(
     return outcomes
 
 
-def summarize_outcomes(outcomes: Sequence[Outcome]) -> List[Dict[str, Any]]:
+def summarize_outcomes(outcomes: Sequence[Outcome]) -> list[dict[str, Any]]:
     """Per signal at the decision: count, average excess return, share of good calls."""
-    groups: Dict[str, List[Outcome]] = {}
+    groups: dict[str, list[Outcome]] = {}
     for o in outcomes:
         if o.excess is not None:
             side = "buy/add" if o.decision.action in OPENING else "trim/sell"
@@ -433,7 +434,7 @@ def summarize_outcomes(outcomes: Sequence[Outcome]) -> List[Dict[str, Any]]:
     ]
 
 
-def period_return(close: Optional[pd.Series], start: date, end: date) -> Optional[float]:
+def period_return(close: pd.Series | None, start: date, end: date) -> float | None:
     """Percent change from the last close on or before `start` to the last on or before `end`."""
     if close is None or close.empty:
         return None
@@ -495,7 +496,7 @@ def render_journal(path: Path, checks: Sequence[ThesisCheck], closed: Sequence[D
     return sections_to_text(sections)
 
 
-def thesis_sections(checks: Sequence[Dict[str, Any]]) -> List[Section]:
+def thesis_sections(checks: Sequence[dict[str, Any]]) -> list[Section]:
     """
     A THESES TO RECHECK section from `ThesisCheck.to_dict()`s, for the broken
     and warned theses (none if all are OK).
@@ -503,7 +504,7 @@ def thesis_sections(checks: Sequence[Dict[str, Any]]) -> List[Section]:
     flagged = [c for c in checks if c["status"] != OK]
     if not flagged:
         return []
-    blocks: List[Any] = []
+    blocks: list[Any] = []
     for c in flagged:
         d = c["decision"]
         if blocks:
@@ -574,7 +575,7 @@ def render_look_back(outcomes: Sequence[Outcome]) -> str:
     return sections_to_text(sections)
 
 
-def _return_pct(decision: Decision, current: Optional[Row]) -> Optional[float]:
+def _return_pct(decision: Decision, current: Row | None) -> float | None:
     price = (current or {}).get("price")
     if not price or not decision.price:
         return None
@@ -594,22 +595,22 @@ def _toml(value: Any) -> str:
     return repr(float(value))
 
 
-def _text(value: Any) -> Optional[str]:
+def _text(value: Any) -> str | None:
     return str(value) if value not in (None, "") else None
 
 
-def _number(value: Any) -> Optional[float]:
+def _number(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value) if math.isfinite(value) else None
 
 
-def _date(value: Any) -> Optional[date]:
+def _date(value: Any) -> date | None:
     # A TOML datetime is a date subclass that doesn't compare with plain dates
     if isinstance(value, dt.datetime):
         return value.date()
     return value if isinstance(value, date) else None
 
 
-def _fmt(value: Optional[float], pattern: str) -> str:
+def _fmt(value: float | None, pattern: str) -> str:
     return "" if value is None else pattern.format(value)

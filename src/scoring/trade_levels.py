@@ -7,7 +7,7 @@ Synthesizes technical levels (support/resistance), valuation targets, and ATR-ba
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -22,20 +22,20 @@ class ScenarioLevels:
     """Entry/exit levels for a single scenario (bullish or bearish)"""
 
     scenario: str  # "bullish" or "bearish"
-    entry_low: Optional[float] = None
-    entry_high: Optional[float] = None
-    target: Optional[float] = None
-    stop_loss: Optional[float] = None
-    reward_risk_ratio: Optional[float] = None
+    entry_low: float | None = None
+    entry_high: float | None = None
+    target: float | None = None
+    stop_loss: float | None = None
+    reward_risk_ratio: float | None = None
 
     # Sources/reasoning for each level
     entry_basis: str = ""
     target_basis: str = ""
     stop_basis: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
-        result: Dict[str, Any] = {"scenario": self.scenario}
+        result: dict[str, Any] = {"scenario": self.scenario}
 
         if self.entry_low is not None:
             result["entry_zone"] = {
@@ -64,18 +64,18 @@ class TradeLevelsResult:
 
     current_price: float
     currency: str = "USD"
-    bullish: Optional[ScenarioLevels] = None
-    bearish: Optional[ScenarioLevels] = None
+    bullish: ScenarioLevels | None = None
+    bearish: ScenarioLevels | None = None
 
     # Key technical levels used
-    support_levels: List[float] = field(default_factory=list)
-    resistance_levels: List[float] = field(default_factory=list)
-    atr: Optional[float] = None
+    support_levels: list[float] = field(default_factory=list)
+    resistance_levels: list[float] = field(default_factory=list)
+    atr: float | None = None
     atr_multiplier: float = 2.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "current_price": round(self.current_price, 2),
             "currency": self.currency,
         }
@@ -164,7 +164,7 @@ class TradeLevelsResult:
 
         return "\n".join(lines)
 
-    def format_markdown(self) -> List[str]:
+    def format_markdown(self) -> list[str]:
         """Format as markdown lines for the report"""
         from ..utils.report import get_currency_symbol
 
@@ -260,7 +260,7 @@ def calculate_support_resistance(
     price_data: pd.DataFrame,
     window: int = 20,
     num_levels: int = 3,
-) -> Tuple[List[float], List[float]]:
+) -> tuple[list[float], list[float]]:
     """
     Calculate support and resistance levels from price data using pivot point clustering.
 
@@ -305,15 +305,15 @@ def calculate_support_resistance(
 
     # Cluster nearby levels (within 2% of each other)
     def cluster_levels(
-        candidates: List[Tuple[float, int]], threshold_pct: float = 0.02
-    ) -> List[float]:
+        candidates: list[tuple[float, int]], threshold_pct: float = 0.02
+    ) -> list[float]:
         if not candidates:
             return []
 
         # Sort by price
         sorted_cands = sorted(candidates, key=lambda x: x[0])
-        clusters: List[List[Tuple[float, int]]] = []
-        current_cluster: List[Tuple[float, int]] = [sorted_cands[0]]
+        clusters: list[list[tuple[float, int]]] = []
+        current_cluster: list[tuple[float, int]] = [sorted_cands[0]]
 
         for price, idx in sorted_cands[1:]:
             cluster_mean = sum(p for p, _ in current_cluster) / len(current_cluster)
@@ -355,17 +355,17 @@ def calculate_support_resistance(
 def calculate_trade_levels(
     current_price: float,
     currency: str = "USD",
-    atr: Optional[float] = None,
-    support_levels: Optional[List[float]] = None,
-    resistance_levels: Optional[List[float]] = None,
-    fair_value: Optional[float] = None,
+    atr: float | None = None,
+    support_levels: list[float] | None = None,
+    resistance_levels: list[float] | None = None,
+    fair_value: float | None = None,
     fair_value_source: str = "DCF",
-    bb_lower: Optional[float] = None,
-    bb_upper: Optional[float] = None,
-    sma_50: Optional[float] = None,
-    sma_200: Optional[float] = None,
+    bb_lower: float | None = None,
+    bb_upper: float | None = None,
+    sma_50: float | None = None,
+    sma_200: float | None = None,
     atr_multiplier: float = 2.0,
-) -> Optional[TradeLevelsResult]:
+) -> TradeLevelsResult | None:
     """
     Calculate trade levels for bullish and bearish scenarios.
 
@@ -412,7 +412,7 @@ def calculate_trade_levels(
     bullish = ScenarioLevels(scenario="bullish")
 
     # Entry zone: nearest support or BB lower or pullback to key MA
-    entry_candidates: List[Tuple[float, str]] = []
+    entry_candidates: list[tuple[float, str]] = []
     if supports:
         entry_candidates.append((supports[0], "nearest support"))
     if bb_lower is not None and not math.isnan(bb_lower):
@@ -448,7 +448,7 @@ def calculate_trade_levels(
         bullish.entry_basis = "current price"
 
     # Target: fair value, resistance, or BB upper
-    target_candidates: List[Tuple[float, str]] = []
+    target_candidates: list[tuple[float, str]] = []
     if fair_value is not None and not math.isnan(fair_value) and fair_value > current_price:
         target_candidates.append((fair_value, fair_value_source))
     if resistances:
@@ -495,7 +495,7 @@ def calculate_trade_levels(
     bearish = ScenarioLevels(scenario="bearish")
 
     # Entry zone: nearest resistance or BB upper or rally to key MA
-    bear_entry_candidates: List[Tuple[float, str]] = []
+    bear_entry_candidates: list[tuple[float, str]] = []
     if resistances:
         bear_entry_candidates.append((resistances[0], "resistance"))
     if bb_upper is not None and not math.isnan(bb_upper) and bb_upper > current_price:
@@ -524,7 +524,7 @@ def calculate_trade_levels(
             bearish.entry_basis = best_entry_basis
 
     # Target: nearest support or fair value below current
-    bear_target_candidates: List[Tuple[float, str]] = []
+    bear_target_candidates: list[tuple[float, str]] = []
     if supports:
         bear_target_candidates.append((supports[0], "support"))
     if fair_value is not None and not math.isnan(fair_value) and fair_value < current_price:
@@ -575,9 +575,9 @@ def calculate_trade_levels(
 
 
 def compute_trade_levels_from_report(
-    report_data: Dict[str, Any],
+    report_data: dict[str, Any],
     atr_multiplier: float = 2.0,
-) -> Optional[TradeLevelsResult]:
+) -> TradeLevelsResult | None:
     """
     Compute trade levels from a full report data dictionary.
     This is the main integration point — called after scoring is complete.
@@ -657,8 +657,8 @@ def compute_trade_levels_from_report(
                 fair_value_source = "Monte Carlo"
 
     # Calculate support/resistance from price data
-    support_levels: List[float] = []
-    resistance_levels: List[float] = []
+    support_levels: list[float] = []
+    resistance_levels: list[float] = []
 
     # First: use pivot-based S/R from technical analysis if available
     sr_data = tech_data.get("support_resistance") or {}

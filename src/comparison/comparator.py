@@ -6,8 +6,9 @@ and portfolio-level statistics for multiple tickers.
 """
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -38,10 +39,10 @@ class TickerComparator:
 
     def __init__(
         self,
-        tickers: List[str],
-        data_fetcher: Optional[DataFetcher] = None,
+        tickers: list[str],
+        data_fetcher: DataFetcher | None = None,
         period: str = "1y",
-        scoring_config: Optional[ScoringConfig] = None,
+        scoring_config: ScoringConfig | None = None,
         output_dir: str = "data",
         output_format: str = "all",
     ):
@@ -65,11 +66,11 @@ class TickerComparator:
         self.output_dir = output_dir
         self.output_format = output_format
 
-        self._reports: Dict[str, Dict[str, Any]] = {}
-        self._scores: Dict[str, ScoringResult] = {}
-        self._prices: Optional[Dict[str, pd.DataFrame]] = None
+        self._reports: dict[str, dict[str, Any]] = {}
+        self._scores: dict[str, ScoringResult] = {}
+        self._prices: dict[str, pd.DataFrame] | None = None
 
-    def fetch_all(self, use_cache: bool = True) -> Dict[str, Dict[str, Any]]:
+    def fetch_all(self, use_cache: bool = True) -> dict[str, dict[str, Any]]:
         """
         Fetch full reports for all tickers.
 
@@ -97,7 +98,7 @@ class TickerComparator:
 
         return self._reports
 
-    def score_all(self) -> Dict[str, ScoringResult]:
+    def score_all(self) -> dict[str, ScoringResult]:
         """
         Score all fetched tickers.
 
@@ -134,7 +135,7 @@ class TickerComparator:
         if not self._scores:
             raise RuntimeError("No scores available. Call score_all() first.")
 
-        rows: Dict[str, Dict[str, Any]] = {}
+        rows: dict[str, dict[str, Any]] = {}
         for ticker, result in self._scores.items():
             rows[ticker] = {
                 "Composite Score": round(result.composite_score, 1),
@@ -159,7 +160,7 @@ class TickerComparator:
         if not self._reports:
             raise RuntimeError("No report data available. Call fetch_all() first.")
 
-        rows: Dict[str, Dict[str, Any]] = {}
+        rows: dict[str, dict[str, Any]] = {}
         for ticker, report in self._reports.items():
             if "error" in report:
                 continue
@@ -188,7 +189,7 @@ class TickerComparator:
         df = pd.DataFrame(rows)
         return df
 
-    def price_data(self, use_cache: bool = True) -> Dict[str, pd.DataFrame]:
+    def price_data(self, use_cache: bool = True) -> dict[str, pd.DataFrame]:
         """
         Daily prices per ticker (fetched once, then reused).
 
@@ -229,7 +230,7 @@ class TickerComparator:
         if not self._reports:
             raise RuntimeError("No report data available. Call fetch_all() first.")
 
-        rows: Dict[str, Dict[str, Any]] = {}
+        rows: dict[str, dict[str, Any]] = {}
         for ticker, report in self._reports.items():
             if "error" in report:
                 continue
@@ -267,8 +268,8 @@ class PortfolioView:
         stats = pv.portfolio_stats(comparator)
     """
 
-    tickers: List[str]
-    weights: List[float] = field(default_factory=list)
+    tickers: list[str]
+    weights: list[float] = field(default_factory=list)
 
     def __post_init__(self):
         if not self.weights:
@@ -285,7 +286,7 @@ class PortfolioView:
         if abs(total - 1.0) > 0.01:
             raise ValueError(f"Weights must sum to 1.0, got {total:.3f}")
 
-    def portfolio_stats(self, comparator: TickerComparator) -> Dict[str, Any]:
+    def portfolio_stats(self, comparator: TickerComparator) -> dict[str, Any]:
         """
         Compute portfolio-level statistics.
 
@@ -316,7 +317,7 @@ class PortfolioView:
         except Exception:
             diversification = None
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "tickers": self.tickers,
             "weights": self.weights,
             "weighted_composite_score": (
@@ -331,7 +332,7 @@ class PortfolioView:
         }
 
         for ticker, weight in zip(self.tickers, self.weights, strict=True):
-            holding: Dict[str, Any] = {
+            holding: dict[str, Any] = {
                 "ticker": ticker,
                 "weight": weight,
             }
@@ -342,9 +343,7 @@ class PortfolioView:
 
         return result
 
-    def _weighted_average(
-        self, values: Mapping[str, Optional[float]]
-    ) -> tuple[Optional[float], float]:
+    def _weighted_average(self, values: Mapping[str, float | None]) -> tuple[float | None, float]:
         """Weighted average of the tickers with a value, and the weight they cover."""
         pairs = [
             (v, w)
@@ -356,7 +355,7 @@ class PortfolioView:
             return None, 0.0
         return sum(v * w for v, w in pairs) / covered, covered
 
-    def _diversification_ratio(self, corr_matrix: pd.DataFrame) -> Optional[float]:
+    def _diversification_ratio(self, corr_matrix: pd.DataFrame) -> float | None:
         """
         Compute diversification ratio.
 
@@ -389,7 +388,7 @@ class PortfolioView:
 
 
 def return_correlations(
-    price_data_map: Dict[str, pd.DataFrame], min_weeks: int = COMPARE_MIN_WEEKS
+    price_data_map: dict[str, pd.DataFrame], min_weeks: int = COMPARE_MIN_WEEKS
 ) -> pd.DataFrame:
     """
     Weekly-return correlation matrix (ticker x ticker) from 'Close' prices.
@@ -405,7 +404,7 @@ def return_correlations(
     # Imported here: portfolio.review imports this package
     from ..portfolio.exposure import weekly_returns
 
-    price_frames: Dict[str, pd.Series] = {}
+    price_frames: dict[str, pd.Series] = {}
     for ticker, prices in price_data_map.items():
         if prices is None or prices.empty or "Close" not in prices.columns:
             continue
@@ -425,8 +424,8 @@ def return_correlations(
 
 
 def calculate_risk_parity_weights(
-    price_data_map: Dict[str, pd.DataFrame],
-) -> Optional[Dict[str, Any]]:
+    price_data_map: dict[str, pd.DataFrame],
+) -> dict[str, Any] | None:
     """
     Calculate inverse-volatility (risk parity) portfolio weights.
 
@@ -446,7 +445,7 @@ def calculate_risk_parity_weights(
     if len(price_data_map) < 2:
         return None
 
-    volatilities: Dict[str, float] = {}
+    volatilities: dict[str, float] = {}
 
     for ticker, price_data in price_data_map.items():
         if price_data is None or price_data.empty or "Close" not in price_data.columns:
@@ -490,7 +489,7 @@ def identify_correlation_flags(
     correlation_matrix: pd.DataFrame,
     high_threshold: float = 0.80,
     hedge_threshold: float = -0.30,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Identify portfolio diversification issues from a correlation matrix.
 
@@ -564,12 +563,12 @@ def identify_correlation_flags(
 
 
 def _safe_metric(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     key: str,
     multiply: float = 1.0,
-    divisor_key: Optional[str] = None,
-    source: Optional[Dict[str, Any]] = None,
-) -> Optional[float]:
+    divisor_key: str | None = None,
+    source: dict[str, Any] | None = None,
+) -> float | None:
     """Safely extract a numeric metric from a dict."""
     val = data.get(key)
     if val is None:
@@ -589,7 +588,7 @@ def _safe_metric(
     return round(val * multiply, 2) if multiply != 1.0 else round(val, 2)
 
 
-def _dcf_vs_price(premium_pct: Any) -> Optional[float]:
+def _dcf_vs_price(premium_pct: Any) -> float | None:
     """(value - price) / price in percent, from the premium (price - value) / value."""
     premium = finite_float(premium_pct)
     if premium is None or premium <= -100:
@@ -597,7 +596,7 @@ def _dcf_vs_price(premium_pct: Any) -> Optional[float]:
     return round((1 / (1 + premium / 100) - 1) * 100, 2)
 
 
-def _format_large_number(value: Any) -> Optional[str]:
+def _format_large_number(value: Any) -> str | None:
     """Format large numbers with B/M/K suffixes."""
     if value is None:
         return None

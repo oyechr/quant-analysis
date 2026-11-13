@@ -6,12 +6,10 @@ Maps Yahoo Finance ticker suffixes to a local benchmark index so risk metrics
 rather than always against the S&P 500.
 """
 
-from typing import Dict, Optional
-
 from .config import get_config
 
 # Yahoo suffix -> (benchmark symbol, display name)
-DEFAULT_BENCHMARKS: Dict[str, tuple[str, str]] = {
+DEFAULT_BENCHMARKS: dict[str, tuple[str, str]] = {
     ".OL": ("OSEBX.OL", "Oslo Børs Benchmark"),
     ".ST": ("^OMX", "OMX Stockholm 30"),
     ".CO": ("^OMXC25", "OMX Copenhagen 25"),
@@ -30,7 +28,7 @@ DEFAULT_BENCHMARKS: Dict[str, tuple[str, str]] = {
     ".T": ("^N225", "Nikkei 225"),
 }
 
-_KNOWN_NAMES: Dict[str, str] = {
+_KNOWN_NAMES: dict[str, str] = {
     "^GSPC": "S&P 500",
     "^NDX": "Nasdaq-100",
     "^IXIC": "Nasdaq Composite",
@@ -39,7 +37,7 @@ _KNOWN_NAMES: Dict[str, str] = {
 }
 
 
-def ticker_suffix(ticker: str) -> Optional[str]:
+def ticker_suffix(ticker: str) -> str | None:
     """Return the exchange suffix of a Yahoo ticker (e.g. '.OL'), or None for US listings."""
     ticker = ticker.upper()
     if ticker.startswith("^") or "." not in ticker:
@@ -66,7 +64,7 @@ def benchmark_for(ticker: str) -> str:
     return config.benchmark_ticker
 
 
-def benchmark_name(symbol: Optional[str]) -> str:
+def benchmark_name(symbol: str | None) -> str:
     """Human-readable benchmark name, falling back to the symbol itself."""
     if not symbol:
         return "benchmark"

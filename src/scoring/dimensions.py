@@ -5,9 +5,10 @@ Each scorer normalizes metrics to a 0-100 scale and tracks data coverage for con
 """
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from itertools import pairwise
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 from ..analysis.fundamental import altman_zones
 from ..utils.financial import finite_float
@@ -52,7 +53,7 @@ class SubScore:
     name: str
     score: float  # 0-100
     weight: float  # Relative weight within dimension
-    raw_value: Optional[float] = None
+    raw_value: float | None = None
     label: str = ""
     available: bool = True
 
@@ -67,12 +68,12 @@ class DimensionResult:
 
     dimension: str
     score: float  # 0-100 (weighted average of sub-scores)
-    sub_scores: List[SubScore] = field(default_factory=list)
+    sub_scores: list[SubScore] = field(default_factory=list)
     data_coverage: float = 0.0  # 0-1, fraction of metrics with available data
-    strengths: List[str] = field(default_factory=list)
-    concerns: List[str] = field(default_factory=list)
+    strengths: list[str] = field(default_factory=list)
+    concerns: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
         return {
             "dimension": self.dimension,
@@ -106,7 +107,7 @@ def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
 FINANCIAL_SECTORS = ("financial services", "financial")
 
 
-def is_financial(ticker_info: Optional[Dict[str, Any]]) -> bool:
+def is_financial(ticker_info: dict[str, Any] | None) -> bool:
     """
     Banks and insurers. Their operating cash flow is mostly deposits, loans
     and float moving through, so cash-flow-based measures (FCF DCF, OCF vs
@@ -123,7 +124,7 @@ QUALITY_MODELS = ("piotroski_f", "altman_z", "beneish_m", "accruals_quality")
 BENEISH_MIN_COMPONENTS = 5
 
 
-def applicable_quality_models(ticker_info: Optional[Dict[str, Any]]) -> Tuple[str, ...]:
+def applicable_quality_models(ticker_info: dict[str, Any] | None) -> tuple[str, ...]:
     """
     The quality models that apply to a company, the one rule for both the
     scorer and the red flags:
@@ -141,13 +142,13 @@ def applicable_quality_models(ticker_info: Optional[Dict[str, Any]]) -> Tuple[st
     return QUALITY_MODELS
 
 
-def beneish_is_partial(beneish: Optional[Dict[str, Any]]) -> bool:
+def beneish_is_partial(beneish: dict[str, Any] | None) -> bool:
     """An M-Score from fewer than `BENEISH_MIN_COMPONENTS` of its 8 inputs: a weak signal."""
     components = (beneish or {}).get("components_available")
     return components is not None and components < BENEISH_MIN_COMPONENTS
 
 
-def _piecewise(x: float, points: Sequence[Tuple[float, float]]) -> float:
+def _piecewise(x: float, points: Sequence[tuple[float, float]]) -> float:
     """
     A score from a curve: linear between (x, score) points sorted by x, and
     flat beyond the first and last. Continuous, so a metric crossing a
@@ -163,9 +164,9 @@ def _piecewise(x: float, points: Sequence[Tuple[float, float]]) -> float:
 
 def _build_result(
     dimension: str,
-    sub_scores: List[SubScore],
-    strengths: List[str],
-    concerns: List[str],
+    sub_scores: list[SubScore],
+    strengths: list[str],
+    concerns: list[str],
 ) -> DimensionResult:
     """A dimension's score: the weighted average of its available sub-scores
     (weights renormalized over them), or a neutral 50 with none."""
@@ -192,11 +193,11 @@ def _build_result(
 class TechnicalScorer:
     """Scores technical analysis data on a 0-100 scale"""
 
-    def __init__(self, config: Optional[ScoringConfig] = None):
+    def __init__(self, config: ScoringConfig | None = None):
         self.config = config or ScoringConfig()
         self.params = self.config.technical
 
-    def score(self, technical_data: Dict[str, Any]) -> DimensionResult:
+    def score(self, technical_data: dict[str, Any]) -> DimensionResult:
         """
         Score technical analysis data.
 
@@ -207,9 +208,9 @@ class TechnicalScorer:
         Returns:
             DimensionResult with technical dimension score
         """
-        sub_scores: List[SubScore] = []
-        strengths: List[str] = []
-        concerns: List[str] = []
+        sub_scores: list[SubScore] = []
+        strengths: list[str] = []
+        concerns: list[str] = []
 
         # Extract latest indicator values
         latest = technical_data.get("latest_values", {})
@@ -259,9 +260,7 @@ class TechnicalScorer:
 
         return _build_result("Technical", sub_scores, strengths, concerns)
 
-    def _score_rsi(
-        self, rsi: Optional[float], strengths: List[str], concerns: List[str]
-    ) -> SubScore:
+    def _score_rsi(self, rsi: float | None, strengths: list[str], concerns: list[str]) -> SubScore:
         if rsi is None:
             return SubScore(name="RSI", score=50.0, weight=0.20, available=False)
 
@@ -283,11 +282,11 @@ class TechnicalScorer:
 
     def _score_macd(
         self,
-        macd_diff: Optional[float],
-        cross: Optional[str],
-        close: Optional[float],
-        strengths: List[str],
-        concerns: List[str],
+        macd_diff: float | None,
+        cross: str | None,
+        close: float | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         """
         Continuous in the histogram (MACD minus signal, as % of price), so the
@@ -326,13 +325,13 @@ class TechnicalScorer:
 
     def _score_ma_alignment(
         self,
-        close: Optional[float],
-        sma_20: Optional[float],
-        sma_50: Optional[float],
-        sma_200: Optional[float],
-        cross: Optional[str],
-        strengths: List[str],
-        concerns: List[str],
+        close: float | None,
+        sma_20: float | None,
+        sma_50: float | None,
+        sma_200: float | None,
+        cross: str | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         """
         The share of bullish orderings: price above SMA 20, 50 and 200, and
@@ -396,9 +395,7 @@ class TechnicalScorer:
             name="MA Alignment", score=_clamp(score), weight=0.25, raw_value=close, label=label
         )
 
-    def _score_adx(
-        self, adx: Optional[float], strengths: List[str], concerns: List[str]
-    ) -> SubScore:
+    def _score_adx(self, adx: float | None, strengths: list[str], concerns: list[str]) -> SubScore:
         if adx is None:
             return SubScore(name="ADX", score=50.0, weight=0.10, available=False)
 
@@ -421,9 +418,7 @@ class TechnicalScorer:
 
         return SubScore(name="ADX", score=_clamp(score), weight=0.10, raw_value=adx, label=label)
 
-    def _score_mfi(
-        self, mfi: Optional[float], strengths: List[str], concerns: List[str]
-    ) -> SubScore:
+    def _score_mfi(self, mfi: float | None, strengths: list[str], concerns: list[str]) -> SubScore:
         if mfi is None:
             return SubScore(name="MFI", score=50.0, weight=0.10, available=False)
 
@@ -445,12 +440,12 @@ class TechnicalScorer:
 
     def _score_bollinger(
         self,
-        close: Optional[float],
-        bb_upper: Optional[float],
-        bb_lower: Optional[float],
-        bb_middle: Optional[float],
-        strengths: List[str],
-        concerns: List[str],
+        close: float | None,
+        bb_upper: float | None,
+        bb_lower: float | None,
+        bb_middle: float | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         if close is None or bb_upper is None or bb_lower is None:
             return SubScore(name="Bollinger Bands", score=50.0, weight=0.10, available=False)
@@ -491,7 +486,7 @@ class TechnicalScorer:
         )
 
     def _score_williams_r(
-        self, williams_r: Optional[float], strengths: List[str], concerns: List[str]
+        self, williams_r: float | None, strengths: list[str], concerns: list[str]
     ) -> SubScore:
         if williams_r is None:
             return SubScore(name="Williams %R", score=50.0, weight=0.05, available=False)
@@ -522,14 +517,14 @@ class TechnicalScorer:
 class FundamentalScorer:
     """Scores fundamental analysis data on a 0-100 scale"""
 
-    def __init__(self, config: Optional[ScoringConfig] = None):
+    def __init__(self, config: ScoringConfig | None = None):
         self.config = config or ScoringConfig()
         self.params = self.config.fundamental
 
     def score(
         self,
-        fundamental_data: Dict[str, Any],
-        ticker_info: Optional[Dict[str, Any]] = None,
+        fundamental_data: dict[str, Any],
+        ticker_info: dict[str, Any] | None = None,
     ) -> DimensionResult:
         """
         Score fundamental analysis data.
@@ -542,9 +537,9 @@ class FundamentalScorer:
         Returns:
             DimensionResult with fundamental dimension score
         """
-        sub_scores: List[SubScore] = []
-        strengths: List[str] = []
-        concerns: List[str] = []
+        sub_scores: list[SubScore] = []
+        strengths: list[str] = []
+        concerns: list[str] = []
 
         # Extract analysis data
         analysis = fundamental_data.get("analysis", fundamental_data)
@@ -605,7 +600,7 @@ class FundamentalScorer:
         return _build_result("Fundamental", sub_scores, strengths, concerns)
 
     def _score_piotroski(
-        self, f_score: Optional[float], strengths: List[str], concerns: List[str]
+        self, f_score: float | None, strengths: list[str], concerns: list[str]
     ) -> SubScore:
         if f_score is None:
             return SubScore(name="Piotroski F-Score", score=50.0, weight=0.25, available=False)
@@ -633,10 +628,10 @@ class FundamentalScorer:
 
     def _score_altman_z(
         self,
-        z_score: Optional[float],
+        z_score: float | None,
         model: str,
-        strengths: List[str],
-        concerns: List[str],
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         if z_score is None:
             return SubScore(name="Altman Z-Score", score=50.0, weight=0.20, available=False)
@@ -671,9 +666,9 @@ class FundamentalScorer:
 
     def _score_beneish(
         self,
-        beneish_data: Optional[dict],
-        strengths: List[str],
-        concerns: List[str],
+        beneish_data: dict | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         if beneish_data is None:
             return SubScore(name="Beneish M-Score", score=50.0, weight=0.05, available=False)
@@ -713,9 +708,9 @@ class FundamentalScorer:
 
     def _score_accruals_quality(
         self,
-        accruals_data: Optional[dict],
-        strengths: List[str],
-        concerns: List[str],
+        accruals_data: dict | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         if accruals_data is None:
             return SubScore(name="Accruals Quality", score=50.0, weight=0.05, available=False)
@@ -751,10 +746,10 @@ class FundamentalScorer:
 
     def _score_revenue_growth(
         self,
-        growth_1y: Optional[float],
-        growth_3y: Optional[float],
-        strengths: List[str],
-        concerns: List[str],
+        growth_1y: float | None,
+        growth_3y: float | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         # Use 1Y if available, fall back to 3Y CAGR
         growth = growth_1y if growth_1y is not None else growth_3y
@@ -787,10 +782,10 @@ class FundamentalScorer:
 
     def _score_earnings_growth(
         self,
-        growth_1y: Optional[float],
-        growth_3y: Optional[float],
-        strengths: List[str],
-        concerns: List[str],
+        growth_1y: float | None,
+        growth_3y: float | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         growth = growth_1y if growth_1y is not None else growth_3y
         if growth is None:
@@ -822,10 +817,10 @@ class FundamentalScorer:
 
     def _score_profitability(
         self,
-        gross_margin: Optional[float],
-        operating_margin: Optional[float],
-        strengths: List[str],
-        concerns: List[str],
+        gross_margin: float | None,
+        operating_margin: float | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         if gross_margin is None and operating_margin is None:
             return SubScore(name="Profitability", score=50.0, weight=0.15, available=False)
@@ -882,10 +877,10 @@ class FundamentalScorer:
 
     def _score_roe(
         self,
-        roe_pct: Optional[float],
-        net_margin: Optional[float],
-        strengths: List[str],
-        concerns: List[str],
+        roe_pct: float | None,
+        net_margin: float | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         if roe_pct is None:
             return SubScore(name="ROE", score=50.0, weight=0.10, available=False)
@@ -935,11 +930,11 @@ class FundamentalScorer:
 class RiskScorer:
     """Scores risk analysis data on a 0-100 scale (higher = lower risk = better)"""
 
-    def __init__(self, config: Optional[ScoringConfig] = None):
+    def __init__(self, config: ScoringConfig | None = None):
         self.config = config or ScoringConfig()
         self.params = self.config.risk
 
-    def score(self, risk_data: Dict[str, Any]) -> DimensionResult:
+    def score(self, risk_data: dict[str, Any]) -> DimensionResult:
         """
         Score risk analysis data.
 
@@ -950,9 +945,9 @@ class RiskScorer:
         Returns:
             DimensionResult with risk dimension score (higher = lower risk = better)
         """
-        sub_scores: List[SubScore] = []
-        strengths: List[str] = []
-        concerns: List[str] = []
+        sub_scores: list[SubScore] = []
+        strengths: list[str] = []
+        concerns: list[str] = []
 
         # 1. Sharpe Ratio (weight: 0.25)
         sharpe = finite_float(risk_data.get("sharpe_ratio"))
@@ -985,7 +980,7 @@ class RiskScorer:
         return _build_result("Risk", sub_scores, strengths, concerns)
 
     def _score_sharpe(
-        self, sharpe: Optional[float], strengths: List[str], concerns: List[str]
+        self, sharpe: float | None, strengths: list[str], concerns: list[str]
     ) -> SubScore:
         if sharpe is None:
             return SubScore(name="Sharpe Ratio", score=50.0, weight=0.25, available=False)
@@ -1017,7 +1012,7 @@ class RiskScorer:
         )
 
     def _score_sortino(
-        self, sortino: Optional[float], strengths: List[str], concerns: List[str]
+        self, sortino: float | None, strengths: list[str], concerns: list[str]
     ) -> SubScore:
         if sortino is None:
             return SubScore(name="Sortino Ratio", score=50.0, weight=0.15, available=False)
@@ -1049,7 +1044,7 @@ class RiskScorer:
         )
 
     def _score_drawdown(
-        self, max_dd: Optional[float], strengths: List[str], concerns: List[str]
+        self, max_dd: float | None, strengths: list[str], concerns: list[str]
     ) -> SubScore:
         if max_dd is None:
             return SubScore(name="Max Drawdown", score=50.0, weight=0.25, available=False)
@@ -1084,7 +1079,7 @@ class RiskScorer:
         )
 
     def _score_beta(
-        self, beta: Optional[float], strengths: List[str], concerns: List[str]
+        self, beta: float | None, strengths: list[str], concerns: list[str]
     ) -> SubScore:
         if beta is None:
             return SubScore(name="Beta", score=50.0, weight=0.15, available=False)
@@ -1109,7 +1104,7 @@ class RiskScorer:
         return SubScore(name="Beta", score=_clamp(score), weight=0.15, raw_value=beta, label=label)
 
     def _score_volatility(
-        self, ann_vol: Optional[float], strengths: List[str], concerns: List[str]
+        self, ann_vol: float | None, strengths: list[str], concerns: list[str]
     ) -> SubScore:
         if ann_vol is None:
             return SubScore(name="Volatility", score=50.0, weight=0.15, available=False)
@@ -1143,7 +1138,7 @@ class RiskScorer:
         )
 
     def _score_var(
-        self, var_95: Optional[float], strengths: List[str], concerns: List[str]
+        self, var_95: float | None, strengths: list[str], concerns: list[str]
     ) -> SubScore:
         if var_95 is None:
             return SubScore(name="VaR (95%)", score=50.0, weight=0.05, available=False)
@@ -1176,16 +1171,16 @@ class RiskScorer:
 class ValuationScorer:
     """Scores valuation analysis data on a 0-100 scale (higher = more undervalued = better)"""
 
-    def __init__(self, config: Optional[ScoringConfig] = None):
+    def __init__(self, config: ScoringConfig | None = None):
         self.config = config or ScoringConfig()
         self.params = self.config.valuation
 
     def score(
         self,
-        valuation_data: Dict[str, Any],
-        ticker_info: Optional[Dict[str, Any]] = None,
-        peer_valuation: Optional[Dict[str, Any]] = None,
-        fcf_yield: Optional[float] = None,
+        valuation_data: dict[str, Any],
+        ticker_info: dict[str, Any] | None = None,
+        peer_valuation: dict[str, Any] | None = None,
+        fcf_yield: float | None = None,
     ) -> DimensionResult:
         """
         Score valuation analysis data.
@@ -1202,9 +1197,9 @@ class ValuationScorer:
         Returns:
             DimensionResult with valuation dimension score
         """
-        sub_scores: List[SubScore] = []
-        strengths: List[str] = []
-        concerns: List[str] = []
+        sub_scores: list[SubScore] = []
+        strengths: list[str] = []
+        concerns: list[str] = []
 
         # A free-cash-flow DCF and cash-backed earnings don't apply to banks
         # and insurers (see is_financial)
@@ -1238,7 +1233,7 @@ class ValuationScorer:
         div_sustainability = finite_float(div_analysis.get("sustainability_score"))
         # No analysis, or one that failed, says nothing about the dividend:
         # unknown, not "No dividend" (a neutral 50 that would still count)
-        pays_dividends: Optional[bool] = (
+        pays_dividends: bool | None = (
             None
             if not div_analysis or div_analysis.get("error")
             else bool(div_analysis.get("pays_dividends"))
@@ -1265,10 +1260,10 @@ class ValuationScorer:
 
     def _score_dcf(
         self,
-        premium_pct: Optional[float],
-        error: Optional[str],
-        strengths: List[str],
-        concerns: List[str],
+        premium_pct: float | None,
+        error: str | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         if premium_pct is None or error:
             return SubScore(name="DCF Valuation", score=50.0, weight=0.25, available=False)
@@ -1308,7 +1303,7 @@ class ValuationScorer:
             label=label,
         )
 
-    def peer_pe_median(self, peer_valuation: Optional[Dict[str, Any]]) -> Optional[float]:
+    def peer_pe_median(self, peer_valuation: dict[str, Any] | None) -> float | None:
         """Peer median P/E to score against, or None to use the absolute cutoffs."""
         if not self.params.peer_relative or not peer_valuation:
             return None
@@ -1320,10 +1315,10 @@ class ValuationScorer:
 
     def _score_pe(
         self,
-        pe: Optional[float],
-        strengths: List[str],
-        concerns: List[str],
-        peer_median: Optional[float] = None,
+        pe: float | None,
+        strengths: list[str],
+        concerns: list[str],
+        peer_median: float | None = None,
     ) -> SubScore:
         if pe is None or pe <= 0:
             return SubScore(name="P/E Ratio", score=50.0, weight=0.20, available=False)
@@ -1367,9 +1362,7 @@ class ValuationScorer:
             name="P/E Ratio", score=_clamp(score), weight=0.20, raw_value=pe, label=label
         )
 
-    def _score_peg(
-        self, peg: Optional[float], strengths: List[str], concerns: List[str]
-    ) -> SubScore:
+    def _score_peg(self, peg: float | None, strengths: list[str], concerns: list[str]) -> SubScore:
         if peg is None or peg <= 0:
             return SubScore(name="PEG Ratio", score=50.0, weight=0.15, available=False)
 
@@ -1388,7 +1381,7 @@ class ValuationScorer:
         )
 
     def _score_fcf_yield(
-        self, fcf_yield: Optional[float], strengths: List[str], concerns: List[str]
+        self, fcf_yield: float | None, strengths: list[str], concerns: list[str]
     ) -> SubScore:
         if fcf_yield is None:
             return SubScore(name="FCF Yield", score=50.0, weight=0.15, available=False)
@@ -1425,10 +1418,10 @@ class ValuationScorer:
 
     def _score_dividend_sustainability(
         self,
-        sustainability_score: Optional[float],
-        pays_dividends: Optional[bool],
-        strengths: List[str],
-        concerns: List[str],
+        sustainability_score: float | None,
+        pays_dividends: bool | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         if pays_dividends is None:
             return SubScore(
@@ -1471,10 +1464,10 @@ class ValuationScorer:
 
     def _score_earnings_quality(
         self,
-        quality_score: Optional[float],
-        beat_rate: Optional[float],
-        strengths: List[str],
-        concerns: List[str],
+        quality_score: float | None,
+        beat_rate: float | None,
+        strengths: list[str],
+        concerns: list[str],
     ) -> SubScore:
         scores = []
         raw_value = None

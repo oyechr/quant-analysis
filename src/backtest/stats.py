@@ -17,7 +17,8 @@ h-month horizon, because monthly samples of 3- and 6-month returns overlap
 """
 
 import math
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -43,7 +44,7 @@ def newey_west_se(values: np.ndarray, lags: int) -> float:
     return math.sqrt(max(variance, 0.0) / n)
 
 
-def mean_ci(series: pd.Series, lags: int = 0) -> Optional[Dict[str, Any]]:
+def mean_ci(series: pd.Series, lags: int = 0) -> dict[str, Any] | None:
     """Mean with a 95% confidence interval; None with fewer than two values."""
     values = series.dropna().to_numpy(dtype=float)
     if len(values) < 2:
@@ -88,9 +89,9 @@ def monthly_spread(obs: pd.DataFrame, signal: str, returns: str) -> pd.Series:
 
 def signal_stats(
     obs: pd.DataFrame, horizons: Sequence[int], kind: str = "excess"
-) -> Dict[str, Dict[str, Dict[str, Any]]]:
+) -> dict[str, dict[str, dict[str, Any]]]:
     """IC, quintile spread and hit rate per signal and horizon."""
-    stats: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    stats: dict[str, dict[str, dict[str, Any]]] = {}
     for signal in SIGNALS:
         if signal not in obs:
             continue
@@ -110,9 +111,9 @@ def signal_stats(
 def band_table(
     obs: pd.DataFrame,
     horizons: Sequence[int],
-    thresholds: Optional[SignalThresholds] = None,
+    thresholds: SignalThresholds | None = None,
     kind: str = "excess",
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Forward returns by the composite's signal band, plus every observation as a baseline."""
     t = thresholds or SignalThresholds()
     ranges = {
@@ -124,10 +125,10 @@ def band_table(
         "All": "",
     }
     scored = obs[obs["signal"].notna()] if "signal" in obs else obs.iloc[0:0]
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for band in (*BANDS, "All"):
         members = scored if band == "All" else scored[scored["signal"] == band]
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "band": band,
             "range": ranges[band],
             "observations": len(members),
@@ -152,8 +153,8 @@ RETURN_KINDS = ("excess", "alpha", "ret")  # vs benchmark, beta-adjusted, raw
 def summarize(
     obs: pd.DataFrame,
     horizons: Sequence[int],
-    thresholds: Optional[SignalThresholds] = None,
-) -> Dict[str, Any]:
+    thresholds: SignalThresholds | None = None,
+) -> dict[str, Any]:
     """Every table, for each kind of return the observations have."""
     return {
         kind: {

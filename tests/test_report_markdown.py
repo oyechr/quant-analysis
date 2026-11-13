@@ -2,12 +2,12 @@
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from src.reporting.markdown import render_report_markdown
 
 
-def _report(**sections: Any) -> Dict[str, Any]:
+def _report(**sections: Any) -> dict[str, Any]:
     return {"info": {}, "generated_at": "2026-11-11T09:00", **sections}
 
 

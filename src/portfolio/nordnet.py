@@ -24,8 +24,8 @@ Real holdings belong in the gitignored `portfolio/` folder.
 
 import csv
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 
@@ -46,13 +46,13 @@ _REQUIRED = ["name", "currency", "shares", "cost_basis"]
 _ACCOUNT_IN_FILENAME = re.compile(r"konto(?:-|no\.\s*)(\d+)", re.IGNORECASE)
 
 
-def account_from_filename(path: Path) -> Optional[str]:
+def account_from_filename(path: Path) -> str | None:
     """The account number in a Nordnet export's file name, if any."""
     match = _ACCOUNT_IN_FILENAME.search(Path(path).name)
     return match.group(1) if match else None
 
 
-def read_nordnet_holdings(path: Path, account: Optional[str] = None) -> pd.DataFrame:
+def read_nordnet_holdings(path: Path, account: str | None = None) -> pd.DataFrame:
     """
     One Nordnet holdings export as a frame with name, account, shares,
     cost_basis and currency.
@@ -83,7 +83,7 @@ def read_nordnet_holdings(path: Path, account: Optional[str] = None) -> pd.DataF
     return out[out["name"].astype(bool) & (out["shares"] > 0)].reset_index(drop=True)
 
 
-def load_ticker_map(path: Path) -> Dict[str, str]:
+def load_ticker_map(path: Path) -> dict[str, str]:
     """Instrument name -> Yahoo ticker, from a `name,ticker` CSV (missing file: empty)."""
     path = Path(path)
     if not path.exists():
@@ -97,8 +97,8 @@ def load_ticker_map(path: Path) -> Dict[str, str]:
 
 
 def combine_holdings(
-    exports: Iterable[Tuple[Path, Optional[str]]], ticker_map: Dict[str, str]
-) -> Tuple[pd.DataFrame, List[str]]:
+    exports: Iterable[tuple[Path, str | None]], ticker_map: dict[str, str]
+) -> tuple[pd.DataFrame, list[str]]:
     """
     Holdings from several exports in the portfolio format, one row per
     account and instrument, plus the names that have no ticker yet.

@@ -4,7 +4,7 @@ Analyzes financial statements and calculates fundamental metrics
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -32,15 +32,15 @@ BENEISH_MAX_SGI = 3.0
 # Z'' (1995) drops sales and uses book equity. Yahoo sector names, lower case.
 ALTMAN_MANUFACTURING_SECTORS = ("industrials", "basic materials", "energy")
 # Model -> (distress below, safe above)
-ALTMAN_ZONES: Dict[str, Tuple[float, float]] = {"Z": (1.81, 2.99), "Z''": (1.10, 2.60)}
+ALTMAN_ZONES: dict[str, tuple[float, float]] = {"Z": (1.81, 2.99), "Z''": (1.10, 2.60)}
 
 
-def altman_zones(model: Optional[str]) -> Tuple[float, float]:
+def altman_zones(model: str | None) -> tuple[float, float]:
     """(distress below, safe above) for a model; reports from before Z'' mean Z."""
     return ALTMAN_ZONES.get(model or "Z", ALTMAN_ZONES["Z"])
 
 
-def _rises(current: Optional[float], previous: Optional[float]) -> bool:
+def _rises(current: float | None, previous: float | None) -> bool:
     """A Piotroski "improved" test; False when either year's ratio is undefined
     (a zero denominator: no revenue yet, no current liabilities)."""
     return current is not None and previous is not None and current > previous
@@ -60,10 +60,10 @@ class FundamentalAnalyzer:
 
     def __init__(
         self,
-        ticker_info: Dict[str, Any],
-        fundamentals: Optional[Dict[str, pd.DataFrame]] = None,
-        price_data: Optional[pd.DataFrame] = None,
-        config: Optional[AnalysisConfig] = None,
+        ticker_info: dict[str, Any],
+        fundamentals: dict[str, pd.DataFrame] | None = None,
+        price_data: pd.DataFrame | None = None,
+        config: AnalysisConfig | None = None,
     ):
         """
         Initialize analyzer with financial data
@@ -82,7 +82,7 @@ class FundamentalAnalyzer:
         # Extract financial statements. An empty frame (a fund, or a failed
         # fetch) is missing data: checks test `is None`, and an empty
         # statement used to pass them and score Piotroski 0/9.
-        def statement(key: str) -> Optional[pd.DataFrame]:
+        def statement(key: str) -> pd.DataFrame | None:
             frame = self.fundamentals.get(key)
             return frame if frame is not None and not frame.empty else None
 
@@ -92,31 +92,27 @@ class FundamentalAnalyzer:
         self.balance_sheet_a = statement("balance_sheet_annual")
         self.cash_flow_q = statement("cash_flow_quarterly")
         self.cash_flow_a = statement("cash_flow_annual")
-        self._all: Optional[Dict[str, Any]] = None
+        self._all: dict[str, Any] | None = None
 
     # ==================== Helper Methods ====================
 
     def _get_value(
-        self, df: Optional[pd.DataFrame], row_name: str, col_index: int = 0
-    ) -> Optional[float]:
+        self, df: pd.DataFrame | None, row_name: str, col_index: int = 0
+    ) -> float | None:
         """Safely extract value from financial statement DataFrame"""
         return safe_get_dataframe_value(df, row_name, col_index)
 
-    def _calculate_growth_rate(
-        self, current: Optional[float], previous: Optional[float]
-    ) -> Optional[float]:
+    def _calculate_growth_rate(self, current: float | None, previous: float | None) -> float | None:
         """Calculate percentage growth rate"""
         return calculate_growth_rate(current, previous)
 
-    def _safe_divide(
-        self, numerator: Optional[float], denominator: Optional[float]
-    ) -> Optional[float]:
+    def _safe_divide(self, numerator: float | None, denominator: float | None) -> float | None:
         """Safely divide two numbers"""
         return safe_divide(numerator, denominator)
 
     # ==================== Growth Rates ====================
 
-    def calculate_growth_rates(self) -> Dict[str, Any]:
+    def calculate_growth_rates(self) -> dict[str, Any]:
         """
         Calculate revenue, earnings, and FCF growth rates: 1Y, plus 3Y and
         4Y CAGRs. Column n is n years back; the 4Y CAGR needs a fifth annual
@@ -125,7 +121,7 @@ class FundamentalAnalyzer:
         Returns:
             Dictionary with growth metrics
         """
-        growth: Dict[str, Dict[str, Any]] = {"revenue": {}, "earnings": {}, "fcf": {}}
+        growth: dict[str, dict[str, Any]] = {"revenue": {}, "earnings": {}, "fcf": {}}
 
         if self.income_stmt_a is not None and not self.income_stmt_a.empty:
             # Revenue growth
@@ -160,8 +156,8 @@ class FundamentalAnalyzer:
         return growth
 
     def _calculate_cagr(
-        self, current: Optional[float], past: Optional[float], years: int
-    ) -> Optional[float]:
+        self, current: float | None, past: float | None, years: int
+    ) -> float | None:
         """Calculate Compound Annual Growth Rate"""
         # No compound rate into or out of a loss (and pow() would go complex)
         if current is None or past is None or past <= 0 or current <= 0 or years == 0:
@@ -170,7 +166,7 @@ class FundamentalAnalyzer:
 
     # ==================== FCF Analysis ====================
 
-    def calculate_fcf_metrics(self) -> Dict[str, Any]:
+    def calculate_fcf_metrics(self) -> dict[str, Any]:
         """
         Calculate Free Cash Flow metrics
 
@@ -207,14 +203,14 @@ class FundamentalAnalyzer:
 
     # ==================== Margin Analysis ====================
 
-    def calculate_margins(self) -> Dict[str, Any]:
+    def calculate_margins(self) -> dict[str, Any]:
         """
         Calculate profitability margins with trends
 
         Returns:
             Dictionary with margin metrics and trends
         """
-        margins: Dict[str, Dict[str, Any]] = {"current": {}, "trend": {}}
+        margins: dict[str, dict[str, Any]] = {"current": {}, "trend": {}}
 
         if self.income_stmt_a is not None and not self.income_stmt_a.empty:
             # Get current period values
@@ -255,7 +251,7 @@ class FundamentalAnalyzer:
 
     # ==================== Efficiency Ratios ====================
 
-    def calculate_efficiency_ratios(self) -> Dict[str, Any]:
+    def calculate_efficiency_ratios(self) -> dict[str, Any]:
         """
         Calculate asset utilization and efficiency metrics
 
@@ -323,7 +319,7 @@ class FundamentalAnalyzer:
 
     # ==================== DuPont Analysis ====================
 
-    def calculate_dupont_analysis(self) -> Dict[str, Any]:
+    def calculate_dupont_analysis(self) -> dict[str, Any]:
         """
         Decompose ROE into profit margin, asset turnover, and financial leverage
 
@@ -377,7 +373,7 @@ class FundamentalAnalyzer:
         sector = str(self.info.get("sector") or "").lower()
         return "Z" if sector in ALTMAN_MANUFACTURING_SECTORS else "Z''"
 
-    def calculate_altman_z_score(self) -> Optional[float]:
+    def calculate_altman_z_score(self) -> float | None:
         """
         Altman Z-Score for bankruptcy risk, in the model that fits the sector
         (`altman_model`; zones in `altman_zones`).
@@ -407,7 +403,7 @@ class FundamentalAnalyzer:
 
         model = self.altman_model()
         balance, income = self.balance_sheet_a, self.income_stmt_a
-        inputs: Dict[str, Optional[float]] = {
+        inputs: dict[str, float | None] = {
             "Current Assets": self._get_value(balance, "Current Assets", 0),
             "Current Liabilities": self._get_value(balance, "Current Liabilities", 0),
             "Total Assets": self._get_value(balance, "Total Assets", 0),
@@ -430,7 +426,7 @@ class FundamentalAnalyzer:
         if missing:
             logger.info(f"Altman {model}-Score incomplete: Missing {', '.join(missing)}")
             return None
-        v: Dict[str, float] = {name: float(value or 0.0) for name, value in inputs.items()}
+        v: dict[str, float] = {name: float(value or 0.0) for name, value in inputs.items()}
 
         total_assets = v["Total Assets"]
         x1 = (v["Current Assets"] - v["Current Liabilities"]) / total_assets
@@ -443,7 +439,7 @@ class FundamentalAnalyzer:
         x4 = v["Book Equity"] / v["Total Liabilities"]
         return float(6.56 * x1 + 3.26 * x2 + 6.72 * x3 + 1.05 * x4)
 
-    def calculate_piotroski_f_score(self) -> Optional[int]:
+    def calculate_piotroski_f_score(self) -> int | None:
         """
         Calculate Piotroski F-Score (0-9) for fundamental strength
 
@@ -571,7 +567,7 @@ class FundamentalAnalyzer:
 
     # ==================== Forensic / Earnings Quality ====================
 
-    def calculate_beneish_m_score(self) -> Optional[Dict[str, Any]]:
+    def calculate_beneish_m_score(self) -> dict[str, Any] | None:
         """
         Calculate Beneish M-Score for earnings manipulation detection
 
@@ -769,7 +765,7 @@ class FundamentalAnalyzer:
             "components_available": available_count,
         }
 
-    def calculate_accruals_quality(self) -> Optional[Dict[str, Any]]:
+    def calculate_accruals_quality(self) -> dict[str, Any] | None:
         """
         Calculate Sloan Accrual Ratio for earnings quality assessment
 
@@ -797,7 +793,7 @@ class FundamentalAnalyzer:
 
         # Try average total assets for more accuracy
         total_assets_prev = self._get_value(self.balance_sheet_a, "Total Assets", 1)
-        avg_total_assets: Optional[float]
+        avg_total_assets: float | None
         if total_assets and total_assets_prev:
             avg_total_assets = (total_assets + total_assets_prev) / 2
         else:
@@ -834,7 +830,7 @@ class FundamentalAnalyzer:
             "interpretation": interpretation,
         }
 
-    def calculate_cash_conversion(self) -> Optional[Dict[str, Any]]:
+    def calculate_cash_conversion(self) -> dict[str, Any] | None:
         """
         Calculate Cash Conversion Score (CFO / EBITDA)
 
@@ -896,7 +892,7 @@ class FundamentalAnalyzer:
 
     # ==================== Annual History ====================
 
-    def calculate_annual_history(self, years: int = 4) -> Dict[str, Any]:
+    def calculate_annual_history(self, years: int = 4) -> dict[str, Any]:
         """
         Per-year values the red-flag checks need (most recent year first).
 
@@ -911,8 +907,8 @@ class FundamentalAnalyzer:
         if not periods:
             return {}
 
-        def row(df: Optional[pd.DataFrame], *names: str) -> List[Optional[float]]:
-            values: List[Optional[float]] = []
+        def row(df: pd.DataFrame | None, *names: str) -> list[float | None]:
+            values: list[float | None] = []
             for period in periods:
                 value = None
                 for name in names:
@@ -952,7 +948,7 @@ class FundamentalAnalyzer:
             "interest_coverage": coverage,
         }
 
-    def calculate_all(self) -> Dict[str, Any]:
+    def calculate_all(self) -> dict[str, Any]:
         """
         Calculate all fundamental metrics (computed once, then reused)
 
@@ -985,7 +981,7 @@ class FundamentalAnalyzer:
         self._all = results
         return results
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """
         Get comprehensive fundamental analysis summary
 
@@ -1000,7 +996,7 @@ class FundamentalAnalyzer:
             "analysis": self.calculate_all(),
         }
 
-    def format_markdown(self) -> List[str]:
+    def format_markdown(self) -> list[str]:
         """
         Format fundamental analysis as markdown report
 
@@ -1255,7 +1251,7 @@ class FundamentalAnalyzer:
 
         return md
 
-    def _format_pct(self, value: Optional[float]) -> str:
+    def _format_pct(self, value: float | None) -> str:
         """Format percentage value for display"""
         if value is None:
             return "N/A"
@@ -1273,7 +1269,7 @@ def _naive_date(value: Any) -> pd.Timestamp:
     return stamp.normalize()
 
 
-def _annual_periods(*frames: Optional[pd.DataFrame]) -> List[pd.Timestamp]:
+def _annual_periods(*frames: pd.DataFrame | None) -> list[pd.Timestamp]:
     """Statement dates across the given frames, most recent first."""
     dates = set()
     for df in frames:
@@ -1287,7 +1283,7 @@ def _annual_periods(*frames: Optional[pd.DataFrame]) -> List[pd.Timestamp]:
     return sorted(dates, reverse=True)
 
 
-def _value_at(df: Optional[pd.DataFrame], row_name: str, period: pd.Timestamp) -> Optional[float]:
+def _value_at(df: pd.DataFrame | None, row_name: str, period: pd.Timestamp) -> float | None:
     """Value of a statement line for one period (matching the column by date)."""
     if df is None or df.empty or row_name not in df.index:
         return None
@@ -1309,9 +1305,9 @@ def _value_at(df: Optional[pd.DataFrame], row_name: str, period: pd.Timestamp) -
 
 
 def calculate_pead_signal(
-    earnings_history: List[Dict[str, Any]],
-    price_data: Optional[pd.DataFrame] = None,
-) -> Optional[Dict[str, Any]]:
+    earnings_history: list[dict[str, Any]],
+    price_data: pd.DataFrame | None = None,
+) -> dict[str, Any] | None:
     """
     Calculate Post-Earnings Announcement Drift (PEAD) signal.
 
@@ -1349,7 +1345,7 @@ def calculate_pead_signal(
         return None
 
     # Yahoo returns earnings history oldest first; everything below expects newest first
-    def _date_key(entry: Dict[str, Any]) -> pd.Timestamp:
+    def _date_key(entry: dict[str, Any]) -> pd.Timestamp:
         try:
             return _naive_date(entry.get("quarter"))
         except ValueError, TypeError:

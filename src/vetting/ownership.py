@@ -16,7 +16,7 @@ import logging
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..paths import CUSIP_TICKERS
 
@@ -35,30 +35,30 @@ _NAME_NOISE = re.compile(
 class FundPosition:
     fund: str
     action: str
-    shares: Optional[float]
-    value: Optional[float]
-    filing_date: Optional[str]
-    period: Optional[str]
+    shares: float | None
+    value: float | None
+    filing_date: str | None
+    period: str | None
     matched_on: str  # "ticker" or "name"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 @dataclass
 class FundActivity:
     ticker: str
-    positions: List[FundPosition] = field(default_factory=list)
+    positions: list[FundPosition] = field(default_factory=list)
     funds_checked: int = 0
     cache_found: bool = False
 
     @property
-    def hint(self) -> Optional[str]:
+    def hint(self) -> str | None:
         if not self.cache_found:
             return "No 13F cache found. Run `quant discover` to fetch tracked funds' filings."
         return None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ticker": self.ticker,
             "funds_checked": self.funds_checked,
@@ -67,7 +67,7 @@ class FundActivity:
         }
 
 
-def fund_activity(ticker: str, company_name: Optional[str], data_dir: str = "data") -> FundActivity:
+def fund_activity(ticker: str, company_name: str | None, data_dir: str = "data") -> FundActivity:
     """Look up the ticker in every cached 13F portfolio."""
     ticker = ticker.upper()
     result = FundActivity(ticker=ticker)
@@ -102,11 +102,11 @@ def normalize_issuer(name: str) -> str:
 
 
 def _position_in(
-    portfolio: Dict[str, Any],
+    portfolio: dict[str, Any],
     symbols: set[str],
     target_name: str,
-    cusip_map: Dict[str, str],
-) -> Optional[FundPosition]:
+    cusip_map: dict[str, str],
+) -> FundPosition | None:
     rows = []
     ticker_match = False
     for holding in portfolio.get("holdings") or []:
@@ -147,7 +147,7 @@ def _ticker_aliases(ticker: str) -> set[str]:
     return {ticker, ticker.replace("-", ".")}
 
 
-def _date_only(value: Any) -> Optional[str]:
+def _date_only(value: Any) -> str | None:
     return str(value)[:10] if value else None
 
 
